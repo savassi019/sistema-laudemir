@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Sistema de Gestao Modular",
+  title: "Sistema Laudemir",
   description:
     "Base local para um sistema empresarial modular com financeiro, clientes, permissoes e crescimento por fases.",
 };

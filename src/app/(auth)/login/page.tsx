@@ -45,7 +45,7 @@ export default async function LoginPage() {
           <div className="max-w-2xl space-y-6">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs uppercase tracking-[0.28em] text-slate-300">
               <Sparkles className="size-4 text-sky-300" />
-              Sistema modular
+              Sistema Laudemir
             </div>
 
             <div className="space-y-4">

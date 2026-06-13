@@ -1,4 +1,4 @@
-# Sistema de Gestao Modular
+# Sistema Laudemir
 
 Base local em Next.js para um sistema empresarial complexo com financeiro, clientes, permissao por modulo e crescimento por fases.
 
