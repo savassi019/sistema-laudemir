@@ -5,12 +5,12 @@ import type { DashboardMetric } from "@/types/app";
 
 const toneStyles = {
   emerald:
-    "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-200 shadow-[0_20px_40px_rgba(16,185,129,0.12)]",
+    "border-[#8aa17c]/25 bg-[#243528]/72 text-[#dbe6d4] shadow-[0_20px_40px_rgba(0,0,0,0.16)]",
   amber:
-    "border-amber-400/20 bg-amber-400/[0.08] text-amber-100 shadow-[0_20px_40px_rgba(245,158,11,0.12)]",
+    "border-[#d1a04f]/28 bg-[#3a2b18]/72 text-[#f3dfae] shadow-[0_20px_40px_rgba(0,0,0,0.16)]",
   rose:
-    "border-rose-400/20 bg-rose-400/[0.08] text-rose-100 shadow-[0_20px_40px_rgba(244,63,94,0.12)]",
-  sky: "border-sky-400/20 bg-sky-400/[0.08] text-sky-100 shadow-[0_20px_40px_rgba(56,189,248,0.12)]",
+    "border-[#b46c5d]/25 bg-[#38211d]/72 text-[#efc6bc] shadow-[0_20px_40px_rgba(0,0,0,0.16)]",
+  sky: "border-[#6f8790]/25 bg-[#27383a]/70 text-[#d6e1de] shadow-[0_20px_40px_rgba(0,0,0,0.16)]",
 };
 
 const icons = {
@@ -26,22 +26,22 @@ export function MetricCard({ metric }: { metric: DashboardMetric }) {
   return (
     <article
       className={cn(
-        "rounded-[24px] border p-5 transition-transform duration-200 hover:-translate-y-0.5",
+        "rounded-2xl border p-4 transition-transform duration-200 hover:-translate-y-0.5 md:p-5",
         toneStyles[metric.tone],
       )}
     >
-      <div className="mb-5 flex items-start justify-between gap-4">
+      <div className="mb-3 flex items-start justify-between gap-3 md:mb-5 md:gap-4">
         <div className="space-y-1">
-          <p className="text-sm font-medium text-white/70">{metric.label}</p>
-          <h3 className="text-3xl font-semibold tracking-tight text-white">
+          <p className="text-xs font-medium text-white/70 md:text-sm">{metric.label}</p>
+          <h3 className="text-2xl font-semibold tracking-tight text-white md:text-3xl">
             {metric.value}
           </h3>
         </div>
-        <span className="rounded-full border border-white/10 bg-black/20 p-2 text-white/70">
+        <span className="rounded-xl border border-white/10 bg-black/20 p-2 text-white/70">
           <Icon className="size-4" />
         </span>
       </div>
-      <p className="text-sm leading-6 text-white/65">{metric.helper}</p>
+      <p className="hidden text-sm leading-6 text-white/65 sm:block">{metric.helper}</p>
     </article>
   );
 }

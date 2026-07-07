@@ -2,55 +2,60 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { CircleDollarSign, LayoutDashboard, LayoutGrid, Users } from "lucide-react";
+import {
+  CircleDollarSign,
+  ClipboardCheck,
+  FileBarChart2,
+  LayoutDashboard,
+  LayoutGrid,
+  Users,
+} from "lucide-react";
 
 import { cn } from "@/lib/cn";
 
-const items = [
-  {
-    href: "/dashboard",
-    label: "Painel",
-    icon: LayoutDashboard,
-  },
-  {
-    href: "/modulos",
-    label: "Modulos",
-    icon: LayoutGrid,
-  },
-  {
-    href: "/clientes",
-    label: "Clientes",
-    icon: Users,
-  },
-  {
-    href: "/financeiro",
-    label: "Financeiro",
-    icon: CircleDollarSign,
-  },
+const ownerItems = [
+  { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
+  { href: "/modulos", label: "Módulos", icon: LayoutGrid },
+  { href: "/clientes", label: "Clientes", icon: Users },
+  { href: "/financeiro", label: "Financeiro", icon: CircleDollarSign },
+  { href: "/relatorio", label: "Relatório", icon: FileBarChart2 },
 ] as const;
 
-export function MobileNav() {
+const staffItems = [
+  { href: "/visita-rapida", label: "Visita", icon: ClipboardCheck },
+  { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
+  { href: "/clientes", label: "Clientes", icon: Users },
+  { href: "/modulos", label: "Módulos", icon: LayoutGrid },
+] as const;
+
+type Role = "OWNER" | "ADMIN" | "STAFF";
+
+export function MobileNav({ role }: { role: Role }) {
   const pathname = usePathname();
+  const items = role === "STAFF" ? staffItems : ownerItems;
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/92 px-3 py-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] backdrop-blur lg:hidden">
-      <div className="mx-auto grid max-w-2xl grid-cols-4 gap-2">
+    <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[rgba(245,241,232,0.1)] bg-[#0d120f]/95 px-3 py-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] backdrop-blur lg:hidden">
+      <div className={`mx-auto grid max-w-2xl gap-1.5 ${items.length === 5 ? "grid-cols-5" : "grid-cols-4"}`}>
         {items.map((item) => {
           const Icon = item.icon;
-          const active = pathname === item.href;
+          const active = pathname === item.href || pathname.startsWith(item.href + "/");
+          const isVisit = item.href === "/visita-rapida";
 
           return (
             <Link
               key={item.href}
               href={item.href}
               className={cn(
-                "flex flex-col items-center justify-center gap-1 rounded-2xl border px-3 py-3 text-xs font-medium transition",
+                "flex min-h-12 flex-col items-center justify-center gap-1 rounded-xl border px-2 py-1.5 text-[11px] font-medium transition",
                 active
-                  ? "border-sky-400/30 bg-sky-400/12 text-sky-200"
-                  : "border-white/8 bg-white/[0.03] text-slate-300",
+                  ? "border-[#d1a04f]/35 bg-[#d1a04f]/12 text-[#f3dfae]"
+                  : isVisit
+                    ? "border-[#d1a04f]/20 bg-[#d1a04f]/8 text-[#d1a04f]"
+                    : "border-[rgba(245,241,232,0.08)] bg-white/[0.025] text-[#c9c2b4]",
               )}
             >
-              <Icon className="size-4" />
+              <Icon className={cn("size-4", isVisit && !active && "text-[#d1a04f]")} />
               <span>{item.label}</span>
             </Link>
           );

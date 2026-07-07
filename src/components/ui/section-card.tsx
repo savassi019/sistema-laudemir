@@ -20,12 +20,12 @@ export function SectionCard({
   return (
     <section
       className={cn(
-        "rounded-[28px] border border-white/10 bg-white/[0.04] p-6 shadow-[0_24px_80px_rgba(15,23,42,0.22)] backdrop-blur",
+        "rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/82 p-4 shadow-[0_24px_80px_rgba(0,0,0,0.2)] backdrop-blur md:p-5",
         className,
       )}
     >
       {(title || subtitle || action) && (
-        <header className="mb-5 flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <header className="mb-4 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
           <div className="space-y-1">
             {title ? (
               <h2 className="text-lg font-semibold tracking-tight text-white">
@@ -33,7 +33,7 @@ export function SectionCard({
               </h2>
             ) : null}
             {subtitle ? (
-              <p className="max-w-2xl text-sm text-slate-300">{subtitle}</p>
+              <p className="max-w-2xl text-sm text-[#c9c2b4]">{subtitle}</p>
             ) : null}
           </div>
           {action}

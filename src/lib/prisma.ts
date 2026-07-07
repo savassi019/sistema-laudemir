@@ -12,6 +12,10 @@ const pool =
   globalForPrisma.pool ??
   new Pool({
     connectionString,
+    max: 10,
+    idleTimeoutMillis: 30_000,
+    connectionTimeoutMillis: 5_000,
+    options: "-c statement_timeout=30000",
   });
 
 export const prisma =

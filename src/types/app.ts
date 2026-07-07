@@ -66,11 +66,27 @@ export type ClientListItem = {
   id: string;
   code: string;
   name: string;
+  personType?: "INDIVIDUAL" | "COMPANY";
   phone: string;
+  email?: string;
+  document?: string;
+  street?: string;
+  neighborhood?: string;
   city: string;
+  state?: string;
+  postalCode?: string;
+  notes?: string;
+  modules?: ModuleName[];
   status: "ativo" | "inativo" | "inadimplente" | "excecao";
   balance: number;
   updatedAt: string;
+};
+
+export type DelinquencyInfo = {
+  hasNotPaid: boolean;
+  hasPartialPayment: boolean;
+  hasDebtAccumulation: boolean;
+  totalDebtAmount: number;
 };
 
 export type FinanceEntryListItem = {
@@ -90,4 +106,40 @@ export type FinanceEntryListItem = {
 export type FinanceOverview = {
   cards: DashboardMetric[];
   entries: FinanceEntryListItem[];
+};
+
+export type VisitRecord = {
+  id: string;
+  clientId?: string;
+  targetId?: string;
+  clientName: string;
+  clientPhone: string;
+  visitType: string;
+  occurredAt: string;
+  checkedItems: string[];
+  incomeAmount: number;
+  expenseAmount: number;
+  notes?: string;
+  createdBy?: string;
+  createdAt: string;
+};
+
+export type ClientVisitSummary = {
+  clientId: string;
+  clientName: string;
+  clientPhone: string;
+  clientCode: string;
+  city: string;
+  lastVisitAt?: string;
+  daysSinceVisit: number;
+};
+
+export type StaffMember = {
+  id: string;
+  name: string;
+  email: string;
+  phone?: string;
+  status: "ativo" | "inativo";
+  role: "STAFF" | "ADMIN";
+  createdAt: string;
 };

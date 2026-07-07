@@ -12,6 +12,7 @@ export type ModuleStage = "Base pronta" | "Fase 2" | "Fase 3" | "Fase 4";
 export type ModuleIconKey =
   | "shield"
   | "ticket"
+  | "calendar"
   | "table"
   | "gift"
   | "wallet"
@@ -21,6 +22,7 @@ export type ModuleIconKey =
   | "megaphone"
   | "globe"
   | "users"
+  | "notebook"
   | "receipt";
 
 export type ModuleCatalogItem = {
@@ -43,27 +45,27 @@ export const moduleGroups: Record<
   core: {
     title: "Core do sistema",
     description:
-      "Autenticacao, acesso por modulo, financeiro global, agenda e configuracoes.",
+      "Autenticação, acesso por módulo, financeiro global, agenda e configurações.",
   },
   field: {
-    title: "Operacoes de campo",
+    title: "Operações de campo",
     description:
-      "Fluxos mais usados por funcionario em rua, rota, coleta e atendimento.",
+      "Fluxos mais usados por funcionário em rua, rota, coleta e atendimento.",
   },
   special: {
-    title: "Operacoes financeiras especiais",
+    title: "Operações financeiras especiais",
     description:
-      "Rotinas com regras de comprovante, divisao, juros, negativo e historico.",
+      "Rotinas com regras de comprovante, divisão, juros, negativo e histórico.",
   },
   business: {
-    title: "Gestao de negocios",
+    title: "Gestão de negócios",
     description:
-      "Visao de contratos, mercado, marketing e plataformas complementares.",
+      "Visão de contratos, mercado, marketing e plataformas complementares.",
   },
   transversal: {
     title: "Funcionalidades transversais",
     description:
-      "Blocos que atendem todos os modulos e reforcam operacao, controle e conversao.",
+      "Blocos que atendem todos os módulos e reforçam operação, controle e conversão.",
   },
 };
 
@@ -72,8 +74,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     module: "CORE",
     slug: "core-do-sistema",
     title: "Core do sistema",
-    summary: "Acesso, permissoes e motor central",
-    detail: "Login seguro, controle por modulo, financeiro global e agenda.",
+    summary: "Acesso, permissões e motor central",
+    detail: "Login seguro, controle por módulo, financeiro global e agenda.",
     group: "core",
     accent: "slate",
     stage: "Base pronta",
@@ -85,7 +87,7 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     slug: "carreta-kids",
     title: "Carreta Kids",
     summary: "Controle por tempo e ficha",
-    detail: "Tempo, local, entrada, saida, tabela de preco e despesas.",
+    detail: "Tempo, local, entrada, saída, tabela de preço e despesas.",
     group: "field",
     accent: "emerald",
     stage: "Fase 2",
@@ -93,11 +95,23 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     href: "/modulos/carreta-kids",
   },
   {
+    module: "RENTAL",
+    slug: "locacao",
+    title: "Locação",
+    summary: "Reservas, sinal e contrato",
+    detail: "Nome, telefone, local, documento, data, sinal opcional e pendências.",
+    group: "field",
+    accent: "emerald",
+    stage: "Fase 2",
+    icon: "calendar",
+    href: "/modulos/locacao",
+  },
+  {
     module: "BILLIARD",
     slug: "bilhar-pebolim",
     title: "Bilhar / Pebolim",
     summary: "Rotas, fichas e telhado",
-    detail: "Rotas, manutencao, contratos, custo e alerta de troca de pano.",
+    detail: "Rotas, fichas, quinzena, telhado, contrato, manutenção e alerta de pano.",
     group: "field",
     accent: "emerald",
     stage: "Fase 2",
@@ -107,9 +121,9 @@ export const moduleCatalog: ModuleCatalogItem[] = [
   {
     module: "PLUSH",
     slug: "maquinas-de-pelucia",
-    title: "Maquinas de Pelucia",
-    summary: "Gruas e comissao",
-    detail: "Fotos coin/gift, percentual, noteiro e comprovante.",
+    title: "Máquinas de Pelúcia",
+    summary: "Gruas e comissão",
+    detail: "Máquinas, pontos, duas fotos, pelúcias, noteiro, desconto e viabilidade.",
     group: "field",
     accent: "emerald",
     stage: "Fase 2",
@@ -120,8 +134,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     module: "BX",
     slug: "bx",
     title: "BX",
-    summary: "Entradas e saidas com comprovante",
-    detail: "Fotos obrigatorias, agente, desconto, recebido e excecao.",
+    summary: "Entradas e saídas com comprovante",
+    detail: "Duas fotos, cliente exceção, recolhe, negativo, desconto e status recebido.",
     group: "special",
     accent: "amber",
     stage: "Fase 3",
@@ -131,9 +145,9 @@ export const moduleCatalog: ModuleCatalogItem[] = [
   {
     module: "SLOT_H",
     slug: "h-caca-niquel",
-    title: "H (Caca-niquel)",
-    summary: "Divisao e negativo",
-    detail: "Entrada/saida, 50%, divida, negativo e conferencias.",
+    title: "H (Caça-níquel)",
+    summary: "Divisão e negativo",
+    detail: "Entrada/saída atual e anterior, percentual, negativo, dívida e conferências.",
     group: "special",
     accent: "amber",
     stage: "Fase 3",
@@ -143,9 +157,9 @@ export const moduleCatalog: ModuleCatalogItem[] = [
   {
     module: "MACHINE",
     slug: "credito-financeiro",
-    title: "Credito Financeiro",
-    summary: "Emprestimos e garantias",
-    detail: "Juros, parcela fixa, assinatura digital e historico.",
+    title: "Crédito Financeiro",
+    summary: "Empréstimos e garantias",
+    detail: "Contratos, garantias, percentual, juros, parcela fixa e pendências.",
     group: "special",
     accent: "amber",
     stage: "Fase 3",
@@ -155,9 +169,9 @@ export const moduleCatalog: ModuleCatalogItem[] = [
   {
     module: "CONDOMINIUM_MARKET",
     slug: "mercado-autonomo",
-    title: "Mercado Autonomo",
+    title: "Mercado Autônomo",
     summary: "Financeiro manual",
-    detail: "Entrada, saida, despesa, lucro bruto e lucro liquido.",
+    detail: "Entrada, saída, despesa, lucro bruto e lucro líquido.",
     group: "business",
     accent: "violet",
     stage: "Fase 3",
@@ -169,7 +183,7 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     slug: "marketing",
     title: "Marketing",
     summary: "Contrato e assinatura",
-    detail: "Servico, valor, GOV, cliente, endereco e arquivo final.",
+    detail: "Serviço, valor, GOV, cliente, endereço e arquivo final.",
     group: "business",
     accent: "violet",
     stage: "Fase 3",
@@ -181,7 +195,7 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     slug: "plataforma-online",
     title: "Plataforma Online",
     summary: "Financeiro do brinde",
-    detail: "Entradas, saidas, despesas e relatorios enxutos.",
+    detail: "Entradas, saídas, despesas e relatórios enxutos.",
     group: "business",
     accent: "violet",
     stage: "Fase 3",
@@ -189,11 +203,23 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     href: "/modulos/plataforma-online",
   },
   {
+    module: "PERSONAL_FINANCE",
+    slug: "financas-pessoais",
+    title: "Finanças Pessoais",
+    summary: "Receitas, despesas e agenda",
+    detail: "Receitas, despesas, contas a pagar, notas, agenda e totais por período.",
+    group: "business",
+    accent: "violet",
+    stage: "Fase 3",
+    icon: "notebook",
+    href: "/modulos/financas-pessoais",
+  },
+  {
     module: "FINANCE",
     slug: "financeiro-global",
     title: "Financeiro global",
     summary: "Pagamento, parcial e saldo",
-    detail: "Consolidado por periodo com entradas, saidas, despesas e comprovantes.",
+    detail: "Consolidado por período com entradas, saídas, despesas e comprovantes.",
     group: "transversal",
     accent: "blue",
     stage: "Base pronta",
@@ -204,8 +230,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     module: "CLIENTS",
     slug: "cadastro-de-clientes",
     title: "Cadastro de clientes",
-    summary: "Divida, parcial e historico",
-    detail: "Telefone, documento, endereco, anexos e timeline completa.",
+    summary: "Dívida, parcial e histórico",
+    detail: "Telefone, documento, endereço, anexos e timeline completa.",
     group: "transversal",
     accent: "blue",
     stage: "Base pronta",
@@ -216,23 +242,24 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     module: "REPORTS",
     slug: "comprovantes-whatsapp",
     title: "Comprovantes / WhatsApp",
-    summary: "Envio automatico entre modulos",
-    detail: "Comprovantes, notificacoes e disparos por etapa operacional.",
+    summary: "Envio automático entre módulos",
+    detail: "Comprovantes, notificações e disparos por etapa operacional.",
     group: "transversal",
     accent: "blue",
     stage: "Fase 4",
     icon: "receipt",
-    href: "/modulos/comprovantes-whatsapp",
   },
 ];
 
+const hiddenGroups: ModuleGroupKey[] = ["core"];
+
 export function getVisibleModuleGroups(activeModules: ModuleName[]) {
   return Object.entries(moduleGroups)
+    .filter(([key]) => !hiddenGroups.includes(key as ModuleGroupKey))
     .map(([key, group]) => {
-      const items = moduleCatalog.filter(
-        (item) =>
-          item.group === key && activeModules.includes(item.module),
-      );
+      const items = moduleCatalog
+        .filter((item) => item.group === key && activeModules.includes(item.module))
+        .sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
 
       return {
         key: key as ModuleGroupKey,
@@ -244,6 +271,30 @@ export function getVisibleModuleGroups(activeModules: ModuleName[]) {
     .filter((group) => group.items.length > 0);
 }
 
+export function getVisibleModulesFlat(activeModules: ModuleName[]) {
+  return moduleCatalog
+    .filter((item) => !hiddenGroups.includes(item.group) && activeModules.includes(item.module))
+    .sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
+}
+
 export function getModuleBySlug(slug: string) {
   return moduleCatalog.find((item) => item.slug === slug);
+}
+
+export const readyModuleSlugs = [
+  "carreta-kids",
+  "locacao",
+  "maquinas-de-pelucia",
+  "bx",
+  "bilhar-pebolim",
+  "h-caca-niquel",
+  "credito-financeiro",
+  "mercado-autonomo",
+  "marketing",
+  "plataforma-online",
+  "financas-pessoais",
+] as const;
+
+export function isModuleReady(slug: string) {
+  return readyModuleSlugs.includes(slug as (typeof readyModuleSlugs)[number]);
 }

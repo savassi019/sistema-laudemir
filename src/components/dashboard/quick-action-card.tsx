@@ -4,10 +4,10 @@ import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 const toneStyles = {
-  sky: "border-sky-400/20 bg-sky-400/[0.08] text-sky-100",
-  emerald: "border-emerald-400/20 bg-emerald-400/[0.08] text-emerald-100",
-  amber: "border-amber-400/20 bg-amber-400/[0.08] text-amber-100",
-  rose: "border-rose-400/20 bg-rose-400/[0.08] text-rose-100",
+  sky: "border-[#6f8790]/25 bg-[#27383a]/70 text-[#d6e1de]",
+  emerald: "border-[#8aa17c]/25 bg-[#243528]/72 text-[#dbe6d4]",
+  amber: "border-[#d1a04f]/28 bg-[#3a2b18]/72 text-[#f3dfae]",
+  rose: "border-[#b46c5d]/25 bg-[#38211d]/72 text-[#efc6bc]",
 } as const;
 
 export function QuickActionCard({
@@ -27,15 +27,17 @@ export function QuickActionCard({
     <Link
       href={href}
       className={cn(
-        "rounded-[24px] border p-4 shadow-[0_20px_50px_rgba(2,6,23,0.18)] transition hover:-translate-y-0.5",
+        "rounded-2xl border p-3 shadow-[0_16px_36px_rgba(0,0,0,0.16)] transition hover:-translate-y-0.5 md:p-4",
         toneStyles[tone],
       )}
     >
-      <div className="mb-4 inline-flex rounded-2xl border border-white/10 bg-black/15 p-3">
-        <Icon className="size-5" />
+      <div className="mb-2.5 inline-flex rounded-xl border border-white/10 bg-black/15 p-2.5 md:mb-4 md:p-3">
+        <Icon className="size-4 md:size-5" />
       </div>
-      <h3 className="text-base font-semibold text-white">{title}</h3>
-      <p className="mt-2 text-sm leading-6 text-white/75">{description}</p>
+      <h3 className="text-sm font-semibold text-white md:text-base">{title}</h3>
+      <p className="mt-2 hidden text-sm leading-6 text-white/75 sm:block">
+        {description}
+      </p>
     </Link>
   );
 }

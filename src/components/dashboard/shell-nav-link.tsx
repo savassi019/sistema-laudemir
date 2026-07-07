@@ -35,13 +35,13 @@ export function ShellNavLink({
     <Link
       href={href}
       className={cn(
-        "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition",
+        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition",
         active
-          ? "border-sky-400/30 bg-sky-400/12 text-sky-100"
-          : "border-white/10 bg-white/[0.03] text-slate-300 hover:bg-white/[0.06]",
+          ? "border-[#d1a04f]/35 bg-[#d1a04f]/12 text-[#f3dfae]"
+          : "border-[rgba(245,241,232,0.1)] bg-white/[0.025] text-[#c9c2b4] hover:bg-white/[0.055]",
       )}
     >
-      <Icon className="size-4" />
+      <Icon className="size-3.5" />
       <span>{label}</span>
     </Link>
   );

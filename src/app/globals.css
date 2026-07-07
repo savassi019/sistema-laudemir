@@ -1,8 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --background: #020617;
-  --foreground: #f8fafc;
+  --background: #0b0f0e;
+  --foreground: #f5f1e8;
+  --surface: #111614;
+  --surface-strong: #151b18;
+  --surface-soft: rgba(245, 241, 232, 0.045);
+  --line: rgba(245, 241, 232, 0.11);
+  --muted: #9a958b;
+  --accent: #d1a04f;
+  --accent-soft: rgba(209, 160, 79, 0.14);
+  --success: #8aa17c;
+  --danger: #b46c5d;
   --font-manrope:
     "Aptos",
     "Segoe UI",
@@ -29,6 +38,8 @@
 }
 
 html {
+  max-width: 100%;
+  overflow-x: hidden;
   scroll-behavior: smooth;
 }
 
@@ -36,10 +47,12 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-manrope), sans-serif;
+  max-width: 100%;
+  overflow-x: hidden;
 }
 
 ::selection {
-  background: rgba(56, 189, 248, 0.28);
+  background: rgba(209, 160, 79, 0.28);
   color: #fff;
 }
 
@@ -51,4 +64,192 @@ button {
     border-color 160ms ease,
     opacity 160ms ease,
     transform 160ms ease;
+}
+
+/* ── Login entrance animations ──────────────────────────── */
+
+@keyframes login-screen-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes login-panel-in {
+  0%   { opacity: 0; transform: translateY(36px) scale(0.95); filter: blur(10px); }
+  55%  { filter: blur(0); }
+  100% { opacity: 1; transform: translateY(0) scale(1);    filter: blur(0); }
+}
+
+@keyframes login-item-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes accent-flow {
+  from { background-position: 0% 50%; }
+  to   { background-position: 200% 50%; }
+}
+
+@keyframes grid-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 42px 42px; }
+}
+
+/* Icon pulse ring that radiates outward */
+@keyframes pulse-ring {
+  0%   { transform: scale(1);    opacity: 0.55; }
+  70%  { transform: scale(1.7);  opacity: 0; }
+  100% { transform: scale(1.7);  opacity: 0; }
+}
+
+/* One-shot shimmer sweep across the card */
+@keyframes shimmer-entry {
+  from { transform: translateX(-120%) skewX(-14deg); }
+  to   { transform: translateX(220%) skewX(-14deg); }
+}
+
+/* Repeating scan line inside icon */
+@keyframes scan-line {
+  0%   { top: -2px;  opacity: 0; }
+  8%   { opacity: 0.75; }
+  92%  { opacity: 0.75; }
+  100% { top: calc(100% + 2px); opacity: 0; }
+}
+
+/* ── Login screen ────────────────────────────────────────── */
+
+.login-screen {
+  animation: login-screen-in 800ms ease both;
+  background:
+    radial-gradient(circle at 18% 24%, rgba(209, 160, 79, 0.12), transparent 27%),
+    radial-gradient(circle at 82% 74%, rgba(80, 111, 96, 0.16), transparent 28%),
+    linear-gradient(180deg, #0b0f0e 0%, #101613 52%, #070908 100%);
+}
+
+.login-screen::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(245, 241, 232, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(245, 241, 232, 0.035) 1px, transparent 1px);
+  background-size: 42px 42px;
+  mask-image: linear-gradient(to bottom, transparent, black 18%, black 78%, transparent);
+  animation: grid-drift 18s linear infinite;
+}
+
+/* ── Login card ─────────────────────────────────────────── */
+
+.login-card {
+  animation: login-panel-in 750ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* One-shot shimmer sweep fires after card appears */
+.login-card::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    105deg,
+    transparent 30%,
+    rgba(255, 255, 255, 0.05) 50%,
+    transparent 70%
+  );
+  animation: shimmer-entry 1.4s cubic-bezier(0.4, 0, 0.2, 1) 400ms both;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* ── Accent top line ────────────────────────────────────── */
+
+.login-accent-line {
+  background: linear-gradient(
+    90deg,
+    rgba(209, 160, 79, 0),
+    rgba(209, 160, 79, 0.86),
+    rgba(138, 161, 124, 0.72),
+    rgba(180, 108, 93, 0.64),
+    rgba(209, 160, 79, 0)
+  );
+  background-size: 200% 100%;
+  animation: accent-flow 3.8s linear infinite;
+}
+
+/* ── Form fields stagger ────────────────────────────────── */
+
+.login-form-step {
+  animation: login-item-in 480ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── Submit button shimmer on hover ─────────────────────── */
+
+.login-primary-button {
+  position: relative;
+  overflow: hidden;
+}
+
+.login-primary-button::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background: linear-gradient(
+    110deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.55) 42%,
+    transparent 64%
+  );
+  transform: translateX(-120%);
+  transition: transform 520ms ease;
+}
+
+.login-primary-button:hover::before {
+  transform: translateX(120%);
+}
+
+/* ── Icon decorations ────────────────────────────────────── */
+
+/* Pulsing ring that radiates outward */
+.login-icon-pulse {
+  position: relative;
+}
+
+.login-icon-pulse::before {
+  content: "";
+  position: absolute;
+  inset: -6px;
+  border-radius: 20px;
+  border: 1px solid rgba(209, 160, 79, 0.5);
+  animation: pulse-ring 2.8s cubic-bezier(0.4, 0, 0.6, 1) 1000ms infinite;
+  pointer-events: none;
+}
+
+/* Scan line that sweeps vertically through the icon */
+.login-icon-scan {
+  position: relative;
+  overflow: hidden;
+}
+
+.login-icon-scan::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(209, 160, 79, 0.85), transparent);
+  animation: scan-line 3.8s ease-in-out 1.4s infinite;
+  pointer-events: none;
+}
+
+/* ── Reduced motion ─────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
 }

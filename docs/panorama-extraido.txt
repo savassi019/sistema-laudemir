@@ -1,0 +1,117 @@
+PANORAMA PROFISSIONAL DO PROJETO
+Sistema Web de Gestão Operacional, Financeira e Administrativa
+Documento organizado para apresentação, validação de escopo e alinhamento com o cliente.
+Tipo de solução
+Sistema web personalizado, modular e responsivo
+Finalidade
+Gestão de clientes, finanças, operações, comprovantes, rotas, contratos e relatórios
+Status do documento
+Panorama de escopo para validação antes do desenvolvimento
+Observação: este documento organiza as necessidades levantadas e deve ser validado pelo cliente antes da execução final. Funcionalidades não previstas ou alterações estruturais poderão ser orçadas separadamente.
+1. Objetivo do Projeto
+Desenvolver um sistema web personalizado, modular e responsivo, com foco em organizar a rotina operacional, financeira e administrativa do negócio. A solução deverá centralizar informações de clientes, lançamentos financeiros, comprovantes, contratos, rotas, manutenções, pendências e relatórios, facilitando o acompanhamento das atividades por módulo.
+2. Escopo Geral da Solução
+Cadastro e gerenciamento de clientes, pontos, locais, documentos e contatos.
+Controle financeiro com entradas, saídas, despesas, contas a pagar, pagamentos parciais e acúmulo de dívidas.
+Login individual por usuário, com possibilidade de permissões por módulo e por função.
+Anexo de comprovantes, fotos e registros obrigatórios conforme a regra de cada módulo.
+Cálculos automáticos de valores, percentuais, comissões, juros, saldos, negativos e pendências.
+Histórico completo das operações, com data, horário, usuário responsável e informações do lançamento.
+Relatórios financeiros gerais, semanais, quinzenais, mensais e por módulo, conforme necessidade operacional.
+Envio ou geração de comprovantes para clientes, quando tecnicamente aplicável.
+3. Funcionalidades Padrão do Sistema
+Funcionalidade
+Descrição Profissional
+Cadastros
+Clientes, locais, documentos, telefones, endereços, equipamentos, pontos e demais informações necessárias para cada operação.
+Financeirocompleto
+Controle de entradas, saídas, despesas, contas a pagar, dívidas, pagamentos parciais, formas de pagamento e valores acumulados.
+Usuários e permissões
+Login por funcionário, com acesso controlado aos módulos e funcionalidades permitidas.
+Comprovantes e anexos
+Possibilidade de anexar comprovantes, fotos e documentos, conforme exigência de cada módulo.
+Relatórios e visãogerencial
+Relatórios por período, módulo, cliente, rota, forma de pagamento, despesas e resultados financeiros.
+Histórico operacional
+Registro das ações realizadas no sistema, incluindo data, hora, usuário e principais informações da operação.
+Notificações e agenda
+Bloco de notas, agenda e possibilidade de notificações internas para lembretes, pendências e rotinas operacionais.
+4. Módulos Previstos
+Abaixo estão os módulos identificados no levantamento inicial, organizados em linguagem comercial e operacional para validação do cliente.
+4.1 Carreta Kids
+Cadastro do local, data, ficha, nome do cliente, telefone, valor, forma de pagamento, horário de entrada e horário de saída.
+Cálculo de cobrança por tempo, considerando regras como 15 minutos, 30 minutos e 1 hora.
+Registro de despesas relacionadas à operação do módulo.
+Relatórios financeiros e operacionais por período.
+4.2 Locação
+Cadastro completo de locações, com nome, telefone, local, documento e data.
+Registro de pagamento de sinal, quando aplicável, com sugestão de 30% como valor opcional.
+Controle de pendências, datas e informações do contrato ou reserva.
+4.3 Máquinas de Pelúcia / Gruas
+Cadastro de máquinas, pontos, clientes e responsáveis.
+Controle de numeração, fotos obrigatórias e registros de conferência.
+Anexo de duas fotos obrigatórias por conferência, quando exigido pela operação.
+Contagem de pelúcias, entradas, saídas, noteiro e cálculo automático de comissão.
+Campo para desconto, com justificativa obrigatória pelo funcionário.
+Registro das formas de pagamento recebidas.
+Classificação de viabilidade do cliente conforme valores movimentados.
+Geração ou envio de comprovante para o cliente, quando tecnicamente aplicável.
+4.4 Mesas de Bilhar e Pebolim
+Cadastro de cliente, endereço, telefone, CPF/CNPJ, modelo de mesa e valor da ficha.
+Controle de ficha, percentual opcional, descontos e fechamento por quinzena.
+Controle de estrutura/telhado, incluindo pendências, forma de pagamento em aberto e custos opcionais de instalação.
+Contrato para aluguel ou venda de estrutura, quando aplicável.
+Alerta para troca de pano a cada 1.500 fichas.
+Controle de materiais, manutenção, data de manutenção e foto do equipamento ou ponto.
+Divisão e criação de rotas, inclusive rotas parciais.
+Numeração de registro do ponto e histórico completo com o máximo de informações operacionais.
+4.5 Gestão de Contratos, Garantias e Pendências
+Controle de código do cliente, valor, nome, data completa, ano, percentual, juros e demais informações cadastrais.
+Ficha de garantiaopcional.
+Controle de total emprestado ou em aberto, total de juros recebidos por mês e média geral de porcentagem.
+Opção para parcela fixa e juros mensal.
+Registro de pendências, garantias e contratos relacionados à operação.
+4.6 Mercado de Condomínio
+Preenchimento manual com base nos dados operacionais.
+Controle financeiro de entradas, saídas, despesas, lucro bruto e lucro líquido.
+Organização dos dados para facilitar acompanhamento e conferência.
+4.7 Marketing de Empresas
+Formulário com informações do contrato, incluindo nome, CPF/CNPJ, tipo de serviço, valor, data, endereço, telefone e e-mail.
+Organização dos contratos e informações comerciais.
+Possibilidade de assinatura digital, desde que validada tecnicamente e juridicamente.
+4.8 Controle de Finanças Pessoais
+Controle de receitas, despesas, contas a pagar e acompanhamento financeiro geral.
+Bloco de notas e agenda com possibilidade de notificações internas.
+Visão de valores totais, semanais e mensais.
+4.9 Módulo BX
+Registro com duas fotos: uma da tela e uma do papel, salvo clientes classificados como exceção.
+Cadastro de cliente pelo funcionário.
+Campos para cliente, recolhe, data, hora, entradas, saídas e valor.
+Indicação visual quando o saldo ficar negativo.
+Campo opcional para desconto.
+Controle de status de recebimento, com indicação visual de recebido ou não recebido.
+Geração ou envio de comprovante para o cliente, quando tecnicamente aplicável.
+4.10 Módulo H - Controle Operacional
+Controle de entrada atual, entrada anterior e diferença.
+Controle de saída atual, saída anterior e diferença.
+Cálculo de percentual conforme regra definida pelo responsável.
+Possibilidade de conferência ilimitada, com controle de valores negativos.
+Controle de dívida do cliente, pagamento parcial e abatimentos antes da divisão de valores.
+Cadastro de valor inicial para novos clientes conforme regra definida pelo responsável.
+Controle de numeração única por equipamento e numeração sequencial por cliente.
+Relatórios de negativos, dívidas, totais e movimentações por período.
+4.11 Plataforma Online - Módulo Brinde
+Módulo adicional previsto como brinde, a ser detalhado e validado antes da execução.
+O funcionamento, regras internas, telas e integrações deverão ser alinhados em reunião de escopo.
+Qualquer funcionalidade regulada, sensível ou dependente de autorização externa deverá passar por validação prévia.
+5. Regras Financeiras e Relatórios
+O sistema deverá permitir visualização financeira geral e por módulo.
+Os relatórios poderão considerar períodos diários, semanais, quinzenais e mensais, conforme a operação de cada módulo.
+Deverá haver controle de formas de pagamento, pagamentos parciais, dívidas acumuladas, despesas e saldos em aberto.
+Campos de comissão, percentual, juros e divisão de valores deverão ser parametrizados conforme regra validada pelo cliente.
+Relatórios mais avançados, dashboards ou exportações específicas deverão ser definidos no escopo final.
+6. Comprovantes, Fotos e Documentos
+Alguns módulos exigirão anexos obrigatórios, como fotos de conferência, comprovantes de pagamento ou documentos de apoio.
+O sistema poderá organizar esses anexos por cliente, módulo, data, funcionário e operação.
+O envio automático por WhatsApp dependerá de validação técnica, disponibilidade de integração e definição do método utilizado.
+Assinaturas digitais, inclusive por plataformas externas, deverão ser avaliadas tecnicamente e juridicamente antes da implementação.

@@ -20,47 +20,47 @@ export function RevenueChart({ data }: { data: ChartPoint[] }) {
         <AreaChart data={data}>
           <defs>
             <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#34d399" stopOpacity={0.45} />
-              <stop offset="95%" stopColor="#34d399" stopOpacity={0} />
+              <stop offset="5%" stopColor="#8aa17c" stopOpacity={0.42} />
+              <stop offset="95%" stopColor="#8aa17c" stopOpacity={0} />
             </linearGradient>
             <linearGradient id="expenseGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#fb7185" stopOpacity={0.35} />
-              <stop offset="95%" stopColor="#fb7185" stopOpacity={0} />
+              <stop offset="5%" stopColor="#b46c5d" stopOpacity={0.34} />
+              <stop offset="95%" stopColor="#b46c5d" stopOpacity={0} />
             </linearGradient>
           </defs>
-          <CartesianGrid stroke="rgba(255,255,255,0.08)" vertical={false} />
+          <CartesianGrid stroke="rgba(245,241,232,0.08)" vertical={false} />
           <XAxis
             dataKey="label"
             tickLine={false}
             axisLine={false}
-            tick={{ fill: "rgba(226,232,240,0.7)", fontSize: 12 }}
+            tick={{ fill: "rgba(245,241,232,0.66)", fontSize: 12 }}
           />
           <YAxis
             tickLine={false}
             axisLine={false}
-            tickFormatter={(value: number) => `R$ ${Math.round(value / 1000)}k`}
-            tick={{ fill: "rgba(226,232,240,0.55)", fontSize: 12 }}
+            tickFormatter={(value: number) => value >= 1000 ? `R$${Math.round(value / 1000)}k` : `R$${value}`}
+            tick={{ fill: "rgba(245,241,232,0.52)", fontSize: 12 }}
           />
           <Tooltip
             formatter={(value) => formatCurrency(Number(value ?? 0))}
             contentStyle={{
-              background: "rgba(15,23,42,0.96)",
+              background: "rgba(17,22,20,0.96)",
               borderRadius: "16px",
-              border: "1px solid rgba(255,255,255,0.08)",
-              color: "#f8fafc",
+              border: "1px solid rgba(245,241,232,0.1)",
+              color: "#f5f1e8",
             }}
           />
           <Area
             type="monotone"
             dataKey="receitas"
-            stroke="#34d399"
+            stroke="#8aa17c"
             fill="url(#incomeGradient)"
             strokeWidth={2}
           />
           <Area
             type="monotone"
             dataKey="despesas"
-            stroke="#fb7185"
+            stroke="#b46c5d"
             fill="url(#expenseGradient)"
             strokeWidth={2}
           />

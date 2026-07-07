@@ -2,12 +2,13 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, Clock3, LoaderCircle, ReceiptText } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
+import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
 const priceTable = {
   "15": 20,
@@ -22,10 +23,30 @@ const schema = z.object({
   phone: z.string().min(8, "Informe um celular valido."),
   minutesCharged: z.enum(["15", "30", "60"]),
   paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "OUTRO"]),
-  entryAmount: z.coerce.number().min(0),
-  exitAmount: z.coerce.number().min(0),
+  entryTime: z.string().optional(),
+  exitTime: z.string().optional(),
+  expenseAmount: z.coerce.number().min(0).default(0),
   notes: z.string().optional(),
 });
+
+function minutesBetween(entryTime?: string, exitTime?: string): number | null {
+  if (!entryTime || !exitTime) return null;
+  const [entryHour, entryMinute] = entryTime.split(":").map(Number);
+  const [exitHour, exitMinute] = exitTime.split(":").map(Number);
+  if ([entryHour, entryMinute, exitHour, exitMinute].some(Number.isNaN)) return null;
+
+  const entryTotal = entryHour * 60 + entryMinute;
+  const exitTotal = exitHour * 60 + exitMinute;
+  const diff = exitTotal - entryTotal;
+
+  return diff >= 0 ? diff : null;
+}
+
+function suggestTier(minutes: number): "15" | "30" | "60" {
+  if (minutes <= 15) return "15";
+  if (minutes <= 30) return "30";
+  return "60";
+}
 
 type FormInput = z.input<typeof schema>;
 type FormValues = z.output<typeof schema>;
@@ -38,23 +59,26 @@ type ReceiptState = {
   minutesCharged: string;
   paymentMethod: string;
   baseValue: number;
-  entryAmount: number;
-  exitAmount: number;
+  entryTime?: string;
+  exitTime?: string;
+  expenseAmount: number;
   totalValue: number;
   notes?: string;
 };
 
-export function CarretaKidsForm() {
+export function CarretaKidsForm({ hideFinancials = false }: { hideFinancials?: boolean } = {}) {
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
+  const submittingRef = useRef(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const tierManuallySet = useRef(false);
 
   const form = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
       minutesCharged: "15",
       paymentMethod: "PIX",
-      entryAmount: 0,
-      exitAmount: 0,
+      expenseAmount: 0,
     },
   });
 
@@ -66,11 +90,50 @@ export function CarretaKidsForm() {
     [selectedMinutes],
   );
 
-  const onSubmit = form.handleSubmit(async (values) => {
-    setLoading(true);
-    await new Promise((resolve) => setTimeout(resolve, 250));
+  const entryTime = useWatch({ control: form.control, name: "entryTime" });
+  const exitTime = useWatch({ control: form.control, name: "exitTime" });
+  const elapsedMinutes = useMemo(
+    () => minutesBetween(entryTime, exitTime),
+    [entryTime, exitTime],
+  );
 
-    const totalValue = baseValue + Number(values.entryAmount) - Number(values.exitAmount);
+  useEffect(() => {
+    if (tierManuallySet.current || elapsedMinutes === null) return;
+    form.setValue("minutesCharged", suggestTier(elapsedMinutes));
+  }, [elapsedMinutes, form]);
+
+  const onSubmit = form.handleSubmit(async (values) => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    setLoading(true);
+    setSaveError(null);
+
+    const totalValue = baseValue - Number(values.expenseAmount);
+
+    try {
+      const response = await fetch("/api/modules/carreta-kids/records", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          localName: values.localName,
+          serviceDate: values.serviceDate,
+          sheetName: values.sheetName,
+          phone: values.phone,
+          minutesCharged: values.minutesCharged,
+          paymentMethod: values.paymentMethod,
+          entryTime: values.entryTime,
+          exitTime: values.exitTime,
+          expenseAmount: Number(values.expenseAmount),
+          notes: values.notes,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("Falha ao salvar a Carreta Kids.");
+      }
+    } catch {
+      setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
+    }
 
     setReceipt({
       localName: values.localName,
@@ -80,12 +143,14 @@ export function CarretaKidsForm() {
       minutesCharged: values.minutesCharged,
       paymentMethod: values.paymentMethod,
       baseValue,
-      entryAmount: Number(values.entryAmount),
-      exitAmount: Number(values.exitAmount),
+      entryTime: values.entryTime,
+      exitTime: values.exitTime,
+      expenseAmount: Number(values.expenseAmount),
       totalValue,
       notes: values.notes,
     });
     setLoading(false);
+    submittingRef.current = false;
   });
 
   return (
@@ -116,7 +181,7 @@ export function CarretaKidsForm() {
             </label>
             <input id="localName" className={fieldClass} {...form.register("localName")} />
             {form.formState.errors.localName ? (
-              <p className="text-sm text-rose-300">
+              <p className="text-sm text-[#d59a8b]">
                 {form.formState.errors.localName.message}
               </p>
             ) : null}
@@ -132,12 +197,15 @@ export function CarretaKidsForm() {
               {...form.register("serviceDate")}
             />
             {form.formState.errors.serviceDate ? (
-              <p className="text-sm text-rose-300">
+              <p className="text-sm text-[#d59a8b]">
                 {form.formState.errors.serviceDate.message}
               </p>
             ) : null}
           </div>
-          <div className="space-y-2">
+          <div className="space-y-2 md:col-span-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
+              Cadastro de cliente
+            </p>
             <label className={labelClass} htmlFor="sheetName">
               Nome na ficha
             </label>
@@ -150,14 +218,49 @@ export function CarretaKidsForm() {
             <input id="phone" className={fieldClass} {...form.register("phone")} />
           </div>
           <div className="space-y-2">
+            <label className={labelClass} htmlFor="entryTime">
+              Horário de entrada
+            </label>
+            <input
+              id="entryTime"
+              type="time"
+              className={fieldClass}
+              {...form.register("entryTime")}
+            />
+          </div>
+          <div className="space-y-2">
+            <label className={labelClass} htmlFor="exitTime">
+              Horário de saída
+            </label>
+            <input
+              id="exitTime"
+              type="time"
+              className={fieldClass}
+              {...form.register("exitTime")}
+            />
+          </div>
+          <div className="space-y-2">
             <label className={labelClass} htmlFor="minutesCharged">
               Tempo cobrado
             </label>
-            <select id="minutesCharged" className={selectClass} {...form.register("minutesCharged")}>
+            <select
+              id="minutesCharged"
+              className={selectClass}
+              {...form.register("minutesCharged", {
+                onChange: () => {
+                  tierManuallySet.current = true;
+                },
+              })}
+            >
               <option value="15">15 minutos</option>
               <option value="30">30 minutos</option>
               <option value="60">1 hora</option>
             </select>
+            {elapsedMinutes !== null ? (
+              <p className="text-xs text-[#9a958b]">
+                {elapsedMinutes} min entre entrada e saída — sugestão automática.
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="paymentMethod">
@@ -166,7 +269,7 @@ export function CarretaKidsForm() {
             <select id="paymentMethod" className={selectClass} {...form.register("paymentMethod")}>
               <option value="PIX">PIX</option>
               <option value="DINHEIRO">Dinheiro</option>
-              <option value="CARTAO">Cartao</option>
+              <option value="CARTAO">Cartão</option>
               <option value="OUTRO">Outro</option>
             </select>
           </div>
@@ -174,64 +277,53 @@ export function CarretaKidsForm() {
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <label className={labelClass} htmlFor="entryAmount">
-              Entrada no caixa
+            <label className={labelClass} htmlFor="expenseAmount">
+              Despesa
             </label>
             <input
-              id="entryAmount"
+              id="expenseAmount"
               type="number"
+              inputMode="decimal"
               step="0.01"
               min="0"
               className={fieldClass}
-              {...form.register("entryAmount")}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="exitAmount">
-              Saida no caixa
-            </label>
-            <input
-              id="exitAmount"
-              type="number"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("exitAmount")}
+              {...form.register("expenseAmount")}
             />
           </div>
         </div>
 
         <div className="space-y-2">
           <label className={labelClass} htmlFor="notes">
-            Observacoes
+            Observações
           </label>
           <textarea id="notes" className={textareaClass} {...form.register("notes")} />
         </div>
 
-        <div className="rounded-[24px] border border-sky-400/20 bg-sky-400/[0.08] p-4">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-sky-200/70">
-                Valor calculado
-              </p>
-              <p className="mt-2 text-3xl font-semibold text-white">
-                {formatCurrency(baseValue)}
-              </p>
+        {hideFinancials ? null : (
+          <div className="rounded-[24px] border border-[#6f8790]/25 bg-[#27383a]/70 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-[#d6e1de]/70">
+                  Valor calculado
+                </p>
+                <p className="mt-2 text-3xl font-semibold text-white">
+                  {formatCurrency(baseValue)}
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3 text-[#d6e1de]">
+                <Clock3 className="size-5" />
+              </div>
             </div>
-            <div className="rounded-2xl border border-white/10 bg-white/[0.06] p-3 text-sky-100">
-              <Clock3 className="size-5" />
-            </div>
+            <p className="mt-3 text-sm leading-6 text-[#d6e1de]/80">
+              O tempo cobrado é sugerido pelo horário de entrada/saída, mas pode ser ajustado manualmente.
+            </p>
           </div>
-          <p className="mt-3 text-sm leading-6 text-sky-100/80">
-            O total final considera entrada e saída de caixa, sem perder o valor
-            da tabela.
-          </p>
-        </div>
+        )}
 
         <button
           type="submit"
           disabled={loading}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-white px-4 py-3 text-sm font-semibold text-slate-950 transition hover:bg-slate-200 disabled:opacity-70"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d1a04f] px-4 py-3.5 text-sm font-semibold text-[#0d0a05] shadow-[0_6px_20px_rgba(209,160,79,0.32)] transition hover:bg-[#daa855] disabled:opacity-70"
         >
           {loading ? <LoaderCircle className="size-4 animate-spin" /> : null}
           Salvar Carreta Kids
@@ -239,23 +331,51 @@ export function CarretaKidsForm() {
         </button>
       </form>
 
+      {saveError ? (
+        <div className="rounded-2xl border border-[#9d6b50]/35 bg-[#2b1e19]/70 p-3 text-sm text-[#f0c9ad]">
+          {saveError}
+        </div>
+      ) : null}
+
       {receipt ? (
-        <article className="rounded-[28px] border border-emerald-400/20 bg-emerald-400/[0.08] p-5">
-          <div className="flex items-center gap-2 text-emerald-100">
+        <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">
+          <div className="flex items-center gap-2 text-[#dbe6d4]">
             <ReceiptText className="size-4" />
-            <p className="font-medium">Registro salvo na base demo</p>
+            <p className="font-medium">Registro salvo</p>
           </div>
-          <div className="mt-4 grid gap-3 text-sm text-emerald-50/85 md:grid-cols-2">
+          <div className="mt-4 grid gap-3 text-sm text-[#dbe6d4]/85 md:grid-cols-2">
             <p>Local: {receipt.localName}</p>
             <p>Ficha: {receipt.sheetName}</p>
             <p>Data: {formatShortDate(receipt.serviceDate)}</p>
             <p>Pagamento: {receipt.paymentMethod}</p>
-            <p>Valor da tabela: {formatCurrency(receipt.baseValue)}</p>
-            <p>Total final: {formatCurrency(receipt.totalValue)}</p>
+            {receipt.entryTime ? <p>Entrada: {receipt.entryTime}</p> : null}
+            {receipt.exitTime ? <p>Saída: {receipt.exitTime}</p> : null}
+            {hideFinancials ? null : (
+              <>
+                <p>Valor da tabela: {formatCurrency(receipt.baseValue)}</p>
+                <p>Despesa: {formatCurrency(receipt.expenseAmount)}</p>
+                <p>Total final: {formatCurrency(receipt.totalValue)}</p>
+              </>
+            )}
           </div>
           {receipt.notes ? (
-            <p className="mt-3 text-sm text-emerald-50/75">{receipt.notes}</p>
+            <p className="mt-3 text-sm text-[#dbe6d4]/75">{receipt.notes}</p>
           ) : null}
+          <WhatsAppReceiptButton
+            defaultPhone={receipt.phone}
+            message={[
+              "*Comprovante Carreta Kids*",
+              `Local: ${receipt.localName}`,
+              `Ficha: ${receipt.sheetName}`,
+              `Data: ${formatShortDate(receipt.serviceDate)}`,
+              `Tempo: ${receipt.minutesCharged} min`,
+              ...(receipt.entryTime ? [`Entrada: ${receipt.entryTime}`] : []),
+              ...(receipt.exitTime ? [`Saída: ${receipt.exitTime}`] : []),
+              `Pagamento: ${receipt.paymentMethod}`,
+              `Despesa: ${formatCurrency(receipt.expenseAmount)}`,
+              `*Total: ${formatCurrency(receipt.totalValue)}*`,
+            ].join("\n")}
+          />
         </article>
       ) : null}
     </div>

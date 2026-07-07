@@ -1,7 +1,11 @@
+import "dotenv/config";
 import bcrypt from "bcryptjs";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { Pool } from "pg";
 import { PrismaClient, SystemModule, UserRole } from "@prisma/client";
 
-const prisma = new PrismaClient();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL ?? "" });
+const prisma = new PrismaClient({ adapter: new PrismaPg(pool) });
 
 async function main() {
   const organization = await prisma.organization.upsert({

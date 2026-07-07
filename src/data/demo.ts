@@ -15,31 +15,40 @@ type DemoAccount = {
 
 export const demoAccounts: DemoAccount[] = [
   {
-    label: "Funcionario",
-    helper: "Visao enxuta para rotina no celular",
-    email: "funcionario@svs-demo.local",
-    password: "Funcionario@12345",
+    label: "Administrador",
+    helper: "Acesso completo ao sistema",
+    email: "admin@lmgestao.local",
+    password: "Admin@12345",
     session: {
-      userId: "demo-user-2",
-      organizationId: "demo-org-1",
-      name: "Equipe Campo Demo",
-      email: "funcionario@svs-demo.local",
-      role: "STAFF",
+      userId: "lmgestao000000000000000002",
+      organizationId: "lmgestao000000000000000001",
+      name: "Administrador LM",
+      email: "admin@lmgestao.local",
+      role: "OWNER",
       modules: [
+        "CORE",
         "DASHBOARD",
         "CLIENTS",
         "FINANCE",
+        "REPORTS",
+        "SETTINGS",
         "CARRETA_KIDS",
-        "BILLIARD",
+        "RENTAL",
         "PLUSH",
+        "BILLIARD",
+        "BRASIL_BETS",
+        "MACHINE",
+        "CONDOMINIUM_MARKET",
+        "MARKETING",
+        "PERSONAL_FINANCE",
         "BX",
         "SLOT_H",
       ],
     },
   },
   {
-    label: "Dono",
-    helper: "Visao completa de operacao e negocio",
+    label: "Demo",
+    helper: "Conta de demonstração",
     email: "admin@svs-demo.local",
     password: "Admin@12345",
     session: {
@@ -78,13 +87,13 @@ export const demoDashboard: DashboardOverview = {
     {
       label: "Receita recebida",
       value: "R$ 48.320",
-      helper: "Ultimos 30 dias no consolidado financeiro",
+      helper: "Últimos 30 dias no consolidado financeiro",
       tone: "emerald",
     },
     {
       label: "Pagamentos pendentes",
       value: "R$ 12.480",
-      helper: "Titulos em aberto e contas a pagar",
+      helper: "Títulos em aberto e contas a pagar",
       tone: "amber",
     },
     {
@@ -94,9 +103,9 @@ export const demoDashboard: DashboardOverview = {
       tone: "rose",
     },
     {
-      label: "Lucro liquido",
+      label: "Lucro líquido",
       value: "R$ 21.940",
-      helper: "Resultado liquido apos despesas operacionais",
+      helper: "Resultado líquido após despesas operacionais",
       tone: "sky",
     },
   ],
@@ -118,7 +127,7 @@ export const demoDashboard: DashboardOverview = {
     },
     {
       id: "rem-2",
-      title: "Enviar contrato de locacao revisado",
+      title: "Enviar contrato de locação revisado",
       dueAt: "Amanha, 09:00",
       owner: "Administrativo",
       status: "aberto",
@@ -135,19 +144,19 @@ export const demoDashboard: DashboardOverview = {
     {
       title: "Motor financeiro unificado",
       description:
-        "Todas as entradas, saidas, contas a pagar, parciais e dividas convergem para um unico ledger auditavel.",
+        "Todas as entradas, saídas, contas a pagar, parciais e dívidas convergem para um único ledger auditável.",
       tone: "default",
     },
     {
-      title: "Permissoes por modulo",
+      title: "Permissões por módulo",
       description:
-        "O dono acessa tudo, administradores gerenciam operacao e funcionarios entram so nos modulos liberados.",
+        "O dono acessa tudo, administradores gerenciam operação e funcionários entram só nos módulos liberados.",
       tone: "success",
     },
     {
       title: "WhatsApp e comprovantes",
       description:
-        "A base ja fica pronta para notificacoes, envio de comprovantes e trilha de auditoria por evento.",
+        "A base já fica pronta para notificações, envio de comprovantes e trilha de auditoria por evento.",
       tone: "warning",
     },
   ],
@@ -159,9 +168,10 @@ export const demoClients: ClientListItem[] = [
     code: "CLI-0001",
     name: "Carlos Henrique",
     phone: "(11) 98888-1111",
-    city: "Sao Paulo",
+    city: "São Paulo",
     status: "ativo",
     balance: 0,
+    modules: ["BILLIARD"],
     updatedAt: "2026-06-10T10:30:00.000Z",
   },
   {
@@ -172,6 +182,7 @@ export const demoClients: ClientListItem[] = [
     city: "Guarulhos",
     status: "inadimplente",
     balance: 1240,
+    modules: ["CARRETA_KIDS", "PLUSH"],
     updatedAt: "2026-06-09T14:00:00.000Z",
   },
   {
@@ -182,6 +193,7 @@ export const demoClients: ClientListItem[] = [
     city: "Osasco",
     status: "excecao",
     balance: 420,
+    modules: ["BX"],
     updatedAt: "2026-06-08T09:20:00.000Z",
   },
   {
@@ -192,6 +204,7 @@ export const demoClients: ClientListItem[] = [
     city: "Barueri",
     status: "ativo",
     balance: 320,
+    modules: ["CONDOMINIUM_MARKET", "RENTAL"],
     updatedAt: "2026-06-07T18:10:00.000Z",
   },
 ];
@@ -201,23 +214,23 @@ export const demoFinance: FinanceOverview = {
     {
       label: "Total recebido",
       value: "R$ 48.320",
-      helper: "Entradas liquidadas no periodo atual",
+      helper: "Entradas liquidadas no período atual",
       tone: "emerald",
     },
     {
       label: "Contas a pagar",
       value: "R$ 7.950",
-      helper: "Titulos ainda nao quitados",
+      helper: "Títulos ainda não quitados",
       tone: "amber",
     },
     {
       label: "Parciais em aberto",
       value: "R$ 4.530",
-      helper: "Lancamentos com baixa parcial",
+      helper: "Lançamentos com baixa parcial",
       tone: "rose",
     },
     {
-      label: "Saldo liquido",
+      label: "Saldo líquido",
       value: "R$ 21.940",
       helper: "Receitas menos despesas consolidadas",
       tone: "sky",
@@ -240,7 +253,7 @@ export const demoFinance: FinanceOverview = {
     {
       id: "fin-2",
       reference: "FIN-0002",
-      description: "Compra de pecas e manutencao",
+      description: "Compra de peças e manutenção",
       module: "Financeiro geral",
       status: "parcial",
       amount: 1350,
@@ -265,7 +278,7 @@ export const demoFinance: FinanceOverview = {
     {
       id: "fin-4",
       reference: "FIN-0004",
-      description: "Recebimento de BX com cliente excecao",
+      description: "Recebimento de BX com cliente exceção",
       module: "BX",
       status: "atrasado",
       amount: 620,

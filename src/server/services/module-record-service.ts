@@ -3,16 +3,14 @@ import type {
   ContractStatus,
   FinancialDirection,
   FinancialStatus,
-  MachineCompensationStatus,
   PaymentMethod,
-  SlotDebtMode,
+  PersonalEntryType,
 } from "@prisma/client";
-import { randomUUID } from "crypto";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
-import type { SessionData } from "@/types/app";
+import type { ClientListItem, SessionData } from "@/types/app";
 
 export type ModuleSlug =
   | "carreta-kids"
@@ -23,7 +21,23 @@ export type ModuleSlug =
   | "credito-financeiro"
   | "mercado-autonomo"
   | "marketing"
-  | "plataforma-online";
+  | "plataforma-online"
+  | "locacao"
+  | "financas-pessoais";
+
+export const moduleSlugs: ModuleSlug[] = [
+  "carreta-kids",
+  "maquinas-de-pelucia",
+  "bilhar-pebolim",
+  "bx",
+  "h-caca-niquel",
+  "credito-financeiro",
+  "mercado-autonomo",
+  "marketing",
+  "plataforma-online",
+  "locacao",
+  "financas-pessoais",
+];
 
 export type ModuleRecordItem = {
   id: string;
@@ -31,9 +45,14 @@ export type ModuleRecordItem = {
   summary: string;
   details: string[];
   amount?: string;
+  amountValue?: number;
+  incomeValue?: number;
+  expenseValue?: number;
   badge?: string;
   createdAt: string;
 };
+
+export type DateRange = { from?: Date; to?: Date };
 
 type SaveResult = {
   record: ModuleRecordItem;
@@ -61,6 +80,7 @@ const paymentMethodMap: Record<string, PaymentMethod> = {
 const contractStatusMap: Record<string, ContractStatus> = {
   DRAFT: "DRAFT",
   PENDING: "PENDING_SIGNATURE",
+  OPEN: "PENDING_SIGNATURE",
   ACTIVE: "ACTIVE",
   CLOSED: "CLOSED",
 };
@@ -76,16 +96,11 @@ const financialStatusMap: Record<string, FinancialStatus> = {
   POSTED: "PARTIAL",
 };
 
-const debtModeMap: Record<string, SlotDebtMode> = {
-  NONE: "NONE",
-  MANUAL: "DEBT",
-  AUTO: "NEGATIVE",
-};
-
-const compensationMap: Record<string, MachineCompensationStatus> = {
-  DRAFT: "WORTH_IT",
-  OPEN: "WORTH_IT",
-  CLOSED: "NOT_WORTH_IT",
+const personalEntryTypeMap: Record<string, PersonalEntryType> = {
+  RECEITA: "INCOME",
+  DESPESA: "EXPENSE",
+  CONTA_A_PAGAR: "PAYABLE",
+  PAGO: "PAID",
 };
 
 const createCarretaSchema = z.object({
@@ -95,12 +110,16 @@ const createCarretaSchema = z.object({
   phone: z.string().optional(),
   minutesCharged: z.string(),
   paymentMethod: z.string(),
-  entryAmount: z.number(),
-  exitAmount: z.number(),
+  entryTime: z.string().optional(),
+  exitTime: z.string().optional(),
+  expenseAmount: z.number().optional(),
   notes: z.string().optional(),
 });
 
 const createPlushSchema = z.object({
+  clientName: z.string(),
+  cpf: z.string().optional(),
+  phone: z.string().optional(),
   code: z.string(),
   name: z.string(),
   machineNumber: z.string(),
@@ -117,36 +136,62 @@ const createPlushSchema = z.object({
   discountAmount: z.number().optional(),
   discountReason: z.string().optional(),
   ownerExpenseAmount: z.number().optional(),
-  compensationStatus: z.string(),
+  compensationStatus: z.enum(["WORTH_IT", "NOT_WORTH_IT"]),
   noteiro: z.string().optional(),
   notes: z.string().optional(),
+  coinPhotoFileId: z.string().optional(),
+  giftPhotoFileId: z.string().optional(),
 });
 
 const createBilliardSchema = z.object({
   clientName: z.string(),
+  cpf: z.string().optional(),
+  cnpj: z.string().optional(),
+  pointCode: z.string().optional(),
   pointName: z.string(),
   phone: z.string().optional(),
+  cep: z.string().optional(),
+  street: z.string().optional(),
   city: z.string(),
   neighborhood: z.string(),
   state: z.string(),
   tableModel: z.string(),
   chipValue: z.number(),
+  collectionDate: z.string().optional(),
+  fortnight: z.string().optional(),
   quantityOfChips: z.number(),
+  accumulatedChips: z.number().optional(),
   percentage: z.number(),
+  discountAmount: z.number().optional(),
+  discountReason: z.string().optional(),
   roofDebt: z.number(),
   roofPaymentMethod: z.string(),
+  contractType: z.string().optional(),
+  contractStatus: z.string().optional(),
+  structureCost: z.number().optional(),
   employeeCost: z.number(),
   installationCost: z.number(),
   maintenanceCost: z.number(),
   otherCost: z.number(),
   routeNumber: z.number(),
   partialRoute: z.string().optional(),
-  maintenanceDate: z.string(),
+  maintenanceDate: z.string().optional(),
+  nextMaintenanceDate: z.string().optional(),
+  materials: z.string().optional(),
+  photoNames: z.array(z.string()).optional(),
+  photoFileIds: z.array(z.string()).optional(),
   notes: z.string().optional(),
 });
 
 const createBxSchema = z.object({
   clientName: z.string(),
+  phone: z.string().optional(),
+  cpf: z.string().optional(),
+  cep: z.string().optional(),
+  street: z.string().optional(),
+  neighborhood: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
   collectNumber: z.string(),
   agentName: z.string(),
   receiverName: z.string(),
@@ -156,20 +201,29 @@ const createBxSchema = z.object({
   incomeAmount: z.number(),
   expenseAmount: z.number(),
   discountAmount: z.number(),
+  paymentMethod: z.string().optional(),
   receiptStatus: z.string(),
   exceptionClient: z.boolean(),
   notes: z.string().optional(),
-  screenPhotoName: z.string().optional(),
-  paperPhotoName: z.string().optional(),
+  screenPhotoFileId: z.string().optional(),
+  paperPhotoFileId: z.string().optional(),
 });
 
 const createSlotSchema = z.object({
   uniqueMachineNumber: z.string(),
-  clientSequenceNumber: z.string(),
+  newClient: z.boolean().optional(),
+  clientName: z.string().optional(),
+  phone: z.string().optional(),
+  cpf: z.string().optional(),
+  cep: z.string().optional(),
+  street: z.string().optional(),
+  neighborhood: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
   customerDebt: z.number().optional(),
   ppValue: z.number().optional(),
   initialAmount: z.number().optional(),
-  initialAmountMode: z.string(),
+  initialAmountMode: z.enum(["NONE", "DEBT", "NEGATIVE"]),
   optionalGreedAmount: z.number().optional(),
   active: z.boolean().optional(),
   occurredAt: z.string(),
@@ -183,7 +237,8 @@ const createSlotSchema = z.object({
   feedingNegativeAmount: z.number().optional(),
   customerDebtDiscounted: z.number().optional(),
   generatedDebtAmount: z.number().optional(),
-  debtMode: z.string(),
+  debtMode: z.enum(["NONE", "DEBT", "NEGATIVE"]),
+  paymentMethod: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -197,10 +252,13 @@ const createMachineContractSchema = z.object({
   monthlyInterest: z.number().optional(),
   installmentFixed: z.boolean(),
   guaranteeEnabled: z.boolean(),
-  digitalSignature: z.boolean(),
+  signatureLink: z.string().optional(),
+  signatureFileId: z.string().optional(),
   streetLoanAmount: z.number().optional(),
   monthlyInterestTotal: z.number().optional(),
   generalPercentageAvg: z.number().optional(),
+  expenseAmount: z.number().optional(),
+  paymentMethod: z.string().optional(),
   status: z.string(),
   notes: z.string().optional(),
 });
@@ -211,6 +269,7 @@ const createMarketSchema = z.object({
   direction: z.string(),
   amount: z.number(),
   expenseAmount: z.number(),
+  paymentMethod: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -225,7 +284,11 @@ const createMarketingSchema = z.object({
   address: z.string().optional(),
   phone: z.string().optional(),
   email: z.string().optional(),
-  digitalSignature: z.boolean(),
+  signatureLink: z.string().optional(),
+  signatureFileId: z.string().optional(),
+  expenseAmount: z.number().optional(),
+  paymentMethod: z.string().optional(),
+  contractFileId: z.string().optional(),
   status: z.string(),
   notes: z.string().optional(),
 });
@@ -236,6 +299,33 @@ const createPlatformSchema = z.object({
   direction: z.string(),
   status: z.string(),
   amount: z.number(),
+  paymentMethod: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+const createRentalSchema = z.object({
+  clientName: z.string(),
+  phone: z.string().optional(),
+  localName: z.string(),
+  document: z.string().optional(),
+  eventDate: z.string(),
+  totalAmount: z.number(),
+  signalEnabled: z.boolean().optional(),
+  signalPercentage: z.number(),
+  expenseAmount: z.number().optional(),
+  paymentMethod: z.string().optional(),
+  paymentStatus: z.string(),
+  contractNumber: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+const createPersonalFinanceSchema = z.object({
+  title: z.string(),
+  category: z.string(),
+  type: z.string(),
+  amount: z.number(),
+  dueDate: z.string(),
+  paymentMethod: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -243,14 +333,35 @@ function toDate(value: string) {
   return new Date(value.includes("T") ? value : `${value}T12:00:00`);
 }
 
-function buildKey(session: SessionData, slug: ModuleSlug) {
-  return `${session.organizationId}:${slug}`;
+async function logFieldVisitForModuleRecord(params: {
+  organizationId: string;
+  createdById: string;
+  targetId: string;
+  visitType: "BILLIARD" | "PLUSH" | "BX" | "SLOT_H" | "CARRETA_KIDS" | "RENTAL";
+  occurredAt: Date;
+  incomeAmount: number;
+  expenseAmount: number;
+  clientName?: string | null;
+  clientPhone?: string | null;
+}) {
+  await prisma.fieldVisit.create({
+    data: {
+      organizationId: params.organizationId,
+      targetId: params.targetId,
+      createdById: params.createdById,
+      visitType: params.visitType,
+      occurredAt: params.occurredAt,
+      checkedItems: [],
+      incomeAmount: params.incomeAmount,
+      expenseAmount: params.expenseAmount,
+      clientName: params.clientName ?? undefined,
+      clientPhone: params.clientPhone ?? undefined,
+    },
+  });
 }
 
-function pushLocalRecord(session: SessionData, slug: ModuleSlug, record: ModuleRecordItem) {
-  const key = buildKey(session, slug);
-  const existing = moduleRecordStore.get(key) ?? [];
-  moduleRecordStore.set(key, [record, ...existing].slice(0, 20));
+function buildKey(session: SessionData, slug: ModuleSlug) {
+  return `${session.organizationId}:${slug}`;
 }
 
 function listLocalRecords(session: SessionData, slug: ModuleSlug, take = 5) {
@@ -274,202 +385,71 @@ function mapFinancialStatus(value: string) {
   return financialStatusMap[value] ?? "PENDING";
 }
 
-function mapDebtMode(value: string) {
-  return debtModeMap[value] ?? "NONE";
+function mapPersonalEntryType(value: string) {
+  return personalEntryTypeMap[value] ?? "EXPENSE";
 }
 
-function mapCompensationStatus(value: string) {
-  return compensationMap[value] ?? "WORTH_IT";
+function buildBilliardPointCode(data: z.infer<typeof createBilliardSchema>) {
+  if (data.pointCode?.trim()) {
+    return data.pointCode.trim();
+  }
+
+  const normalizedPoint = data.pointName
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 16)
+    .toUpperCase();
+
+  return `R${String(data.routeNumber).padStart(2, "0")}-${normalizedPoint || "PONTO"}`;
 }
 
-function buildCarretaRecord(data: z.infer<typeof createCarretaSchema>): ModuleRecordItem {
-  const total = data.entryAmount - data.exitAmount + (data.minutesCharged === "15" ? 20 : data.minutesCharged === "30" ? 30 : 40);
-
-  return {
-    id: randomUUID(),
-    title: data.localName,
-    summary: `Ficha ${data.sheetName}`,
-    details: [
-      `Data: ${formatShortDate(data.serviceDate)}`,
-      `Pagamento: ${data.paymentMethod}`,
-      `Entrada: ${formatCurrency(data.entryAmount)}`,
-      `Saida: ${formatCurrency(data.exitAmount)}`,
-    ],
-    amount: formatCurrency(total),
-    badge: `${data.minutesCharged} min`,
-    createdAt: new Date().toISOString(),
-  };
+function buildBilliardNotes(data: z.infer<typeof createBilliardSchema>) {
+  return [
+    data.notes,
+    data.discountAmount ? `Desconto: ${formatCurrency(data.discountAmount)} - ${data.discountReason ?? "sem motivo"}` : null,
+    data.contractType && data.contractType !== "NENHUM"
+      ? `Contrato: ${data.contractType} / ${data.contractStatus ?? "NAO_APLICA"}`
+      : null,
+    data.nextMaintenanceDate ? `Proxima manutencao: ${formatShortDate(data.nextMaintenanceDate)}` : null,
+    data.photoNames?.length ? `Anexos: ${data.photoNames.join(", ")}` : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
-function buildPlushRecord(data: z.infer<typeof createPlushSchema>): ModuleRecordItem {
-  const grossAmount = data.grossAmount;
-  const clientAmount = grossAmount * (data.commissionPercentage / 100);
-  const companyAmount = grossAmount - clientAmount - (data.discountAmount ?? 0) - (data.ownerExpenseAmount ?? 0);
 
-  return {
-    id: randomUUID(),
-    title: data.name,
-    summary: `Maquina ${data.machineNumber}`,
-    details: [
-      `Codigo: ${data.code}`,
-      `Fichas: ${data.plushCountOut}`,
-      `Comissao: ${data.commissionPercentage}%`,
-      `Compensacao: ${data.compensationStatus}`,
-    ],
-    amount: formatCurrency(companyAmount),
-    badge: data.active ? "Ativa" : "Inativa",
-    createdAt: new Date().toISOString(),
-  };
+type SlotSplitInput = {
+  currentIncome: number;
+  previousIncome: number;
+  currentExpense: number;
+  previousExpense: number;
+  percentageSplit: number;
+  negativeAmount?: number;
+  feedingNegativeAmount?: number;
+  optionalGreedAmount?: number;
+  customerDebtDiscounted?: number;
+  generatedDebtAmount?: number;
+};
+
+function computeSlotSplit(data: SlotSplitInput) {
+  const incomeDifference = data.currentIncome - data.previousIncome;
+  const expenseDifference = data.currentExpense - data.previousExpense;
+  const netRevenue = incomeDifference - expenseDifference;
+  const totalNegative = (data.negativeAmount ?? 0) + (data.feedingNegativeAmount ?? 0);
+  const adjustedTotal = netRevenue - totalNegative;
+  const clientShareBase = adjustedTotal * (data.percentageSplit / 100);
+  const houseShareBase = adjustedTotal - clientShareBase;
+  const greed = data.optionalGreedAmount ?? 0;
+  const clientShareAfterGreed = clientShareBase - greed;
+  const houseShareAfterGreed = houseShareBase + greed;
+  const clientShareFinal = clientShareAfterGreed - (data.customerDebtDiscounted ?? 0);
+  const houseAmount = houseShareAfterGreed - (data.generatedDebtAmount ?? 0);
+
+  return { incomeDifference, expenseDifference, netRevenue, adjustedTotal, clientShareFinal, houseAmount };
 }
 
-function buildBilliardRecord(data: z.infer<typeof createBilliardSchema>): ModuleRecordItem {
-  const grossAmount = data.quantityOfChips * data.chipValue;
-  const clientShare = grossAmount * (data.percentage / 100);
-  const companyShare =
-    grossAmount -
-    clientShare -
-    data.employeeCost -
-    data.installationCost -
-    data.maintenanceCost -
-    data.otherCost -
-    data.roofDebt;
-
-  return {
-    id: randomUUID(),
-    title: data.pointName,
-    summary: data.tableModel,
-    details: [
-      `Cidade: ${data.city}`,
-      `Rota: ${data.routeNumber}`,
-      `Fichas: ${data.quantityOfChips}`,
-      `Manutencao: ${formatShortDate(data.maintenanceDate)}`,
-    ],
-    amount: formatCurrency(companyShare),
-    badge: data.quantityOfChips >= 1500 ? "Trocar pano" : "OK",
-    createdAt: new Date().toISOString(),
-  };
-}
-
-function buildBxRecord(data: z.infer<typeof createBxSchema>): ModuleRecordItem {
-  const netAmount = data.incomeAmount - data.expenseAmount - data.discountAmount;
-
-  return {
-    id: randomUUID(),
-    title: data.clientName,
-    summary: `Recolhe ${data.collectNumber}`,
-    details: [
-      `Agente: ${data.agentName}`,
-      `Recebeu: ${data.receiverName}`,
-      `Status: ${data.receiptStatus}`,
-      data.exceptionClient ? "Cliente excecao" : "Fluxo padrao",
-    ],
-    amount: formatCurrency(netAmount),
-    badge: data.receiptStatus === "RECEIVED" ? "Recebido" : "Nao recebido",
-    createdAt: new Date().toISOString(),
-  };
-}
-
-function buildSlotRecord(data: z.infer<typeof createSlotSchema>): ModuleRecordItem {
-  const splitAmount = data.currentIncome * (data.percentageSplit / 100);
-  const houseAmount =
-    data.currentIncome -
-    splitAmount -
-    (data.negativeAmount ?? 0) -
-    (data.feedingNegativeAmount ?? 0) -
-    (data.customerDebtDiscounted ?? 0) +
-    (data.generatedDebtAmount ?? 0);
-
-  return {
-    id: randomUUID(),
-    title: data.uniqueMachineNumber,
-    summary: `Cliente ${data.clientSequenceNumber}`,
-    details: [
-      `Conferencias: ${data.conferenceCount}`,
-      `Mode: ${data.debtMode}`,
-      `Entrada: ${formatCurrency(data.currentIncome)}`,
-      `Casa: ${formatCurrency(houseAmount)}`,
-    ],
-    amount: formatCurrency(houseAmount),
-    badge: data.active ? "Ativa" : "Inativa",
-    createdAt: new Date().toISOString(),
-  };
-}
-
-function buildMachineContractRecord(
-  data: z.infer<typeof createMachineContractSchema>,
-): ModuleRecordItem {
-  const monthlyCharge = data.amount * ((data.monthlyInterest ?? 0) / 100);
-
-  return {
-    id: randomUUID(),
-    title: data.clientName,
-    summary: `Contrato ${data.clientCode}`,
-    details: [
-      `Ano: ${data.year}`,
-      `Juros: ${data.monthlyInterest ?? 0}%`,
-      `Garantia: ${data.guaranteeEnabled ? "Sim" : "Nao"}`,
-      `Assinatura: ${data.digitalSignature ? "Sim" : "Nao"}`,
-    ],
-    amount: formatCurrency(monthlyCharge),
-    badge: data.status,
-    createdAt: new Date().toISOString(),
-  };
-}
-
-function buildMarketRecord(data: z.infer<typeof createMarketSchema>): ModuleRecordItem {
-  const netAmount = data.direction === "SAIDA" ? -(data.amount + data.expenseAmount) : data.amount - data.expenseAmount;
-
-  return {
-    id: randomUUID(),
-    title: data.description,
-    summary: `Movimento ${data.direction}`,
-    details: [
-      `Data: ${formatShortDate(data.movementDate)}`,
-      `Despesa: ${formatCurrency(data.expenseAmount)}`,
-      `Saldo: ${formatCurrency(netAmount)}`,
-    ],
-    amount: formatCurrency(netAmount),
-    badge: data.direction,
-    createdAt: new Date().toISOString(),
-  };
-}
-
-function buildMarketingRecord(data: z.infer<typeof createMarketingSchema>): ModuleRecordItem {
-  const signedAmount = data.digitalSignature ? data.contractValue * 0.95 : data.contractValue;
-
-  return {
-    id: randomUUID(),
-    title: data.name,
-    summary: data.serviceType,
-    details: [
-      `Tipo: ${data.personType}`,
-      `Data: ${formatShortDate(data.contractDate)}`,
-      `Assinatura: ${data.digitalSignature ? "Sim" : "Nao"}`,
-      `Status: ${data.status}`,
-    ],
-    amount: formatCurrency(signedAmount),
-    badge: data.status,
-    createdAt: new Date().toISOString(),
-  };
-}
-
-function buildPlatformRecord(data: z.infer<typeof createPlatformSchema>): ModuleRecordItem {
-  const netAmount = data.direction === "SAIDA" ? -data.amount : data.amount;
-
-  return {
-    id: randomUUID(),
-    title: data.description,
-    summary: `Movimento ${data.direction}`,
-    details: [
-      `Data: ${formatShortDate(data.movementDate)}`,
-      `Status: ${data.status}`,
-      `Liquido: ${formatCurrency(netAmount)}`,
-    ],
-    amount: formatCurrency(netAmount),
-    badge: data.status,
-    createdAt: new Date().toISOString(),
-  };
-}
 
 async function saveWithPrisma(
   session: SessionData,
@@ -480,6 +460,7 @@ async function saveWithPrisma(
     case "carreta-kids": {
       const data = createCarretaSchema.parse(payload);
       const basePrice = data.minutesCharged === "15" ? 20 : data.minutesCharged === "30" ? 30 : 40;
+      const totalAmount = basePrice - (data.expenseAmount ?? 0);
       const record = await prisma.carretaKidsRecord.create({
         data: {
           organizationId: session.organizationId,
@@ -490,13 +471,25 @@ async function saveWithPrisma(
           phone: data.phone,
           minutesCharged: Number(data.minutesCharged),
           tablePrice: basePrice,
-          totalAmount: basePrice + data.entryAmount - data.exitAmount,
+          totalAmount,
           paymentMethod: mapPaymentMethod(data.paymentMethod),
-          entryAmount: data.entryAmount,
-          exitAmount: data.exitAmount,
+          entryTime: data.entryTime,
+          exitTime: data.exitTime,
+          expenseAmount: data.expenseAmount ?? 0,
           notes: data.notes,
         },
       });
+
+      await logFieldVisitForModuleRecord({
+        organizationId: session.organizationId,
+        createdById: session.userId,
+        targetId: record.id,
+        visitType: "CARRETA_KIDS",
+        occurredAt: record.serviceDate,
+        incomeAmount: basePrice,
+        expenseAmount: data.expenseAmount ?? 0,
+        clientPhone: data.phone ?? null,
+      }).catch((e) => console.error("[module-record-service] logFieldVisit carreta-kids falhou:", e));
 
       return {
         record: {
@@ -506,8 +499,9 @@ async function saveWithPrisma(
           details: [
             `Data: ${formatShortDate(record.serviceDate)}`,
             `Pagamento: ${data.paymentMethod}`,
-            `Entrada: ${formatCurrency(Number(record.entryAmount ?? 0))}`,
-            `Saida: ${formatCurrency(Number(record.exitAmount ?? 0))}`,
+            ...(record.entryTime ? [`Entrada: ${record.entryTime}`] : []),
+            ...(record.exitTime ? [`Saida: ${record.exitTime}`] : []),
+            `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
           ],
           amount: formatCurrency(Number(record.totalAmount)),
           badge: `${record.minutesCharged} min`,
@@ -527,6 +521,9 @@ async function saveWithPrisma(
         },
         create: {
           organizationId: session.organizationId,
+          clientName: data.clientName,
+          cpf: data.cpf,
+          phone: data.phone,
           code: data.code,
           name: data.name,
           machineNumber: data.machineNumber,
@@ -537,6 +534,9 @@ async function saveWithPrisma(
           active: data.active ?? true,
         },
         update: {
+          clientName: data.clientName,
+          cpf: data.cpf,
+          phone: data.phone,
           name: data.name,
           machineNumber: data.machineNumber,
           noteNumber: data.noteNumber,
@@ -565,13 +565,27 @@ async function saveWithPrisma(
           discountAmount: data.discountAmount ?? 0,
           discountReason: data.discountReason,
           ownerExpenseAmount: data.ownerExpenseAmount ?? 0,
-          compensationStatus: mapCompensationStatus(data.compensationStatus),
+          compensationStatus: data.compensationStatus,
           noteiro: data.noteiro,
+          coinPhotoId: data.coinPhotoFileId,
+          giftPhotoId: data.giftPhotoFileId,
         },
         include: {
           plushMachine: true,
         },
       });
+
+      await logFieldVisitForModuleRecord({
+        organizationId: session.organizationId,
+        createdById: session.userId,
+        targetId: record.plushMachineId,
+        visitType: "PLUSH",
+        occurredAt: record.createdAt,
+        incomeAmount: data.grossAmount,
+        expenseAmount: data.ownerExpenseAmount ?? 0,
+        clientName: record.plushMachine.clientName ?? null,
+        clientPhone: record.plushMachine.phone ?? null,
+      }).catch((e) => console.error("[module-record-service] logFieldVisit pelucia falhou:", e));
 
       return {
         record: {
@@ -579,10 +593,11 @@ async function saveWithPrisma(
           title: record.plushMachine.name,
           summary: `Maquina ${record.plushMachine.machineNumber}`,
           details: [
+            `Cliente: ${record.plushMachine.clientName ?? "-"}`,
             `Codigo: ${record.plushMachine.code}`,
             `Fichas: ${record.plushCountOut}`,
             `Comissao: ${record.commissionPercentage}%`,
-            `Compensacao: ${record.compensationStatus}`,
+            `Compensacao: ${record.compensationStatus === "WORTH_IT" ? "Compensa" : "Nao compensa"}`,
           ],
           amount: formatCurrency(Number(record.companyAmount)),
           badge: record.plushMachine.active ? "Ativa" : "Inativa",
@@ -593,81 +608,144 @@ async function saveWithPrisma(
     }
     case "bilhar-pebolim": {
       const data = createBilliardSchema.parse(payload);
+      const pointCode = buildBilliardPointCode(data);
+      const accumulatedChips = (data.accumulatedChips ?? 0) + data.quantityOfChips;
+      const existingPoint = await prisma.billiardPoint.findUnique({
+        where: {
+          organizationId_code: {
+            organizationId: session.organizationId,
+            code: pointCode,
+          },
+        },
+        select: { id: true },
+      });
+      let registrationNumber: number | undefined;
+      if (!existingPoint) {
+        // Usa MAX atômico em vez de findFirst+1 para evitar race condition com múltiplos usuários simultâneos.
+        const result = await prisma.$queryRaw<[{ next: number }]>`
+          SELECT COALESCE(MAX("registrationNumber"), 0) + 1 AS next
+          FROM "BilliardPoint"
+          WHERE "organizationId" = ${session.organizationId}
+        `;
+        registrationNumber = result[0]?.next ?? 1;
+      }
       const point = await prisma.billiardPoint.upsert({
         where: {
           organizationId_code: {
             organizationId: session.organizationId,
-            code: `P${data.routeNumber}`,
+            code: pointCode,
           },
         },
         create: {
           organizationId: session.organizationId,
           createdById: session.userId,
-          code: `P${data.routeNumber}`,
+          registrationNumber,
+          code: pointCode,
           name: data.pointName,
+          clientName: data.clientName,
+          cep: data.cep,
+          street: data.street,
           city: data.city,
           neighborhood: data.neighborhood,
           state: data.state,
           phone: data.phone,
+          cpf: data.cpf,
+          cnpj: data.cnpj,
           tableModel: data.tableModel,
           chipValue: data.chipValue,
           roofOpenDebt: data.roofDebt,
           routeNumber: data.routeNumber,
           partialRoute: data.partialRoute,
+          accumulatedChips,
         },
         update: {
           name: data.pointName,
+          clientName: data.clientName,
+          cep: data.cep,
+          street: data.street,
           city: data.city,
           neighborhood: data.neighborhood,
           state: data.state,
           phone: data.phone,
+          cpf: data.cpf,
+          cnpj: data.cnpj,
           tableModel: data.tableModel,
           chipValue: data.chipValue,
           roofOpenDebt: data.roofDebt,
           routeNumber: data.routeNumber,
           partialRoute: data.partialRoute,
+          accumulatedChips,
         },
       });
 
       const grossAmount = data.quantityOfChips * data.chipValue;
+      const collectionDate = data.collectionDate || data.maintenanceDate || new Date().toISOString();
+      const installationTotal = data.installationCost + (data.structureCost ?? 0);
       const record = await prisma.billiardCollection.create({
         data: {
           organizationId: session.organizationId,
           createdById: session.userId,
           billiardPointId: point.id,
-          collectionDate: toDate(data.maintenanceDate),
+          collectionDate: toDate(collectionDate),
           quantityOfChips: data.quantityOfChips,
           grossAmount,
           percentage: data.percentage,
+          discountAmount: data.discountAmount ?? 0,
           roofAmount: data.roofDebt,
           roofPaymentMethod: mapPaymentMethod(data.roofPaymentMethod),
           employeeCost: data.employeeCost,
-          installationCost: data.installationCost,
+          installationCost: installationTotal,
           maintenanceCost: data.maintenanceCost,
           otherCost: data.otherCost,
-          registerNumber: String(data.routeNumber),
+          registerNumber: pointCode,
         },
         include: { billiardPoint: true },
       });
 
-      await prisma.billiardMaintenance.create({
-        data: {
-          organizationId: session.organizationId,
-          createdById: session.userId,
-          billiardPointId: point.id,
-          maintenanceDate: toDate(data.maintenanceDate),
-          notes: data.notes,
-          status: "SCHEDULED",
-        },
-      });
+      if (data.photoFileIds && data.photoFileIds.length > 0) {
+        await prisma.fileAsset.updateMany({
+          where: { id: { in: data.photoFileIds }, organizationId: session.organizationId },
+          data: { entityType: "BILLIARD_COLLECTION", entityId: record.id },
+        });
+      }
+
+      const maintenanceDate = data.maintenanceDate || data.nextMaintenanceDate;
+      const maintenanceNotes = buildBilliardNotes(data);
+
+      if (maintenanceDate || data.materials || maintenanceNotes) {
+        await prisma.billiardMaintenance.create({
+          data: {
+            organizationId: session.organizationId,
+            createdById: session.userId,
+            billiardPointId: point.id,
+            maintenanceDate: toDate(maintenanceDate || collectionDate),
+            materials: data.materials,
+            notes: maintenanceNotes,
+            status: data.maintenanceDate ? "DONE" : "SCHEDULED",
+          },
+        });
+      }
 
       const companyShare =
         grossAmount * (1 - data.percentage / 100) -
         data.employeeCost -
-        data.installationCost -
+        installationTotal -
         data.maintenanceCost -
         data.otherCost -
-        data.roofDebt;
+        data.roofDebt -
+        (data.discountAmount ?? 0);
+
+      await logFieldVisitForModuleRecord({
+        organizationId: session.organizationId,
+        createdById: session.userId,
+        targetId: record.billiardPointId,
+        visitType: "BILLIARD",
+        occurredAt: record.collectionDate,
+        incomeAmount: grossAmount,
+        expenseAmount: data.employeeCost + installationTotal + data.maintenanceCost + data.otherCost + data.roofDebt + (data.discountAmount ?? 0),
+        clientName: record.billiardPoint.clientName ?? null,
+        clientPhone: record.billiardPoint.phone ?? null,
+      }).catch((e) => console.error("[module-record-service] logFieldVisit bilhar falhou:", e));
 
       return {
         record: {
@@ -675,13 +753,15 @@ async function saveWithPrisma(
           title: record.billiardPoint.name,
           summary: record.billiardPoint.tableModel ?? "Mesa de bilhar",
           details: [
+            `Ponto nº: ${record.billiardPoint.registrationNumber ?? "-"}`,
             `Cidade: ${record.billiardPoint.city ?? "-"}`,
             `Rota: ${record.billiardPoint.routeNumber ?? "-"}`,
             `Fichas: ${record.quantityOfChips}`,
+            `Acumulado: ${accumulatedChips}/1500`,
             `Manutencao: ${formatShortDate(record.collectionDate)}`,
           ],
           amount: formatCurrency(companyShare),
-          badge: record.quantityOfChips >= 1500 ? "Trocar pano" : "OK",
+          badge: accumulatedChips >= 1500 ? "Trocar pano" : "OK",
           createdAt: record.createdAt.toISOString(),
         },
         source: "database",
@@ -694,7 +774,16 @@ async function saveWithPrisma(
           organizationId: session.organizationId,
           createdById: session.userId,
           clientName: data.clientName,
+          phone: data.phone,
+          cpf: data.cpf,
+          cep: data.cep,
+          street: data.street,
+          neighborhood: data.neighborhood,
+          city: data.city,
+          state: data.state,
           collectNumber: data.collectNumber,
+          agentName: data.agentName,
+          receiverName: data.receiverName,
           occurredAt: toDate(data.occurredAt),
           sentToAgentAmount: data.sentToAgentAmount,
           deliveredAmount: data.deliveredAmount,
@@ -702,10 +791,25 @@ async function saveWithPrisma(
           expenseAmount: data.expenseAmount,
           totalAmount: data.incomeAmount - data.expenseAmount - data.discountAmount,
           discountAmount: data.discountAmount,
+          paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
           exceptionClient: data.exceptionClient,
           receiptStatus: data.receiptStatus as BxReceiptStatus,
+          screenPhotoId: data.screenPhotoFileId,
+          paperPhotoId: data.paperPhotoFileId,
         },
       });
+
+      await logFieldVisitForModuleRecord({
+        organizationId: session.organizationId,
+        createdById: session.userId,
+        targetId: record.id,
+        visitType: "BX",
+        occurredAt: record.occurredAt,
+        incomeAmount: Number(record.incomeAmount),
+        expenseAmount: Number(record.expenseAmount),
+        clientName: record.clientName ?? null,
+        clientPhone: record.phone ?? null,
+      }).catch((e) => console.error("[module-record-service] logFieldVisit bx falhou:", e));
 
       return {
         record: {
@@ -713,8 +817,8 @@ async function saveWithPrisma(
           title: record.clientName,
           summary: `Recolhe ${record.collectNumber ?? "-"}`,
           details: [
-            `Agente: ${data.agentName}`,
-            `Recebeu: ${data.receiverName}`,
+            `Agente: ${record.agentName ?? "-"}`,
+            `Recebeu: ${record.receiverName ?? "-"}`,
             `Status: ${record.receiptStatus}`,
             data.exceptionClient ? "Cliente excecao" : "Fluxo padrao",
           ],
@@ -727,6 +831,58 @@ async function saveWithPrisma(
     }
     case "h-caca-niquel": {
       const data = createSlotSchema.parse(payload);
+      const existingMachine = await prisma.slotMachine.findUnique({
+        where: {
+          organizationId_uniqueMachineNumber: {
+            organizationId: session.organizationId,
+            uniqueMachineNumber: data.uniqueMachineNumber,
+          },
+        },
+      });
+
+      const clientSequenceNumber = !existingMachine
+        ? "1"
+        : data.newClient
+          ? String((Number(existingMachine.clientSequenceNumber) || 0) + 1)
+          : existingMachine.clientSequenceNumber;
+
+      const resetDebtForNewClient = !existingMachine || data.newClient;
+      const baseDebt = resetDebtForNewClient
+        ? data.initialAmountMode === "DEBT"
+          ? data.initialAmount ?? 0
+          : 0
+        : data.customerDebt ?? 0;
+      // P.P (pagamento pendente) abate do saldo permanente da divida, separado do desconto pos-split (customerDebtDiscounted).
+      const customerDebt = Math.max(baseDebt - (data.ppValue ?? 0), 0);
+
+      // Valor inicial em modo "Negativo" entra no negativo deste fechamento, igual um negativo manual.
+      const initialNegativeBonus =
+        resetDebtForNewClient && data.initialAmountMode === "NEGATIVE" ? data.initialAmount ?? 0 : 0;
+      const effectiveNegativeAmount = (data.negativeAmount ?? 0) + initialNegativeBonus;
+
+      // newClient force-clears cadastro fields not resent, so the old client's data never lingers under the new one.
+      const clientFields = resetDebtForNewClient
+        ? {
+            clientName: data.clientName ?? "",
+            phone: data.phone ?? "",
+            cpf: data.cpf ?? "",
+            cep: data.cep ?? "",
+            street: data.street ?? "",
+            neighborhood: data.neighborhood ?? "",
+            city: data.city ?? "",
+            state: data.state ?? "",
+          }
+        : {
+            clientName: data.clientName,
+            phone: data.phone,
+            cpf: data.cpf,
+            cep: data.cep,
+            street: data.street,
+            neighborhood: data.neighborhood,
+            city: data.city,
+            state: data.state,
+          };
+
       const machine = await prisma.slotMachine.upsert({
         where: {
           organizationId_uniqueMachineNumber: {
@@ -737,20 +893,22 @@ async function saveWithPrisma(
         create: {
           organizationId: session.organizationId,
           uniqueMachineNumber: data.uniqueMachineNumber,
-          clientSequenceNumber: data.clientSequenceNumber,
-          customerDebt: data.customerDebt ?? 0,
+          clientSequenceNumber,
+          ...clientFields,
+          customerDebt,
           ppValue: data.ppValue ?? 0,
           initialAmount: data.initialAmount ?? 0,
-          initialAmountMode: mapDebtMode(data.initialAmountMode),
+          initialAmountMode: data.initialAmountMode,
           optionalGreedAmount: data.optionalGreedAmount ?? 0,
           active: data.active ?? true,
         },
         update: {
-          clientSequenceNumber: data.clientSequenceNumber,
-          customerDebt: data.customerDebt ?? 0,
+          clientSequenceNumber,
+          ...clientFields,
+          customerDebt,
           ppValue: data.ppValue ?? 0,
           initialAmount: data.initialAmount ?? 0,
-          initialAmountMode: mapDebtMode(data.initialAmountMode),
+          initialAmountMode: data.initialAmountMode,
           optionalGreedAmount: data.optionalGreedAmount ?? 0,
           active: data.active ?? true,
         },
@@ -770,33 +928,43 @@ async function saveWithPrisma(
           expenseDifference: data.currentExpense - data.previousExpense,
           percentageSplit: data.percentageSplit,
           conferenceCount: data.conferenceCount,
-          negativeAmount: data.negativeAmount,
+          negativeAmount: effectiveNegativeAmount,
           feedingNegativeAmount: data.feedingNegativeAmount,
           customerDebtDiscounted: data.customerDebtDiscounted,
           generatedDebtAmount: data.generatedDebtAmount,
-          debtMode: mapDebtMode(data.debtMode),
+          debtMode: data.debtMode,
+          paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
         },
         include: { slotMachine: true },
       });
 
-      const splitAmount = data.currentIncome * (data.percentageSplit / 100);
-      const houseAmount =
-        data.currentIncome -
-        splitAmount -
-        (data.negativeAmount ?? 0) -
-        (data.feedingNegativeAmount ?? 0) -
-        (data.customerDebtDiscounted ?? 0) +
-        (data.generatedDebtAmount ?? 0);
+      const { houseAmount, clientShareFinal } = computeSlotSplit({
+        ...data,
+        negativeAmount: effectiveNegativeAmount,
+      });
+
+      await logFieldVisitForModuleRecord({
+        organizationId: session.organizationId,
+        createdById: session.userId,
+        targetId: record.slotMachineId,
+        visitType: "SLOT_H",
+        occurredAt: record.occurredAt,
+        incomeAmount: Number(record.incomeDifference),
+        expenseAmount: Number(record.expenseDifference),
+        clientName: record.slotMachine.clientName ?? null,
+        clientPhone: record.slotMachine.phone ?? null,
+      }).catch((e) => console.error("[module-record-service] logFieldVisit h-caca-niquel falhou:", e));
 
       return {
         record: {
           id: record.id,
           title: record.slotMachine.uniqueMachineNumber,
-          summary: `Cliente ${record.slotMachine.clientSequenceNumber}`,
+          summary: `Cliente ${record.slotMachine.clientSequenceNumber}${data.clientName ? " - " + data.clientName : ""}`,
           details: [
             `Conferencias: ${record.conferenceCount}`,
             `Mode: ${record.debtMode}`,
             `Entrada: ${formatCurrency(Number(record.currentIncome))}`,
+            `Cliente: ${formatCurrency(clientShareFinal)}`,
             `Casa: ${formatCurrency(houseAmount)}`,
           ],
           amount: formatCurrency(houseAmount),
@@ -821,14 +989,20 @@ async function saveWithPrisma(
           monthlyInterest: data.monthlyInterest,
           installmentFixed: data.installmentFixed,
           guaranteeEnabled: data.guaranteeEnabled,
-          digitalSignature: data.digitalSignature,
+          signatureLink: data.signatureLink,
+          signatureFileId: data.signatureFileId,
           streetLoanAmount: data.streetLoanAmount,
           monthlyInterestTotal: data.monthlyInterestTotal,
           generalPercentageAvg: data.generalPercentageAvg,
+          expenseAmount: data.expenseAmount ?? 0,
+          paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
           status: mapContractStatus(data.status),
           notes: data.notes,
         },
       });
+
+      const netAmount = Number(record.amount) - Number(record.expenseAmount ?? 0);
+      const signed = Boolean(record.signatureLink || record.signatureFileId);
 
       return {
         record: {
@@ -839,9 +1013,10 @@ async function saveWithPrisma(
             `Ano: ${record.year}`,
             `Juros: ${record.monthlyInterest ?? 0}%`,
             `Garantia: ${record.guaranteeEnabled ? "Sim" : "Nao"}`,
-            `Assinatura: ${record.digitalSignature ? "Sim" : "Nao"}`,
+            `Assinatura: ${signed ? "Sim" : "Pendente"}`,
+            `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
           ],
-          amount: formatCurrency(Number(record.amount)),
+          amount: formatCurrency(netAmount),
           badge: record.status,
           createdAt: record.createdAt.toISOString(),
         },
@@ -858,6 +1033,7 @@ async function saveWithPrisma(
           direction: mapDirection(data.direction),
           amount: data.amount,
           expenseAmount: data.expenseAmount,
+          paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
           notes: data.notes,
         },
       });
@@ -896,12 +1072,17 @@ async function saveWithPrisma(
           address: data.address,
           phone: data.phone,
           email: data.email,
-          digitalSignature: data.digitalSignature,
+          signatureLink: data.signatureLink,
+          signatureFileId: data.signatureFileId,
+          expenseAmount: data.expenseAmount ?? 0,
+          paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
+          generatedFileId: data.contractFileId,
           status: mapContractStatus(data.status),
         },
       });
 
-      const signedAmount = data.digitalSignature ? data.contractValue * 0.95 : data.contractValue;
+      const signed = Boolean(record.signatureLink || record.signatureFileId);
+      const netAmount = data.contractValue - (data.expenseAmount ?? 0);
 
       return {
         record: {
@@ -911,10 +1092,11 @@ async function saveWithPrisma(
           details: [
             `Tipo: ${data.personType}`,
             `Data: ${formatShortDate(record.contractDate)}`,
-            `Assinatura: ${record.digitalSignature ? "Sim" : "Nao"}`,
+            `Assinatura: ${signed ? "Sim" : "Pendente"}`,
             `Status: ${record.status}`,
+            `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
           ],
-          amount: formatCurrency(signedAmount),
+          amount: formatCurrency(netAmount),
           badge: record.status,
           createdAt: record.createdAt.toISOString(),
         },
@@ -931,6 +1113,7 @@ async function saveWithPrisma(
           direction: mapDirection(data.direction),
           status: mapFinancialStatus(data.status),
           amount: data.amount,
+          paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
           notes: data.notes,
         },
       });
@@ -954,6 +1137,96 @@ async function saveWithPrisma(
         source: "database",
       };
     }
+    case "locacao": {
+      const data = createRentalSchema.parse(payload);
+      const signalAmount = data.signalEnabled ? data.totalAmount * (data.signalPercentage / 100) : 0;
+      const balanceAmount = data.totalAmount - signalAmount - (data.expenseAmount ?? 0);
+
+      const record = await prisma.rentalOrder.create({
+        data: {
+          organizationId: session.organizationId,
+          createdById: session.userId,
+          clientName: data.clientName,
+          phone: data.phone,
+          document: data.document,
+          localName: data.localName,
+          eventDate: toDate(data.eventDate),
+          totalAmount: data.totalAmount,
+          signalPercentage: data.signalEnabled ? data.signalPercentage : undefined,
+          signalAmount,
+          balanceAmount,
+          expenseAmount: data.expenseAmount ?? 0,
+          paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
+          paymentStatus: data.paymentStatus as FinancialStatus,
+          contractNumber: data.contractNumber,
+          notes: data.notes,
+        },
+      });
+
+      await logFieldVisitForModuleRecord({
+        organizationId: session.organizationId,
+        createdById: session.userId,
+        targetId: record.id,
+        visitType: "RENTAL",
+        occurredAt: record.eventDate,
+        incomeAmount: Number(record.totalAmount),
+        expenseAmount: Number(record.expenseAmount ?? 0),
+        clientName: record.clientName ?? null,
+        clientPhone: record.phone ?? null,
+      }).catch((e) => console.error("[module-record-service] logFieldVisit locacao falhou:", e));
+
+      return {
+        record: {
+          id: record.id,
+          title: data.clientName,
+          summary: record.localName,
+          details: [
+            `Data: ${formatShortDate(record.eventDate)}`,
+            `Sinal: ${formatCurrency(Number(record.signalAmount ?? 0))}`,
+            `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
+            `Saldo: ${formatCurrency(Number(record.balanceAmount ?? 0))}`,
+          ],
+          amount: formatCurrency(Number(record.balanceAmount ?? record.totalAmount)),
+          badge: record.paymentStatus,
+          createdAt: record.createdAt.toISOString(),
+        },
+        source: "database",
+      };
+    }
+    case "financas-pessoais": {
+      const data = createPersonalFinanceSchema.parse(payload);
+      const record = await prisma.personalFinanceRecord.create({
+        data: {
+          organizationId: session.organizationId,
+          createdById: session.userId,
+          title: data.title,
+          type: mapPersonalEntryType(data.type),
+          category: data.category,
+          amount: data.amount,
+          dueDate: toDate(data.dueDate),
+          paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
+          notes: data.notes,
+        },
+      });
+
+      const signedAmount = record.type === "INCOME" ? Number(record.amount) : -Number(record.amount);
+
+      return {
+        record: {
+          id: record.id,
+          title: record.title,
+          summary: record.category,
+          details: [
+            `Tipo: ${record.type}`,
+            `Data: ${formatShortDate(record.dueDate ?? record.createdAt)}`,
+          ],
+          amount: formatCurrency(signedAmount),
+          badge: record.type,
+          createdAt: record.createdAt.toISOString(),
+        },
+        source: "database",
+      };
+    }
     default:
       throw new Error("Modulo nao suportado.");
   }
@@ -964,62 +1237,33 @@ export async function saveModuleRecord(
   slug: ModuleSlug,
   payload: Record<string, unknown>,
 ) {
-  try {
-    return await saveWithPrisma(session, slug, payload);
-  } catch {
-    let record: ModuleRecordItem;
+  return saveWithPrisma(session, slug, payload);
+}
 
-    switch (slug) {
-      case "carreta-kids":
-        record = buildCarretaRecord(createCarretaSchema.parse(payload));
-        break;
-      case "maquinas-de-pelucia":
-        record = buildPlushRecord(createPlushSchema.parse(payload));
-        break;
-      case "bilhar-pebolim":
-        record = buildBilliardRecord(createBilliardSchema.parse(payload));
-        break;
-      case "bx":
-        record = buildBxRecord(createBxSchema.parse(payload));
-        break;
-      case "h-caca-niquel":
-        record = buildSlotRecord(createSlotSchema.parse(payload));
-        break;
-      case "credito-financeiro":
-        record = buildMachineContractRecord(createMachineContractSchema.parse(payload));
-        break;
-      case "mercado-autonomo":
-        record = buildMarketRecord(createMarketSchema.parse(payload));
-        break;
-      case "marketing":
-        record = buildMarketingRecord(createMarketingSchema.parse(payload));
-        break;
-      case "plataforma-online":
-        record = buildPlatformRecord(createPlatformSchema.parse(payload));
-        break;
-      default:
-        throw new Error("Modulo nao suportado.");
-    }
-
-    pushLocalRecord(session, slug, record);
-
-    return {
-      record,
-      source: "local" as const,
-    };
+function buildDateWhere(range?: DateRange) {
+  if (!range || (!range.from && !range.to)) {
+    return {};
   }
+
+  return {
+    createdAt: {
+      ...(range.from ? { gte: range.from } : {}),
+      ...(range.to ? { lte: range.to } : {}),
+    },
+  };
 }
 
 export async function listModuleRecords(
   session: SessionData,
   slug: ModuleSlug,
   take = 5,
+  range?: DateRange,
 ): Promise<ModuleRecordItem[]> {
   try {
     switch (slug) {
       case "carreta-kids": {
         const records = await prisma.carretaKidsRecord.findMany({
-          where: { organizationId: session.organizationId },
+          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
           orderBy: { createdAt: "desc" },
           take,
         });
@@ -1031,17 +1275,21 @@ export async function listModuleRecords(
           details: [
             `Data: ${formatShortDate(record.serviceDate)}`,
             `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
-            `Entrada: ${formatCurrency(Number(record.entryAmount ?? 0))}`,
-            `Saida: ${formatCurrency(Number(record.exitAmount ?? 0))}`,
+            ...(record.entryTime ? [`Entrada: ${record.entryTime}`] : []),
+            ...(record.exitTime ? [`Saida: ${record.exitTime}`] : []),
+            `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
           ],
           amount: formatCurrency(Number(record.totalAmount)),
+          amountValue: Number(record.totalAmount),
+          incomeValue: Number(record.tablePrice ?? 0),
+          expenseValue: Number(record.expenseAmount ?? 0),
           badge: `${record.minutesCharged} min`,
           createdAt: record.createdAt.toISOString(),
         }));
       }
       case "maquinas-de-pelucia": {
         const records = await prisma.plushCollection.findMany({
-          where: { organizationId: session.organizationId },
+          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
           orderBy: { createdAt: "desc" },
           take,
           include: { plushMachine: true },
@@ -1052,19 +1300,23 @@ export async function listModuleRecords(
           title: record.plushMachine.name,
           summary: `Maquina ${record.plushMachine.machineNumber}`,
           details: [
+            `Cliente: ${record.plushMachine.clientName ?? "-"}`,
             `Codigo: ${record.plushMachine.code}`,
             `Fichas: ${record.plushCountOut}`,
             `Comissao: ${record.commissionPercentage}%`,
-            `Compensacao: ${record.compensationStatus}`,
+            `Compensacao: ${record.compensationStatus === "WORTH_IT" ? "Compensa" : "Nao compensa"}`,
           ],
           amount: formatCurrency(Number(record.companyAmount)),
+          amountValue: Number(record.companyAmount),
+          incomeValue: Number(record.grossAmount),
+          expenseValue: Number(record.grossAmount) - Number(record.companyAmount),
           badge: record.plushMachine.active ? "Ativa" : "Inativa",
           createdAt: record.createdAt.toISOString(),
         }));
       }
       case "bilhar-pebolim": {
         const records = await prisma.billiardCollection.findMany({
-          where: { organizationId: session.organizationId },
+          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
           orderBy: { createdAt: "desc" },
           take,
           include: { billiardPoint: true },
@@ -1086,12 +1338,16 @@ export async function listModuleRecords(
             title: record.billiardPoint.name,
             summary: record.billiardPoint.tableModel ?? "Mesa de bilhar",
             details: [
+              `Cliente: ${record.billiardPoint.clientName ?? "-"}`,
               `Cidade: ${record.billiardPoint.city ?? "-"}`,
               `Rota: ${record.billiardPoint.routeNumber ?? "-"}`,
               `Fichas: ${record.quantityOfChips}`,
               `Manutencao: ${formatShortDate(record.collectionDate)}`,
             ],
             amount: formatCurrency(companyShare),
+            amountValue: companyShare,
+            incomeValue: grossAmount,
+            expenseValue: grossAmount - companyShare,
             badge: record.quantityOfChips >= 1500 ? "Trocar pano" : "OK",
             createdAt: record.createdAt.toISOString(),
           };
@@ -1099,7 +1355,7 @@ export async function listModuleRecords(
       }
       case "bx": {
         const records = await prisma.bxTransaction.findMany({
-          where: { organizationId: session.organizationId },
+          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
           orderBy: { createdAt: "desc" },
           take,
         });
@@ -1109,18 +1365,24 @@ export async function listModuleRecords(
           title: record.clientName,
           summary: `Recolhe ${record.collectNumber ?? "-"}`,
           details: [
+            `Agente: ${record.agentName ?? "-"}`,
+            `Recebeu: ${record.receiverName ?? "-"}`,
             `Status: ${record.receiptStatus}`,
             `Entrada: ${formatCurrency(Number(record.incomeAmount ?? 0))}`,
             `Saida: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
+            `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
           ],
           amount: formatCurrency(Number(record.totalAmount)),
+          amountValue: Number(record.totalAmount),
+          incomeValue: Number(record.incomeAmount ?? 0),
+          expenseValue: Number(record.expenseAmount ?? 0),
           badge: record.receiptStatus === "RECEIVED" ? "Recebido" : "Nao recebido",
           createdAt: record.createdAt.toISOString(),
         }));
       }
       case "h-caca-niquel": {
         const records = await prisma.slotCollection.findMany({
-          where: { organizationId: session.organizationId },
+          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
           orderBy: { createdAt: "desc" },
           take,
           include: { slotMachine: true },
@@ -1128,26 +1390,34 @@ export async function listModuleRecords(
 
         return records.map((record) => {
           const currentIncome = Number(record.currentIncome);
-          const splitAmount = currentIncome * (Number(record.percentageSplit ?? 0) / 100);
-          const houseAmount =
-            currentIncome -
-            splitAmount -
-            Number(record.negativeAmount ?? 0) -
-            Number(record.feedingNegativeAmount ?? 0) -
-            Number(record.customerDebtDiscounted ?? 0) +
-            Number(record.generatedDebtAmount ?? 0);
+          const { houseAmount, clientShareFinal } = computeSlotSplit({
+            currentIncome,
+            previousIncome: Number(record.previousIncome),
+            currentExpense: Number(record.currentExpense),
+            previousExpense: Number(record.previousExpense),
+            percentageSplit: Number(record.percentageSplit ?? 0),
+            negativeAmount: Number(record.negativeAmount ?? 0),
+            feedingNegativeAmount: Number(record.feedingNegativeAmount ?? 0),
+            customerDebtDiscounted: Number(record.customerDebtDiscounted ?? 0),
+            generatedDebtAmount: Number(record.generatedDebtAmount ?? 0),
+          });
 
           return {
             id: record.id,
             title: record.slotMachine.uniqueMachineNumber,
-            summary: `Cliente ${record.slotMachine.clientSequenceNumber}`,
+            summary: `Cliente ${record.slotMachine.clientSequenceNumber}${record.slotMachine.clientName ? " - " + record.slotMachine.clientName : ""}`,
             details: [
               `Conferencias: ${record.conferenceCount}`,
               `Mode: ${record.debtMode}`,
               `Entrada: ${formatCurrency(currentIncome)}`,
+              `Cliente: ${formatCurrency(clientShareFinal)}`,
               `Casa: ${formatCurrency(houseAmount)}`,
+              `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
             ],
             amount: formatCurrency(houseAmount),
+            amountValue: houseAmount,
+            incomeValue: clientShareFinal + houseAmount,
+            expenseValue: Number(record.negativeAmount ?? 0) + Number(record.feedingNegativeAmount ?? 0),
             badge: record.slotMachine.active ? "Ativa" : "Inativa",
             createdAt: record.createdAt.toISOString(),
           };
@@ -1155,29 +1425,39 @@ export async function listModuleRecords(
       }
       case "credito-financeiro": {
         const records = await prisma.machineContract.findMany({
-          where: { organizationId: session.organizationId },
+          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
           orderBy: { createdAt: "desc" },
           take,
         });
 
-        return records.map((record) => ({
-          id: record.id,
-          title: record.clientName,
-          summary: `Contrato ${record.clientCode}`,
-          details: [
-            `Ano: ${record.year}`,
-            `Juros: ${record.monthlyInterest ?? 0}%`,
-            `Garantia: ${record.guaranteeEnabled ? "Sim" : "Nao"}`,
-            `Assinatura: ${record.digitalSignature ? "Sim" : "Nao"}`,
-          ],
-          amount: formatCurrency(Number(record.amount)),
-          badge: record.status,
-          createdAt: record.createdAt.toISOString(),
-        }));
+        return records.map((record) => {
+          const netAmount = Number(record.amount) - Number(record.expenseAmount ?? 0);
+          const signed = Boolean(record.signatureLink || record.signatureFileId);
+
+          return {
+            id: record.id,
+            title: record.clientName,
+            summary: `Contrato ${record.clientCode}`,
+            details: [
+              `Ano: ${record.year}`,
+              `Juros: ${record.monthlyInterest ?? 0}%`,
+              `Garantia: ${record.guaranteeEnabled ? "Sim" : "Nao"}`,
+              `Assinatura: ${signed ? "Sim" : "Pendente"}`,
+              `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
+              `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
+            ],
+            amount: formatCurrency(netAmount),
+            amountValue: netAmount,
+            incomeValue: Number(record.amount),
+            expenseValue: Number(record.expenseAmount ?? 0),
+            badge: record.status,
+            createdAt: record.createdAt.toISOString(),
+          };
+        });
       }
       case "mercado-autonomo": {
         const records = await prisma.condominiumMarketEntry.findMany({
-          where: { organizationId: session.organizationId },
+          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
           orderBy: { createdAt: "desc" },
           take,
         });
@@ -1196,8 +1476,15 @@ export async function listModuleRecords(
               `Data: ${formatShortDate(record.movementDate)}`,
               `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
               `Saldo: ${formatCurrency(netAmount)}`,
+              `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
             ],
             amount: formatCurrency(netAmount),
+            amountValue: netAmount,
+            incomeValue: record.direction === "EXPENSE" ? 0 : Number(record.amount),
+            expenseValue:
+              record.direction === "EXPENSE"
+                ? Number(record.amount) + Number(record.expenseAmount ?? 0)
+                : Number(record.expenseAmount ?? 0),
             badge: record.direction,
             createdAt: record.createdAt.toISOString(),
           };
@@ -1205,29 +1492,40 @@ export async function listModuleRecords(
       }
       case "marketing": {
         const records = await prisma.marketingContract.findMany({
-          where: { organizationId: session.organizationId },
+          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
           orderBy: { createdAt: "desc" },
           take,
         });
 
-        return records.map((record) => ({
-          id: record.id,
-          title: record.name,
-          summary: record.serviceType,
-          details: [
-            `Tipo: ${record.personType}`,
-            `Data: ${formatShortDate(record.contractDate)}`,
-            `Assinatura: ${record.digitalSignature ? "Sim" : "Nao"}`,
-            `Status: ${record.status}`,
-          ],
-          amount: formatCurrency(Number(record.contractValue)),
-          badge: record.status,
-          createdAt: record.createdAt.toISOString(),
-        }));
+        return records.map((record) => {
+          const signed = Boolean(record.signatureLink || record.signatureFileId);
+          const grossAmount = Number(record.contractValue);
+          const netAmount = grossAmount - Number(record.expenseAmount ?? 0);
+
+          return {
+            id: record.id,
+            title: record.name,
+            summary: record.serviceType,
+            details: [
+              `Tipo: ${record.personType}`,
+              `Data: ${formatShortDate(record.contractDate)}`,
+              `Assinatura: ${signed ? "Sim" : "Pendente"}`,
+              `Status: ${record.status}`,
+              `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
+              `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
+            ],
+            amount: formatCurrency(netAmount),
+            amountValue: netAmount,
+            incomeValue: grossAmount,
+            expenseValue: Number(record.expenseAmount ?? 0),
+            badge: record.status,
+            createdAt: record.createdAt.toISOString(),
+          };
+        });
       }
       case "plataforma-online": {
         const records = await prisma.brazilBetsEntry.findMany({
-          where: { organizationId: session.organizationId },
+          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
           orderBy: { createdAt: "desc" },
           take,
         });
@@ -1243,9 +1541,67 @@ export async function listModuleRecords(
               `Data: ${formatShortDate(record.movementDate)}`,
               `Status: ${record.status}`,
               `Liquido: ${formatCurrency(netAmount)}`,
+              `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
             ],
             amount: formatCurrency(netAmount),
+            amountValue: netAmount,
+            incomeValue: record.direction === "EXPENSE" ? 0 : Number(record.amount),
+            expenseValue: record.direction === "EXPENSE" ? Number(record.amount) : 0,
             badge: record.status,
+            createdAt: record.createdAt.toISOString(),
+          };
+        });
+      }
+      case "locacao": {
+        const records = await prisma.rentalOrder.findMany({
+          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
+          orderBy: { createdAt: "desc" },
+          take,
+        });
+
+        return records.map((record) => ({
+          id: record.id,
+          title: record.clientName ?? record.localName,
+          summary: record.contractNumber ? `Contrato ${record.contractNumber}` : record.localName,
+          details: [
+            `Data: ${formatShortDate(record.eventDate)}`,
+            `Sinal: ${formatCurrency(Number(record.signalAmount ?? 0))}`,
+            `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
+            `Saldo: ${formatCurrency(Number(record.balanceAmount ?? 0))}`,
+            `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
+          ],
+          amount: formatCurrency(Number(record.balanceAmount ?? record.totalAmount)),
+          amountValue: Number(record.balanceAmount ?? record.totalAmount),
+          incomeValue: Number(record.totalAmount),
+          expenseValue: Number(record.expenseAmount ?? 0),
+          badge: record.paymentStatus,
+          createdAt: record.createdAt.toISOString(),
+        }));
+      }
+      case "financas-pessoais": {
+        const records = await prisma.personalFinanceRecord.findMany({
+          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
+          orderBy: { createdAt: "desc" },
+          take,
+        });
+
+        return records.map((record) => {
+          const signedAmount = record.type === "INCOME" ? Number(record.amount) : -Number(record.amount);
+
+          return {
+            id: record.id,
+            title: record.title,
+            summary: record.category,
+            details: [
+              `Tipo: ${record.type}`,
+              `Data: ${formatShortDate(record.dueDate ?? record.createdAt)}`,
+              `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
+            ],
+            amount: formatCurrency(signedAmount),
+            amountValue: signedAmount,
+            incomeValue: record.type === "INCOME" ? Number(record.amount) : 0,
+            expenseValue: record.type === "INCOME" ? 0 : Number(record.amount),
+            badge: record.type,
             createdAt: record.createdAt.toISOString(),
           };
         });
@@ -1253,7 +1609,199 @@ export async function listModuleRecords(
       default:
         return [];
     }
-  } catch {
+  } catch (error) {
+    console.error(`[module-record-service] listModuleRecords (${slug}) falhou, retornando dados locais:`, error);
     return listLocalRecords(session, slug, take);
   }
+}
+
+export type ModuleClientItem = {
+  id: string;
+  name: string;
+  subtitle?: string;
+  tags: string[];
+  badge?: string;
+  phone?: string;
+};
+
+function dedupeByKey<T>(items: T[], keyFn: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  const result: T[] = [];
+
+  for (const item of items) {
+    const key = keyFn(item);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    result.push(item);
+  }
+
+  return result;
+}
+
+export async function listModuleClients(
+  session: SessionData,
+  slug: ModuleSlug,
+  take = 30,
+): Promise<ModuleClientItem[]> {
+  try {
+    switch (slug) {
+      case "bilhar-pebolim": {
+        const points = await prisma.billiardPoint.findMany({
+          where: { organizationId: session.organizationId },
+          orderBy: { updatedAt: "desc" },
+          take,
+        });
+
+        return points.map((point) => ({
+          id: point.id,
+          name: point.clientName || point.name,
+          subtitle: `${point.name} - ${point.tableModel ?? "Mesa nao informada"}`,
+          tags: [point.phone, point.cpf, point.cnpj, point.city].filter(Boolean) as string[],
+          badge: `${formatCurrency(Number(point.chipValue ?? 0))}/ficha`,
+          phone: point.phone ?? undefined,
+        }));
+      }
+      case "bx": {
+        const records = await prisma.bxTransaction.findMany({
+          where: { organizationId: session.organizationId },
+          orderBy: { createdAt: "desc" },
+          take: take * 5,
+        });
+
+        return dedupeByKey(records, (r) => r.clientName)
+          .slice(0, take)
+          .map((record) => ({
+            id: record.id,
+            name: record.clientName,
+            subtitle: `Recolhe ${record.collectNumber ?? "-"}`,
+            tags: [record.phone, record.cpf].filter(Boolean) as string[],
+            badge: formatCurrency(Number(record.totalAmount)),
+            phone: record.phone ?? undefined,
+          }));
+      }
+      case "carreta-kids": {
+        const records = await prisma.carretaKidsRecord.findMany({
+          where: { organizationId: session.organizationId },
+          orderBy: { createdAt: "desc" },
+          take: take * 5,
+        });
+
+        return dedupeByKey(records, (r) => `${r.sheetName}-${r.phone ?? ""}`)
+          .slice(0, take)
+          .map((record) => ({
+            id: record.id,
+            name: record.sheetName,
+            subtitle: record.locationName,
+            tags: [record.phone].filter(Boolean) as string[],
+            badge: formatCurrency(Number(record.totalAmount)),
+            phone: record.phone ?? undefined,
+          }));
+      }
+      case "maquinas-de-pelucia": {
+        const machines = await prisma.plushMachine.findMany({
+          where: { organizationId: session.organizationId },
+          orderBy: { updatedAt: "desc" },
+          take,
+        });
+
+        return machines.map((machine) => ({
+          id: machine.id,
+          name: machine.clientName || machine.name,
+          subtitle: `${machine.name} - Maquina ${machine.machineNumber}`,
+          tags: [machine.phone, machine.cpf, machine.code].filter(Boolean) as string[],
+          badge: machine.active ? "Ativa" : "Inativa",
+        }));
+      }
+      case "h-caca-niquel": {
+        const machines = await prisma.slotMachine.findMany({
+          where: { organizationId: session.organizationId },
+          orderBy: { updatedAt: "desc" },
+          take,
+        });
+
+        return machines.map((machine) => ({
+          id: machine.id,
+          name: machine.clientName || `Maquina ${machine.uniqueMachineNumber}`,
+          subtitle: `Maquina ${machine.uniqueMachineNumber} - Cliente ${machine.clientSequenceNumber}`,
+          tags: [machine.phone, machine.cpf].filter(Boolean) as string[],
+          badge: machine.active ? "Ativa" : "Inativa",
+        }));
+      }
+      case "credito-financeiro": {
+        const records = await prisma.machineContract.findMany({
+          where: { organizationId: session.organizationId },
+          orderBy: { createdAt: "desc" },
+          take: take * 5,
+        });
+
+        return dedupeByKey(records, (r) => r.clientCode)
+          .slice(0, take)
+          .map((record) => ({
+            id: record.id,
+            name: record.clientName,
+            subtitle: `Codigo ${record.clientCode}`,
+            tags: [record.status],
+            badge: formatCurrency(Number(record.amount)),
+          }));
+      }
+      case "marketing": {
+        const records = await prisma.marketingContract.findMany({
+          where: { organizationId: session.organizationId },
+          orderBy: { createdAt: "desc" },
+          take: take * 5,
+        });
+
+        return dedupeByKey(records, (r) => `${r.name}-${r.cpf ?? r.cnpj ?? ""}`)
+          .slice(0, take)
+          .map((record) => ({
+            id: record.id,
+            name: record.name,
+            subtitle: record.serviceType,
+            tags: [record.cpf, record.cnpj, record.phone].filter(Boolean) as string[],
+            badge: record.status,
+          }));
+      }
+      case "locacao": {
+        const records = await prisma.rentalOrder.findMany({
+          where: { organizationId: session.organizationId },
+          orderBy: { createdAt: "desc" },
+          take: take * 5,
+        });
+
+        return dedupeByKey(records, (r) => r.clientName ?? r.id)
+          .slice(0, take)
+          .map((record) => ({
+            id: record.id,
+            name: record.clientName ?? record.localName,
+            subtitle: record.localName,
+            tags: [record.phone, record.document].filter(Boolean) as string[],
+            badge: record.paymentStatus,
+            phone: record.phone ?? undefined,
+          }));
+      }
+      default:
+        return [];
+    }
+  } catch (error) {
+    console.error(`[module-record-service] listModuleClients (${slug}) falhou:`, error);
+    return [];
+  }
+}
+
+export async function listModuleVisitTargets(
+  session: SessionData,
+  slug: ModuleSlug,
+): Promise<ClientListItem[]> {
+  const items = await listModuleClients(session, slug, 200);
+
+  return items.map((item) => ({
+    id: item.id,
+    code: item.id.slice(0, 8),
+    name: item.name,
+    phone: item.phone ?? "",
+    city: item.subtitle ?? "",
+    status: item.badge === "Inativa" ? ("inativo" as const) : ("ativo" as const),
+    balance: 0,
+    updatedAt: new Date().toISOString(),
+  }));
 }

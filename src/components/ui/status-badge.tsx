@@ -1,14 +1,14 @@
 import { cn } from "@/lib/cn";
 
 const toneMap = {
-  ativo: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
-  inativo: "border-slate-400/30 bg-slate-400/10 text-slate-200",
-  inadimplente: "border-rose-400/30 bg-rose-400/10 text-rose-200",
-  excecao: "border-amber-400/30 bg-amber-400/10 text-amber-200",
-  pago: "border-emerald-400/30 bg-emerald-400/10 text-emerald-200",
-  parcial: "border-amber-400/30 bg-amber-400/10 text-amber-200",
-  pendente: "border-slate-400/30 bg-slate-400/10 text-slate-200",
-  atrasado: "border-rose-400/30 bg-rose-400/10 text-rose-200",
+  ativo: "border-[#8aa17c]/35 bg-[#8aa17c]/12 text-[#dbe6d4]",
+  inativo: "border-[#9a958b]/30 bg-[#9a958b]/10 text-[#d8d0bf]",
+  inadimplente: "border-[#b46c5d]/35 bg-[#b46c5d]/12 text-[#efc6bc]",
+  excecao: "border-[#d1a04f]/35 bg-[#d1a04f]/12 text-[#f3dfae]",
+  pago: "border-[#8aa17c]/35 bg-[#8aa17c]/12 text-[#dbe6d4]",
+  parcial: "border-[#d1a04f]/35 bg-[#d1a04f]/12 text-[#f3dfae]",
+  pendente: "border-[#9a958b]/30 bg-[#9a958b]/10 text-[#d8d0bf]",
+  atrasado: "border-[#b46c5d]/35 bg-[#b46c5d]/12 text-[#efc6bc]",
 } as const;
 
 type StatusKey = keyof typeof toneMap;

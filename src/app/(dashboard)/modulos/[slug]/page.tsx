@@ -1,35 +1,57 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ArrowLeft, Layers3, Sparkles } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 
-import { BilliardForm } from "@/components/modules/billiard-form";
-import { BxForm } from "@/components/modules/bx-form";
-import { CarretaKidsForm } from "@/components/modules/carreta-kids-form";
-import { MachineContractForm } from "@/components/modules/machine-contract-form";
-import { MarketEntryForm } from "@/components/modules/market-entry-form";
-import { MarketingContractForm } from "@/components/modules/marketing-contract-form";
-import { PlatformOnlineForm } from "@/components/modules/platform-online-form";
-import { PlushForm } from "@/components/modules/plush-form";
-import { SlotForm } from "@/components/modules/slot-form";
-import { SectionCard } from "@/components/ui/section-card";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { ModuleWorkspace } from "@/components/modules/module-workspace";
 import { requireSession } from "@/lib/auth";
-import { formatShortDate } from "@/lib/format";
-import { getModuleBySlug, moduleCatalog } from "@/lib/module-catalog";
+import { formatCurrency } from "@/lib/format";
+import { getModuleBySlug } from "@/lib/module-catalog";
+import { listModuleFinancialEntries } from "@/server/services/finance-service";
+import {
+  listModuleClients,
+  listModuleRecords,
+  listModuleVisitTargets,
+  moduleSlugs,
+  type ModuleRecordItem,
+  type ModuleSlug,
+} from "@/server/services/module-record-service";
+import { getModuleScopeSummary } from "@/server/services/module-scope-service";
+import { getModuleUnvisitedTargets } from "@/server/services/visit-service";
+import type { ClientVisitSummary } from "@/types/app";
 
 export const dynamic = "force-dynamic";
 
-const formMap = {
-  "carreta-kids": CarretaKidsForm,
-  "maquinas-de-pelucia": PlushForm,
-  "bx": BxForm,
-  "bilhar-pebolim": BilliardForm,
-  "h-caca-niquel": SlotForm,
-  "credito-financeiro": MachineContractForm,
-  "mercado-autonomo": MarketEntryForm,
-  "marketing": MarketingContractForm,
-  "plataforma-online": PlatformOnlineForm,
-} as const;
+function isRecordSlug(slug: string): slug is ModuleSlug {
+  return moduleSlugs.includes(slug as ModuleSlug);
+}
+
+function buildFallbackRecords(
+  moduleTitle: string,
+  scopeSummary: Awaited<ReturnType<typeof getModuleScopeSummary>>,
+): ModuleRecordItem[] {
+  return [
+    {
+      id: `${moduleTitle}-demo-1`,
+      title: "Ultimo fechamento",
+      summary: `Historico de ${moduleTitle}`,
+      details: [
+        `Entradas: ${formatCurrency(scopeSummary.incomeAmount)}`,
+        `Despesas: ${formatCurrency(scopeSummary.expenseAmount)}`,
+      ],
+      amount: formatCurrency(scopeSummary.balanceAmount),
+      badge: "Demo",
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: `${moduleTitle}-demo-2`,
+      title: "Cliente vinculado",
+      summary: "Cadastro do modulo",
+      details: [`Clientes ativos: ${scopeSummary.clientsCount}`],
+      badge: "Modulo",
+      createdAt: new Date(Date.now() - 86_400_000).toISOString(),
+    },
+  ];
+}
 
 export default async function ModuleDetailPage({
   params,
@@ -48,121 +70,53 @@ export default async function ModuleDetailPage({
     notFound();
   }
 
-  const Form = formMap[item.slug as keyof typeof formMap];
-  const isReady = Boolean(Form);
-
-  const relatedModules = moduleCatalog.filter(
-    (moduleItem) => moduleItem.module !== item.module,
-  );
+  const fieldSlugs = ["bilhar-pebolim", "maquinas-de-pelucia", "bx", "h-caca-niquel", "carreta-kids", "locacao"];
+  const isField = fieldSlugs.includes(item.slug);
+  const hideFinancials = session.role === "STAFF";
+  const [scopeSummary, records, visitTargets, moduleClients, financialEntries] = await Promise.all([
+    getModuleScopeSummary(session, item.module, isRecordSlug(item.slug) ? item.slug : null),
+    isRecordSlug(item.slug) ? listModuleRecords(session, item.slug, 6) : Promise.resolve([]),
+    isField && isRecordSlug(item.slug) ? listModuleVisitTargets(session, item.slug) : Promise.resolve([]),
+    isRecordSlug(item.slug) ? listModuleClients(session, item.slug) : Promise.resolve([]),
+    hideFinancials ? Promise.resolve([]) : listModuleFinancialEntries(session, item.module),
+  ]);
+  const overdueClients: ClientVisitSummary[] = isField
+    ? await getModuleUnvisitedTargets(session, visitTargets, 15)
+    : [];
+  const recentRecords =
+    records.length > 0 ? records : buildFallbackRecords(item.title, scopeSummary);
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-[34px] border border-white/10 bg-[linear-gradient(135deg,rgba(15,23,42,0.92),rgba(56,189,248,0.16))] p-5 md:p-8">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-3">
-            <Link
-              href="/modulos"
-              className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs uppercase tracking-[0.28em] text-slate-300"
-            >
-              <ArrowLeft className="size-4" />
-              Voltar aos modulos
-            </Link>
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-3xl font-semibold tracking-tight text-white md:text-5xl">
-                {item.title}
-              </h1>
-              <StatusBadge label={isReady ? "ativo" : "pendente"} />
-            </div>
-            <p className="max-w-3xl text-sm leading-7 text-slate-300 md:text-base">
-              {item.detail}
-            </p>
-          </div>
-
-          <div className="rounded-[28px] border border-white/10 bg-slate-950/55 p-5">
-            <div className="flex items-center gap-2 text-white">
-              <Layers3 className="size-4 text-sky-300" />
-              <p className="font-medium">Resumo rapido</p>
-            </div>
-            <p className="mt-3 text-sm leading-6 text-slate-300">
-              {item.summary}
-            </p>
-            <p className="mt-3 text-xs uppercase tracking-[0.24em] text-slate-500">
-              Atualizado em {formatShortDate(new Date())}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_360px]">
-        <SectionCard
-          title="Formulario do modulo"
-          subtitle={
-            isReady
-              ? "Preencha e salve um registro rapido. O retorno aparece logo abaixo para testar no celular."
-              : "Modulo catalogado ainda sem formulario proprio. A base esta pronta para evoluir em seguida."
-          }
+    <div className="space-y-3 md:space-y-4">
+      <div className="flex items-center gap-2">
+        <Link
+          href="/modulos"
+          className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[rgba(245,241,232,0.12)] bg-white/[0.035] px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-[#c9c2b4]"
         >
-          {Form ? (
-            <Form />
-          ) : (
-            <div className="rounded-[28px] border border-white/8 bg-slate-950/55 p-5 text-sm leading-7 text-slate-300">
-              Este modulo ainda nao tem formulario especifico nesta etapa.
-            </div>
-          )}
-        </SectionCard>
-
-        <SectionCard
-          title="Regras do modulo"
-          subtitle="Referencia curta para o funcionario nao se perder no meio da operacao."
-        >
-          <div className="space-y-3">
-            {[
-              "Guardar fotos e comprovantes sempre que o fluxo pedir.",
-              "Usar entrada e saida sem apagar o historico anterior.",
-              "Marcar excecao apenas quando a regra do cliente permitir.",
-              "Salvar tudo com o campo de status correto.",
-            ].map((rule) => (
-              <article
-                key={rule}
-                className="rounded-2xl border border-white/8 bg-white/[0.03] px-4 py-3 text-sm leading-6 text-slate-300"
-              >
-                {rule}
-              </article>
-            ))}
-          </div>
-        </SectionCard>
+          <ArrowLeft className="size-3.5" />
+          Modulos
+        </Link>
+        <p className="truncate text-xs text-[#9a958b]">{item.detail}</p>
       </div>
 
-      <SectionCard
-        title="Outros modulos"
-        subtitle="A base ja esta preparada para os demais blocos do projeto."
-        action={
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs uppercase tracking-[0.22em] text-slate-300">
-            <Sparkles className="size-4" />
-            Navegacao rapida
-          </div>
-        }
+      <ModuleWorkspace
+        slug={item.slug}
+        moduleTitle={item.title}
+        summary={scopeSummary}
+        recentRecords={recentRecords}
+        clients={visitTargets}
+        overdueClients={overdueClients}
+        moduleClients={moduleClients}
+        financialEntries={financialEntries}
+        hideFinancials={hideFinancials}
+      />
+
+      <Link
+        href="/modulos"
+        className="inline-flex w-full items-center justify-center rounded-2xl border border-[rgba(245,241,232,0.1)] bg-white/[0.025] px-4 py-3 text-sm font-medium text-[#c9c2b4] transition hover:bg-white/[0.05]"
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {relatedModules.map((moduleItem) => (
-            <Link
-              key={moduleItem.slug}
-              href={moduleItem.href ?? "/modulos"}
-              className="rounded-[24px] border border-white/8 bg-slate-950/55 p-4 transition hover:border-white/15 hover:bg-white/[0.05]"
-            >
-              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">
-                {moduleItem.stage}
-              </p>
-              <h3 className="mt-2 text-base font-semibold text-white">
-                {moduleItem.title}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-slate-400">
-                {moduleItem.summary}
-              </p>
-            </Link>
-          ))}
-        </div>
-      </SectionCard>
+        Voltar para todos os modulos
+      </Link>
     </div>
   );
 }

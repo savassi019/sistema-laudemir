@@ -161,6 +161,16 @@ enum SlotDebtMode {
   NONE
 }
 
+enum FieldVisitType {
+  BILLIARD
+  PLUSH
+  BX
+  SLOT_H
+  CARRETA_KIDS
+  RENTAL
+  GENERAL
+}
+
 enum EntityType {
   ORGANIZATION
   USER
@@ -182,46 +192,72 @@ enum EntityType {
   OTHER
 }
 
+model FieldVisit {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String?
+  client         Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  targetId       String?
+  clientName     String?
+  clientPhone    String?
+  createdById    String?
+  createdBy      User?          @relation("VisitCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  visitType      FieldVisitType @default(GENERAL)
+  occurredAt     DateTime
+  checkedItems   String[]
+  incomeAmount   Decimal        @default(0) @db.Decimal(14, 2)
+  expenseAmount  Decimal        @default(0) @db.Decimal(14, 2)
+  notes          String?
+  createdAt      DateTime       @default(now())
+
+  @@index([organizationId, occurredAt])
+  @@index([clientId])
+  @@index([organizationId, targetId])
+}
+
 model Organization {
-  id                      String                   @id @default(cuid())
-  name                    String
-  slug                    String                   @unique
-  legalName               String?
-  document                String?
-  phone                   String?
-  email                   String?
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  users                   User[]
-  modulePermissions       ModulePermission[]
-  settings                SystemSetting[]
-  clients                 Client[]
-  financialAccounts       FinancialAccount[]
-  financialCategories     FinancialCategory[]
-  financialEntries        FinancialEntry[]
-  payments                Payment[]
-  fileAssets              FileAsset[]
-  notes                   Note[]
-  reminders               Reminder[]
-  notifications           Notification[]
-  auditLogs               AuditLog[]
-  carretaKidsRecords      CarretaKidsRecord[]
-  rentalOrders            RentalOrder[]
-  plushMachines           PlushMachine[]
-  plushCollections        PlushCollection[]
-  billiardPoints          BilliardPoint[]
-  billiardCollections     BilliardCollection[]
-  billiardMaintenances    BilliardMaintenance[]
-  routePlans              RoutePlan[]
-  brazilBetsEntries       BrazilBetsEntry[]
-  machineContracts        MachineContract[]
-  machineGuarantees       MachineGuarantee[]
+  id                       String                   @id @default(cuid())
+  name                     String
+  slug                     String                   @unique
+  legalName                String?
+  document                 String?
+  phone                    String?
+  email                    String?
+  createdAt                DateTime                 @default(now())
+  updatedAt                DateTime                 @updatedAt
+  users                    User[]
+  modulePermissions        ModulePermission[]
+  settings                 SystemSetting[]
+  clients                  Client[]
+  financialAccounts        FinancialAccount[]
+  financialCategories      FinancialCategory[]
+  financialEntries         FinancialEntry[]
+  payments                 Payment[]
+  fileAssets               FileAsset[]
+  notes                    Note[]
+  reminders                Reminder[]
+  notifications            Notification[]
+  auditLogs                AuditLog[]
+  moduleClients            ModuleClient[]
+  carretaKidsRecords       CarretaKidsRecord[]
+  rentalOrders             RentalOrder[]
+  plushMachines            PlushMachine[]
+  plushCollections         PlushCollection[]
+  billiardPoints           BilliardPoint[]
+  billiardCollections      BilliardCollection[]
+  billiardMaintenances     BilliardMaintenance[]
+  routePlans               RoutePlan[]
+  brazilBetsEntries        BrazilBetsEntry[]
+  machineContracts         MachineContract[]
+  machineGuarantees        MachineGuarantee[]
   condominiumMarketEntries CondominiumMarketEntry[]
-  marketingContracts      MarketingContract[]
-  personalFinanceRecords  PersonalFinanceRecord[]
-  bxTransactions          BxTransaction[]
-  slotMachines            SlotMachine[]
-  slotCollections         SlotCollection[]
+  marketingContracts       MarketingContract[]
+  personalFinanceRecords   PersonalFinanceRecord[]
+  bxTransactions           BxTransaction[]
+  slotMachines             SlotMachine[]
+  slotCollections          SlotCollection[]
+  fieldVisits              FieldVisit[]
 }
 
 model User {
@@ -245,23 +281,24 @@ model User {
   notesCreated      Note[]             @relation("NoteCreatedBy")
   remindersCreated  Reminder[]         @relation("ReminderCreatedBy")
   remindersAssigned Reminder[]         @relation("ReminderAssignedTo")
+  fieldVisits       FieldVisit[]       @relation("VisitCreatedBy")
 }
 
 model ModulePermission {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userId         String
-  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   module         SystemModule
-  canView        Boolean       @default(false)
-  canCreate      Boolean       @default(false)
-  canUpdate      Boolean       @default(false)
-  canDelete      Boolean       @default(false)
-  canApprove     Boolean       @default(false)
-  canExport      Boolean       @default(false)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  canView        Boolean      @default(false)
+  canCreate      Boolean      @default(false)
+  canUpdate      Boolean      @default(false)
+  canDelete      Boolean      @default(false)
+  canApprove     Boolean      @default(false)
+  canExport      Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([userId, module])
   @@index([organizationId, module])
@@ -283,12 +320,12 @@ model SystemSetting {
 }
 
 model Client {
-  id             String        @id @default(cuid())
+  id             String           @id @default(cuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   code           String
   name           String
-  personType     PersonType    @default(INDIVIDUAL)
+  personType     PersonType       @default(INDIVIDUAL)
   phone          String?
   email          String?
   cpf            String?
@@ -300,21 +337,42 @@ model Client {
   state          String?
   postalCode     String?
   notes          String?
-  status         ClientStatus  @default(ACTIVE)
-  registeredAt   DateTime      @default(now())
+  status         ClientStatus     @default(ACTIVE)
+  registeredAt   DateTime         @default(now())
   createdById    String?
-  createdBy      User?         @relation("ClientCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  updatedAt      DateTime      @updatedAt
+  createdBy      User?            @relation("ClientCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  updatedAt      DateTime         @updatedAt
   financialItems FinancialEntry[]
   rentalOrders   RentalOrder[]
   plushMachines  PlushMachine[]
   billiardPoints BilliardPoint[]
   bxTransactions BxTransaction[]
   slotMachines   SlotMachine[]
+  moduleClients  ModuleClient[]
+  fieldVisits    FieldVisit[]
 
   @@unique([organizationId, code])
   @@index([organizationId, name])
   @@index([organizationId, status])
+}
+
+model ModuleClient {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String
+  client         Client       @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  module         SystemModule
+  moduleCode     String?
+  notes          String?
+  isActive       Boolean      @default(true)
+  createdById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, clientId, module])
+  @@index([organizationId, module])
+  @@index([clientId])
 }
 
 model FinancialAccount {
@@ -332,15 +390,15 @@ model FinancialAccount {
 }
 
 model FinancialCategory {
-  id             String            @id @default(cuid())
+  id             String             @id @default(cuid())
   organizationId String
-  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   name           String
   direction      FinancialDirection
   module         SystemModule?
-  isActive       Boolean           @default(true)
-  createdAt      DateTime          @default(now())
-  updatedAt      DateTime          @updatedAt
+  isActive       Boolean            @default(true)
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
   entries        FinancialEntry[]
 
   @@unique([organizationId, name])
@@ -390,30 +448,30 @@ model FinancialEntry {
 }
 
 model Payment {
-  id               String        @id @default(cuid())
+  id               String         @id @default(cuid())
   organizationId   String
-  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   financialEntryId String
   financialEntry   FinancialEntry @relation(fields: [financialEntryId], references: [id], onDelete: Cascade)
-  amount           Decimal       @db.Decimal(14, 2)
-  paymentDate      DateTime      @default(now())
+  amount           Decimal        @db.Decimal(14, 2)
+  paymentDate      DateTime       @default(now())
   method           PaymentMethod
   proofFileId      String?
-  proofFile        FileAsset?    @relation("PaymentProof", fields: [proofFileId], references: [id], onDelete: SetNull)
+  proofFile        FileAsset?     @relation("PaymentProof", fields: [proofFileId], references: [id], onDelete: SetNull)
   notes            String?
   createdById      String?
-  createdBy        User?         @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt        DateTime      @default(now())
+  createdBy        User?          @relation("PaymentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt        DateTime       @default(now())
 
   @@index([organizationId, paymentDate])
 }
 
 model FileAsset {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   uploadedById   String?
-  uploadedBy     User?         @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  uploadedBy     User?        @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   category       FileCategory
   entityType     EntityType?
   entityId       String?
@@ -422,23 +480,23 @@ model FileAsset {
   mimeType       String
   size           Int
   storagePath    String
-  createdAt      DateTime      @default(now())
-  paymentProofs  Payment[]     @relation("PaymentProof")
+  createdAt      DateTime     @default(now())
+  paymentProofs  Payment[]    @relation("PaymentProof")
 
   @@index([organizationId, entityType, entityId])
 }
 
 model Note {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   title          String
   content        String
-  pinned         Boolean       @default(false)
+  pinned         Boolean      @default(false)
   createdById    String?
-  createdBy      User?         @relation("NoteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdBy      User?        @relation("NoteCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@index([organizationId, pinned])
 }
@@ -463,12 +521,12 @@ model Reminder {
 }
 
 model Notification {
-  id             String             @id @default(cuid())
+  id             String              @id @default(cuid())
   organizationId String
-  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   module         SystemModule?
   channel        NotificationChannel
-  status         NotificationStatus @default(PENDING)
+  status         NotificationStatus  @default(PENDING)
   title          String
   message        String
   recipientName  String?
@@ -478,207 +536,223 @@ model Notification {
   payload        Json?
   scheduledAt    DateTime?
   sentAt         DateTime?
-  createdAt      DateTime           @default(now())
+  createdAt      DateTime            @default(now())
 
   @@index([organizationId, status])
   @@index([organizationId, channel])
 }
 
 model AuditLog {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   userId         String?
-  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user           User?        @relation(fields: [userId], references: [id], onDelete: SetNull)
   module         SystemModule
   action         String
   entityType     EntityType
   entityId       String
   oldData        Json?
   newData        Json?
-  createdAt      DateTime      @default(now())
+  createdAt      DateTime     @default(now())
 
   @@index([organizationId, module])
   @@index([organizationId, entityType, entityId])
 }
 
 model CarretaKidsRecord {
-  id               String        @id @default(cuid())
-  organizationId   String
-  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId         String?
-  locationName     String
-  serviceDate      DateTime
-  sheetName        String
-  phone            String?
-  minutesCharged   Int
-  tablePrice       Decimal       @db.Decimal(14, 2)
-  totalAmount      Decimal       @db.Decimal(14, 2)
-  paymentMethod    PaymentMethod?
-  entryAmount      Decimal?      @db.Decimal(14, 2)
-  exitAmount       Decimal?      @db.Decimal(14, 2)
-  notes            String?
-  createdById      String?
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String?
+  locationName   String
+  serviceDate    DateTime
+  sheetName      String
+  phone          String?
+  minutesCharged Int
+  tablePrice     Decimal        @db.Decimal(14, 2)
+  totalAmount    Decimal        @db.Decimal(14, 2)
+  paymentMethod  PaymentMethod?
+  entryAmount    Decimal?       @db.Decimal(14, 2)
+  exitAmount     Decimal?       @db.Decimal(14, 2)
+  entryTime      String?
+  exitTime       String?
+  expenseAmount  Decimal?       @db.Decimal(14, 2)
+  notes          String?
+  createdById    String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 
   @@index([organizationId, serviceDate])
 }
 
 model RentalOrder {
-  id                String          @id @default(cuid())
-  organizationId    String
-  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId          String?
-  client            Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  localName         String
-  eventDate         DateTime
-  totalAmount       Decimal         @db.Decimal(14, 2)
-  signalPercentage  Decimal?        @db.Decimal(5, 2)
-  signalAmount      Decimal?        @db.Decimal(14, 2)
-  balanceAmount     Decimal?        @db.Decimal(14, 2)
-  paymentStatus     FinancialStatus @default(PENDING)
-  contractNumber    String?
-  notes             String?
-  status            RentalStatus    @default(DRAFT)
-  createdById       String?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId         String?
+  client           Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientName       String?
+  phone            String?
+  document         String?
+  localName        String
+  eventDate        DateTime
+  totalAmount      Decimal         @db.Decimal(14, 2)
+  signalPercentage Decimal?        @db.Decimal(5, 2)
+  signalAmount     Decimal?        @db.Decimal(14, 2)
+  balanceAmount    Decimal?        @db.Decimal(14, 2)
+  expenseAmount    Decimal?        @db.Decimal(14, 2)
+  paymentMethod    PaymentMethod?
+  paymentStatus    FinancialStatus @default(PENDING)
+  contractNumber   String?
+  notes            String?
+  status           RentalStatus    @default(DRAFT)
+  createdById      String?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
 
   @@index([organizationId, eventDate])
 }
 
 model PlushMachine {
-  id               String        @id @default(cuid())
-  organizationId   String
-  organization     Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId         String?
-  client           Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  code             String
-  name             String
-  machineNumber    String
-  noteNumber       String?
-  noteiroFixed     String?       @default("01")
-  coinPhotoRule    Boolean       @default(true)
-  giftPhotoRule    Boolean       @default(true)
-  active           Boolean       @default(true)
-  createdAt        DateTime      @default(now())
-  updatedAt        DateTime      @updatedAt
-  collections      PlushCollection[]
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String?
+  client         Client?           @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientName     String?
+  cpf            String?
+  phone          String?
+  code           String
+  name           String
+  machineNumber  String
+  noteNumber     String?
+  noteiroFixed   String?           @default("01")
+  coinPhotoRule  Boolean           @default(true)
+  giftPhotoRule  Boolean           @default(true)
+  active         Boolean           @default(true)
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+  collections    PlushCollection[]
 
   @@unique([organizationId, code])
   @@unique([organizationId, machineNumber])
 }
 
 model PlushCollection {
-  id                   String                     @id @default(cuid())
+  id                   String                    @id @default(cuid())
   organizationId       String
-  organization         Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization         Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   plushMachineId       String
-  plushMachine         PlushMachine               @relation(fields: [plushMachineId], references: [id], onDelete: Cascade)
+  plushMachine         PlushMachine              @relation(fields: [plushMachineId], references: [id], onDelete: Cascade)
   clientId             String?
-  grossAmount          Decimal                    @db.Decimal(14, 2)
-  commissionPercentage Decimal                    @default(25) @db.Decimal(5, 2)
-  clientAmount         Decimal                    @db.Decimal(14, 2)
-  companyAmount        Decimal                    @db.Decimal(14, 2)
-  plushCountOut        Int                        @default(0)
+  grossAmount          Decimal                   @db.Decimal(14, 2)
+  commissionPercentage Decimal                   @default(25) @db.Decimal(5, 2)
+  clientAmount         Decimal                   @db.Decimal(14, 2)
+  companyAmount        Decimal                   @db.Decimal(14, 2)
+  plushCountOut        Int                       @default(0)
   paymentMethod        PaymentMethod?
-  discountAmount       Decimal                    @default(0) @db.Decimal(14, 2)
+  discountAmount       Decimal                   @default(0) @db.Decimal(14, 2)
   discountReason       String?
-  ownerExpenseAmount   Decimal                    @default(0) @db.Decimal(14, 2)
+  ownerExpenseAmount   Decimal                   @default(0) @db.Decimal(14, 2)
   compensationStatus   MachineCompensationStatus
   noteiro              String?
   coinPhotoId          String?
   giftPhotoId          String?
   createdById          String?
-  createdAt            DateTime                   @default(now())
-  updatedAt            DateTime                   @updatedAt
+  createdAt            DateTime                  @default(now())
+  updatedAt            DateTime                  @updatedAt
 
   @@index([organizationId, createdAt])
 }
 
 model BilliardPoint {
-  id                  String        @id @default(cuid())
-  organizationId      String
-  organization        Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId            String?
-  client              Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  code                String
-  name                String
-  street              String?
-  neighborhood        String?
-  city                String?
-  state               String?
-  phone               String?
-  cpf                 String?
-  cnpj                String?
-  tableModel          String?
-  chipValue           Decimal?      @db.Decimal(14, 2)
-  roofOpenDebt        Decimal?      @db.Decimal(14, 2)
-  routeNumber         Int?
-  partialRoute        String?
-  clothChangeAlertAt  Int           @default(1500)
-  createdById         String?
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-  collections         BilliardCollection[]
-  maintenances        BilliardMaintenance[]
+  id                 String                @id @default(cuid())
+  organizationId     String
+  organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId           String?
+  client             Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  registrationNumber Int?
+  code               String
+  name               String
+  clientName         String?
+  cep                String?
+  street             String?
+  neighborhood       String?
+  city               String?
+  state              String?
+  phone              String?
+  cpf                String?
+  cnpj               String?
+  tableModel         String?
+  chipValue          Decimal?              @db.Decimal(14, 2)
+  roofOpenDebt       Decimal?              @db.Decimal(14, 2)
+  routeNumber        Int?
+  partialRoute       String?
+  accumulatedChips   Int                   @default(0)
+  clothChangeAlertAt Int                   @default(1500)
+  createdById        String?
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+  collections        BilliardCollection[]
+  maintenances       BilliardMaintenance[]
 
   @@unique([organizationId, code])
+  @@unique([organizationId, registrationNumber])
 }
 
 model BilliardCollection {
-  id                    String        @id @default(cuid())
-  organizationId        String
-  organization          Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  billiardPointId       String
-  billiardPoint         BilliardPoint @relation(fields: [billiardPointId], references: [id], onDelete: Cascade)
-  collectionDate        DateTime
-  quantityOfChips       Int
-  grossAmount           Decimal       @db.Decimal(14, 2)
-  percentage            Decimal?      @db.Decimal(5, 2)
-  discountAmount        Decimal?      @db.Decimal(14, 2)
-  roofAmount            Decimal?      @db.Decimal(14, 2)
-  roofPaymentMethod     PaymentMethod?
-  employeeCost          Decimal?      @db.Decimal(14, 2)
-  installationCost      Decimal?      @db.Decimal(14, 2)
-  maintenanceCost       Decimal?      @db.Decimal(14, 2)
-  otherCost             Decimal?      @db.Decimal(14, 2)
-  photoId               String?
-  registerNumber        String?
-  createdById           String?
-  createdAt             DateTime      @default(now())
+  id                String         @id @default(cuid())
+  organizationId    String
+  organization      Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  billiardPointId   String
+  billiardPoint     BilliardPoint  @relation(fields: [billiardPointId], references: [id], onDelete: Cascade)
+  collectionDate    DateTime
+  quantityOfChips   Int
+  grossAmount       Decimal        @db.Decimal(14, 2)
+  percentage        Decimal?       @db.Decimal(5, 2)
+  discountAmount    Decimal?       @db.Decimal(14, 2)
+  roofAmount        Decimal?       @db.Decimal(14, 2)
+  roofPaymentMethod PaymentMethod?
+  employeeCost      Decimal?       @db.Decimal(14, 2)
+  installationCost  Decimal?       @db.Decimal(14, 2)
+  maintenanceCost   Decimal?       @db.Decimal(14, 2)
+  otherCost         Decimal?       @db.Decimal(14, 2)
+  photoId           String?
+  registerNumber    String?
+  createdById       String?
+  createdAt         DateTime       @default(now())
 
   @@index([organizationId, collectionDate])
 }
 
 model BilliardMaintenance {
-  id               String            @id @default(cuid())
-  organizationId   String
-  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  billiardPointId  String
-  billiardPoint    BilliardPoint     @relation(fields: [billiardPointId], references: [id], onDelete: Cascade)
-  maintenanceDate  DateTime
-  materials        String?
-  notes            String?
-  status           MaintenanceStatus @default(SCHEDULED)
-  createdById      String?
-  createdAt        DateTime          @default(now())
+  id              String            @id @default(cuid())
+  organizationId  String
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  billiardPointId String
+  billiardPoint   BilliardPoint     @relation(fields: [billiardPointId], references: [id], onDelete: Cascade)
+  maintenanceDate DateTime
+  materials       String?
+  notes           String?
+  status          MaintenanceStatus @default(SCHEDULED)
+  createdById     String?
+  createdAt       DateTime          @default(now())
 
   @@index([organizationId, maintenanceDate])
 }
 
 model RoutePlan {
-  id             String        @id @default(cuid())
+  id             String       @id @default(cuid())
   organizationId String
-  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   code           String
   name           String
   routeNumber    Int
   description    String?
   createdById    String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   @@unique([organizationId, code])
 }
@@ -692,6 +766,7 @@ model BrazilBetsEntry {
   direction      FinancialDirection
   status         FinancialStatus    @default(PENDING)
   amount         Decimal            @db.Decimal(14, 2)
+  paymentMethod  PaymentMethod?
   notes          String?
   createdById    String?
   createdAt      DateTime           @default(now())
@@ -700,44 +775,47 @@ model BrazilBetsEntry {
 }
 
 model MachineContract {
-  id                    String         @id @default(cuid())
-  organizationId        String
-  organization          Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientCode            String
-  clientName            String
-  amount                Decimal        @db.Decimal(14, 2)
-  contractDate          DateTime
-  year                  Int
-  percentage            Decimal?       @db.Decimal(5, 2)
-  monthlyInterest       Decimal?       @db.Decimal(5, 2)
-  installmentFixed      Boolean        @default(false)
-  guaranteeEnabled      Boolean        @default(false)
-  digitalSignature      Boolean        @default(false)
-  streetLoanAmount      Decimal?       @db.Decimal(14, 2)
-  monthlyInterestTotal  Decimal?       @db.Decimal(14, 2)
-  generalPercentageAvg  Decimal?       @db.Decimal(5, 2)
-  status                ContractStatus @default(DRAFT)
-  notes                 String?
-  createdById           String?
-  createdAt             DateTime       @default(now())
-  updatedAt             DateTime       @updatedAt
-  guarantees            MachineGuarantee[]
+  id                   String             @id @default(cuid())
+  organizationId       String
+  organization         Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientCode           String
+  clientName           String
+  amount               Decimal            @db.Decimal(14, 2)
+  contractDate         DateTime
+  year                 Int
+  percentage           Decimal?           @db.Decimal(5, 2)
+  monthlyInterest      Decimal?           @db.Decimal(5, 2)
+  installmentFixed     Boolean            @default(false)
+  guaranteeEnabled     Boolean            @default(false)
+  signatureLink        String?
+  signatureFileId      String?
+  streetLoanAmount     Decimal?           @db.Decimal(14, 2)
+  monthlyInterestTotal Decimal?           @db.Decimal(14, 2)
+  generalPercentageAvg Decimal?           @db.Decimal(5, 2)
+  expenseAmount        Decimal?           @db.Decimal(14, 2)
+  paymentMethod        PaymentMethod?
+  status               ContractStatus     @default(DRAFT)
+  notes                String?
+  createdById          String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  guarantees           MachineGuarantee[]
 
   @@index([organizationId, contractDate])
 }
 
 model MachineGuarantee {
-  id                String          @id @default(cuid())
+  id                String           @id @default(cuid())
   organizationId    String
-  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   machineContractId String?
   machineContract   MachineContract? @relation(fields: [machineContractId], references: [id], onDelete: SetNull)
   code              String
   description       String?
-  status            ContractStatus  @default(DRAFT)
+  status            ContractStatus   @default(DRAFT)
   fileId            String?
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
 
   @@unique([organizationId, code])
 }
@@ -751,6 +829,7 @@ model CondominiumMarketEntry {
   direction      FinancialDirection
   amount         Decimal            @db.Decimal(14, 2)
   expenseAmount  Decimal?           @db.Decimal(14, 2)
+  paymentMethod  PaymentMethod?
   notes          String?
   createdAt      DateTime           @default(now())
 
@@ -771,7 +850,10 @@ model MarketingContract {
   address          String?
   phone            String?
   email            String?
-  digitalSignature Boolean        @default(false)
+  signatureLink    String?
+  signatureFileId  String?
+  expenseAmount    Decimal?       @db.Decimal(14, 2)
+  paymentMethod    PaymentMethod?
   status           ContractStatus @default(DRAFT)
   generatedFileId  String?
   createdAt        DateTime       @default(now())
@@ -790,6 +872,7 @@ model PersonalFinanceRecord {
   amount         Decimal           @db.Decimal(14, 2)
   dueDate        DateTime?
   paidAt         DateTime?
+  paymentMethod  PaymentMethod?
   notes          String?
   createdById    String?
   createdAt      DateTime          @default(now())
@@ -799,75 +882,93 @@ model PersonalFinanceRecord {
 }
 
 model BxTransaction {
-  id                   String           @id @default(cuid())
-  organizationId       String
-  organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId             String?
-  client               Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  clientName           String
-  collectNumber        String?
-  occurredAt           DateTime
-  sentToAgentAmount    Decimal?         @db.Decimal(14, 2)
-  deliveredAmount      Decimal?         @db.Decimal(14, 2)
-  incomeAmount         Decimal?         @db.Decimal(14, 2)
-  expenseAmount        Decimal?         @db.Decimal(14, 2)
-  totalAmount          Decimal          @db.Decimal(14, 2)
-  discountAmount       Decimal?         @db.Decimal(14, 2)
-  employeeFilled       Boolean          @default(true)
-  screenPhotoId        String?
-  paperPhotoId         String?
-  exceptionClient      Boolean          @default(false)
-  receiptStatus        BxReceiptStatus  @default(NOT_RECEIVED)
-  createdById          String?
-  createdAt            DateTime         @default(now())
+  id                String          @id @default(cuid())
+  organizationId    String
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId          String?
+  client            Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientName        String
+  phone             String?
+  cpf               String?
+  cep               String?
+  street            String?
+  neighborhood      String?
+  city              String?
+  state             String?
+  collectNumber     String?
+  occurredAt        DateTime
+  agentName         String?
+  receiverName      String?
+  sentToAgentAmount Decimal?        @db.Decimal(14, 2)
+  deliveredAmount   Decimal?        @db.Decimal(14, 2)
+  incomeAmount      Decimal?        @db.Decimal(14, 2)
+  expenseAmount     Decimal?        @db.Decimal(14, 2)
+  totalAmount       Decimal         @db.Decimal(14, 2)
+  discountAmount    Decimal?        @db.Decimal(14, 2)
+  paymentMethod     PaymentMethod?
+  employeeFilled    Boolean         @default(true)
+  screenPhotoId     String?
+  paperPhotoId      String?
+  exceptionClient   Boolean         @default(false)
+  receiptStatus     BxReceiptStatus @default(NOT_RECEIVED)
+  createdById       String?
+  createdAt         DateTime        @default(now())
 
   @@index([organizationId, occurredAt])
 }
 
 model SlotMachine {
-  id                    String        @id @default(cuid())
-  organizationId        String
-  organization          Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId              String?
-  client                Client?       @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  uniqueMachineNumber   String
-  clientSequenceNumber  String
-  customerDebt          Decimal?      @db.Decimal(14, 2)
-  ppValue               Decimal?      @db.Decimal(14, 2)
-  initialAmount         Decimal?      @db.Decimal(14, 2)
-  initialAmountMode     SlotDebtMode  @default(NONE)
-  optionalGreedAmount   Decimal?      @db.Decimal(14, 2)
-  active                Boolean       @default(true)
-  createdAt             DateTime      @default(now())
-  updatedAt             DateTime      @updatedAt
-  collections           SlotCollection[]
+  id                   String           @id @default(cuid())
+  organizationId       String
+  organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId             String?
+  client               Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  uniqueMachineNumber  String
+  clientSequenceNumber String
+  clientName           String?
+  phone                String?
+  cpf                  String?
+  cep                  String?
+  street               String?
+  neighborhood         String?
+  city                 String?
+  state                String?
+  customerDebt         Decimal?         @db.Decimal(14, 2)
+  ppValue              Decimal?         @db.Decimal(14, 2)
+  initialAmount        Decimal?         @db.Decimal(14, 2)
+  initialAmountMode    SlotDebtMode     @default(NONE)
+  optionalGreedAmount  Decimal?         @db.Decimal(14, 2)
+  active               Boolean          @default(true)
+  createdAt            DateTime         @default(now())
+  updatedAt            DateTime         @updatedAt
+  collections          SlotCollection[]
 
   @@unique([organizationId, uniqueMachineNumber])
-  @@unique([organizationId, clientSequenceNumber])
 }
 
 model SlotCollection {
-  id                      String        @id @default(cuid())
-  organizationId          String
-  organization            Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  slotMachineId           String
-  slotMachine             SlotMachine   @relation(fields: [slotMachineId], references: [id], onDelete: Cascade)
-  occurredAt              DateTime
-  currentIncome           Decimal       @db.Decimal(14, 2)
-  previousIncome          Decimal       @db.Decimal(14, 2)
-  incomeDifference        Decimal       @db.Decimal(14, 2)
-  currentExpense          Decimal       @db.Decimal(14, 2)
-  previousExpense         Decimal       @db.Decimal(14, 2)
-  expenseDifference       Decimal       @db.Decimal(14, 2)
-  percentageSplit         Decimal       @default(50) @db.Decimal(5, 2)
-  conferenceCount         Int           @default(0)
-  negativeAmount          Decimal?      @db.Decimal(14, 2)
-  feedingNegativeAmount   Decimal?      @db.Decimal(14, 2)
-  customerDebtDiscounted  Decimal?      @db.Decimal(14, 2)
-  generatedDebtAmount     Decimal?      @db.Decimal(14, 2)
-  debtMode                SlotDebtMode  @default(NONE)
-  createdById             String?
-  createdAt               DateTime      @default(now())
+  id                     String         @id @default(cuid())
+  organizationId         String
+  organization           Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  slotMachineId          String
+  slotMachine            SlotMachine    @relation(fields: [slotMachineId], references: [id], onDelete: Cascade)
+  occurredAt             DateTime
+  currentIncome          Decimal        @db.Decimal(14, 2)
+  previousIncome         Decimal        @db.Decimal(14, 2)
+  incomeDifference       Decimal        @db.Decimal(14, 2)
+  currentExpense         Decimal        @db.Decimal(14, 2)
+  previousExpense        Decimal        @db.Decimal(14, 2)
+  expenseDifference      Decimal        @db.Decimal(14, 2)
+  percentageSplit        Decimal        @default(50) @db.Decimal(5, 2)
+  conferenceCount        Int            @default(0)
+  negativeAmount         Decimal?       @db.Decimal(14, 2)
+  feedingNegativeAmount  Decimal?       @db.Decimal(14, 2)
+  customerDebtDiscounted Decimal?       @db.Decimal(14, 2)
+  generatedDebtAmount    Decimal?       @db.Decimal(14, 2)
+  debtMode               SlotDebtMode   @default(NONE)
+  paymentMethod          PaymentMethod?
+  createdById            String?
+  createdAt              DateTime       @default(now())
 
   @@index([organizationId, occurredAt])
 }
