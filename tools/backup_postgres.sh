@@ -18,3 +18,13 @@ echo "[backup] $(date -Is) salvo em $OUT_FILE"
 
 find "$BACKUP_DIR" -type f -name "${DB_NAME}_*.sql.gz" -mtime +"$KEEP_DAYS" -delete
 echo "[backup] $(date -Is) concluido."
+
+# Envia para o Google Drive (rclone)
+RCLONE="$HOME/bin/rclone"
+if [ -x "$RCLONE" ]; then
+  echo "[backup] $(date -Is) enviando para Google Drive..."
+  "$RCLONE" copy "$OUT_FILE" gdrive:backups-laudemir/ --quiet
+  echo "[backup] $(date -Is) Google Drive: ok"
+else
+  echo "[backup] $(date -Is) rclone nao encontrado, pulando Google Drive"
+fi
