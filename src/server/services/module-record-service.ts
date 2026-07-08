@@ -1788,6 +1788,229 @@ export async function listModuleClients(
   }
 }
 
+export async function listModuleClientRecords(
+  session: SessionData,
+  slug: ModuleSlug,
+  clientId: string,
+  clientName: string,
+): Promise<ModuleRecordItem[]> {
+  const org = session.organizationId;
+
+  switch (slug) {
+    case "maquinas-de-pelucia": {
+      const records = await prisma.plushCollection.findMany({
+        where: { organizationId: org, plushMachineId: clientId },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        include: { plushMachine: true },
+      });
+      return records.map((record) => ({
+        id: record.id,
+        title: record.plushMachine.name,
+        summary: `Maquina ${record.plushMachine.machineNumber}`,
+        details: [
+          `Cliente: ${record.plushMachine.clientName ?? "-"}`,
+          `Fichas: ${record.plushCountOut}`,
+          `Comissao: ${record.commissionPercentage}%`,
+          `Compensacao: ${record.compensationStatus === "WORTH_IT" ? "Compensa" : "Nao compensa"}`,
+        ],
+        amount: formatCurrency(Number(record.companyAmount)),
+        amountValue: Number(record.companyAmount),
+        incomeValue: Number(record.grossAmount),
+        expenseValue: Number(record.grossAmount) - Number(record.companyAmount),
+        badge: record.compensationStatus === "WORTH_IT" ? "Compensa" : "Nao compensa",
+        createdAt: record.createdAt.toISOString(),
+      }));
+    }
+
+    case "h-caca-niquel": {
+      const records = await prisma.slotCollection.findMany({
+        where: { organizationId: org, slotMachineId: clientId },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+        include: { slotMachine: true },
+      });
+      return records.map((record) => {
+        const currentIncome = Number(record.currentIncome);
+        const { houseAmount, clientShareFinal } = computeSlotSplit({
+          currentIncome,
+          previousIncome: Number(record.previousIncome),
+          currentExpense: Number(record.currentExpense),
+          previousExpense: Number(record.previousExpense),
+          percentageSplit: Number(record.percentageSplit ?? 0),
+          negativeAmount: Number(record.negativeAmount ?? 0),
+          feedingNegativeAmount: Number(record.feedingNegativeAmount ?? 0),
+          customerDebtDiscounted: Number(record.customerDebtDiscounted ?? 0),
+          generatedDebtAmount: Number(record.generatedDebtAmount ?? 0),
+        });
+        return {
+          id: record.id,
+          title: record.slotMachine.uniqueMachineNumber,
+          summary: `Cliente ${record.slotMachine.clientSequenceNumber}${record.slotMachine.clientName ? " - " + record.slotMachine.clientName : ""}`,
+          details: [
+            `Conferencias: ${record.conferenceCount}`,
+            `Entrada: ${formatCurrency(currentIncome)}`,
+            `Cliente: ${formatCurrency(clientShareFinal)}`,
+            `Casa: ${formatCurrency(houseAmount)}`,
+            `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
+          ],
+          amount: formatCurrency(houseAmount),
+          amountValue: houseAmount,
+          incomeValue: clientShareFinal + houseAmount,
+          expenseValue: Number(record.negativeAmount ?? 0) + Number(record.feedingNegativeAmount ?? 0),
+          badge: formatShortDate(record.createdAt),
+          createdAt: record.createdAt.toISOString(),
+        };
+      });
+    }
+
+    case "bx": {
+      const records = await prisma.bxTransaction.findMany({
+        where: { organizationId: org, clientName },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      });
+      return records.map((record) => ({
+        id: record.id,
+        title: record.clientName,
+        summary: `Recolhe ${record.collectNumber ?? "-"}`,
+        details: [
+          `Agente: ${record.agentName ?? "-"}`,
+          `Recebeu: ${record.receiverName ?? "-"}`,
+          `Status: ${record.receiptStatus}`,
+          `Entrada: ${formatCurrency(Number(record.incomeAmount ?? 0))}`,
+          `Saida: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
+          `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
+        ],
+        amount: formatCurrency(Number(record.totalAmount)),
+        amountValue: Number(record.totalAmount),
+        incomeValue: Number(record.incomeAmount ?? 0),
+        expenseValue: Number(record.expenseAmount ?? 0),
+        badge: record.receiptStatus === "RECEIVED" ? "Recebido" : "Nao recebido",
+        createdAt: record.createdAt.toISOString(),
+      }));
+    }
+
+    case "carreta-kids": {
+      const records = await prisma.carretaKidsRecord.findMany({
+        where: { organizationId: org, sheetName: clientName },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      });
+      return records.map((record) => ({
+        id: record.id,
+        title: record.locationName,
+        summary: `Ficha ${record.sheetName}`,
+        details: [
+          `Data: ${formatShortDate(record.serviceDate)}`,
+          `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
+          ...(record.entryTime ? [`Entrada: ${record.entryTime}`] : []),
+          ...(record.exitTime ? [`Saida: ${record.exitTime}`] : []),
+          `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
+        ],
+        amount: formatCurrency(Number(record.totalAmount)),
+        amountValue: Number(record.totalAmount),
+        incomeValue: Number(record.tablePrice ?? 0),
+        expenseValue: Number(record.expenseAmount ?? 0),
+        badge: `${record.minutesCharged} min`,
+        createdAt: record.createdAt.toISOString(),
+      }));
+    }
+
+    case "locacao": {
+      const records = await prisma.rentalOrder.findMany({
+        where: { organizationId: org, clientName },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      });
+      return records.map((record) => ({
+        id: record.id,
+        title: record.clientName ?? record.localName,
+        summary: record.contractNumber ? `Contrato ${record.contractNumber}` : record.localName,
+        details: [
+          `Data: ${formatShortDate(record.eventDate)}`,
+          `Sinal: ${formatCurrency(Number(record.signalAmount ?? 0))}`,
+          `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
+          `Saldo: ${formatCurrency(Number(record.balanceAmount ?? 0))}`,
+          `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
+        ],
+        amount: formatCurrency(Number(record.balanceAmount ?? record.totalAmount)),
+        amountValue: Number(record.balanceAmount ?? record.totalAmount),
+        incomeValue: Number(record.totalAmount),
+        expenseValue: Number(record.expenseAmount ?? 0),
+        badge: record.paymentStatus,
+        createdAt: record.createdAt.toISOString(),
+      }));
+    }
+
+    case "marketing": {
+      const records = await prisma.marketingContract.findMany({
+        where: { organizationId: org, name: clientName },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      });
+      return records.map((record) => {
+        const signed = Boolean(record.signatureLink || record.signatureFileId);
+        const grossAmount = Number(record.contractValue);
+        const netAmount = grossAmount - Number(record.expenseAmount ?? 0);
+        return {
+          id: record.id,
+          title: record.name,
+          summary: record.serviceType,
+          details: [
+            `Tipo: ${record.personType}`,
+            `Data: ${formatShortDate(record.contractDate)}`,
+            `Assinatura: ${signed ? "Sim" : "Pendente"}`,
+            `Status: ${record.status}`,
+            `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
+            `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
+          ],
+          amount: formatCurrency(netAmount),
+          amountValue: netAmount,
+          incomeValue: grossAmount,
+          expenseValue: Number(record.expenseAmount ?? 0),
+          badge: record.status,
+          createdAt: record.createdAt.toISOString(),
+        };
+      });
+    }
+
+    case "credito-financeiro": {
+      const records = await prisma.machineContract.findMany({
+        where: { organizationId: org, clientName },
+        orderBy: { createdAt: "desc" },
+        take: 30,
+      });
+      return records.map((record) => {
+        const netAmount = Number(record.amount) - Number(record.expenseAmount ?? 0);
+        const signed = Boolean(record.signatureLink || record.signatureFileId);
+        return {
+          id: record.id,
+          title: record.clientName,
+          summary: `Contrato ${record.clientCode}`,
+          details: [
+            `Ano: ${record.year}`,
+            `Juros: ${record.monthlyInterest ?? 0}%`,
+            `Garantia: ${record.guaranteeEnabled ? "Sim" : "Nao"}`,
+            `Assinatura: ${signed ? "Sim" : "Pendente"}`,
+            `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
+            `Pagamento: ${record.paymentMethod ?? "NAO INFORMADO"}`,
+          ],
+          amount: formatCurrency(netAmount),
+          amountValue: netAmount,
+          incomeValue: Number(record.amount),
+          expenseValue: Number(record.expenseAmount ?? 0),
+          badge: record.status,
+          createdAt: record.createdAt.toISOString(),
+        };
+      });
+    }
+
+    default:
+      return [];
+  }
+}
+
 export async function listModuleVisitTargets(
   session: SessionData,
   slug: ModuleSlug,

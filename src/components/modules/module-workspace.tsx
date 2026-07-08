@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { BilliardForm } from "@/components/modules/billiard-form";
 import { BilliardHistoryOverview } from "@/components/modules/billiard-history-overview";
+import { ModuleHistoryOverview } from "@/components/modules/module-history-overview";
 import { BxForm } from "@/components/modules/bx-form";
 import { CarretaKidsForm } from "@/components/modules/carreta-kids-form";
 import { MachineContractForm } from "@/components/modules/machine-contract-form";
@@ -109,7 +110,6 @@ export function ModuleWorkspace({
     .filter((t) => t.key !== "clientes" || hasClientConcept)
     .filter((t) => t.key !== "financeiro" || !hideFinancials);
   const Form = formMap[slug];
-  const history = recentRecords.slice(0, 8);
 
   return (
     <section className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/82 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.2)] md:p-4">
@@ -316,16 +316,7 @@ export function ModuleWorkspace({
           slug === "bilhar-pebolim" ? (
             <BilliardHistoryOverview hideFinancials={hideFinancials} />
           ) : (
-            <ListPanel
-              title="Histórico recente"
-              empty="Nenhum histórico neste módulo ainda."
-              items={history.map((record) => ({
-                id: record.id,
-                title: record.title,
-                helper: `${record.summary} - ${formatShortDate(record.createdAt)}`,
-                badge: record.badge ?? record.amount ?? "Registro",
-              }))}
-            />
+            <ModuleHistoryOverview slug={slug} clients={moduleClients} hideFinancials={hideFinancials} />
           )
         ) : null}
       </div>
@@ -333,50 +324,3 @@ export function ModuleWorkspace({
   );
 }
 
-function ListPanel({
-  title,
-  empty,
-  items,
-}: {
-  title: string;
-  empty: string;
-  items: Array<{ id: string; title: string; helper: string; badge: string }>;
-}) {
-  return (
-    <section className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
-        <span className="rounded-full border border-white/10 bg-white/[0.03] px-2.5 py-1 text-xs text-[#c9c2b4]">
-          {items.length}
-        </span>
-      </div>
-
-      {items.length > 0 ? (
-        <div className="mt-4 grid gap-2">
-          {items.map((item) => (
-            <article
-              key={item.id}
-              className="flex items-center justify-between gap-3 overflow-hidden rounded-xl border border-[rgba(245,241,232,0.08)] bg-white/[0.025] py-2.5 pl-0 pr-3"
-            >
-              <div className="flex min-w-0 flex-1 items-center gap-3">
-                <div className="h-8 w-[3px] shrink-0 rounded-r-full bg-[#d1a04f]/50" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-white">{item.title}</p>
-                  <p className="mt-0.5 truncate text-xs text-[#9a958b]">{item.helper}</p>
-                </div>
-              </div>
-              <span className="shrink-0 rounded-full border border-[#d1a04f]/25 bg-[#d1a04f]/10 px-2 py-1 text-[11px] font-medium text-[#f3dfae]">
-                {item.badge}
-              </span>
-            </article>
-          ))}
-        </div>
-      ) : (
-        <div className="mt-4 flex flex-col items-center justify-center rounded-xl border border-dashed border-[rgba(245,241,232,0.14)] bg-white/[0.02] px-4 py-8 text-center">
-          <Inbox className="mb-3 size-7 text-[#5a544c]" />
-          <p className="text-sm text-[#9a958b]">{empty}</p>
-        </div>
-      )}
-    </section>
-  );
-}
