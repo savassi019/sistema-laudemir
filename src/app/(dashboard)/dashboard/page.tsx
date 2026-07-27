@@ -50,7 +50,7 @@ export default async function DashboardPage() {
       include: { contract: { select: { name: true } } },
       orderBy: { contentDate: "asc" },
       take: 8,
-    }).catch(() => []) : Promise.resolve([]),
+    }).catch(() => [] as Awaited<ReturnType<typeof prisma.marketingContent.findMany<{ include: { contract: { select: { name: true } } } }>>>) : Promise.resolve([] as Awaited<ReturnType<typeof prisma.marketingContent.findMany<{ include: { contract: { select: { name: true } } } }>>>),
     !isField ? prisma.marketingContent.findMany({
       where: {
         organizationId: orgId,
@@ -60,7 +60,7 @@ export default async function DashboardPage() {
       include: { contract: { select: { name: true } } },
       orderBy: { contentDate: "asc" },
       take: 8,
-    }).catch(() => []) : Promise.resolve([]),
+    }).catch(() => [] as Awaited<ReturnType<typeof prisma.marketingContent.findMany<{ include: { contract: { select: { name: true } } } }>>>) : Promise.resolve([] as Awaited<ReturnType<typeof prisma.marketingContent.findMany<{ include: { contract: { select: { name: true } } } }>>>),
   ]);
 
   const openReminders   = overview.reminders.filter((r) => r.status === "aberto");
