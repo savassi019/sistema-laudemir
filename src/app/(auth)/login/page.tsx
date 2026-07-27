@@ -42,8 +42,9 @@ export default async function LoginPage() {
               </div>
             </div>
 
-            <div className="rounded-lg border border-white/[0.08] bg-white/[0.03] px-2.5 py-1 text-[10px] font-medium uppercase tracking-widest text-white/30">
-              Local
+            <div className="flex items-center gap-1.5 rounded-lg border border-emerald-500/20 bg-emerald-500/[0.07] px-2.5 py-1">
+              <span className="size-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.8)]" />
+              <span className="text-[9px] font-medium uppercase tracking-widest text-emerald-400/80">Online</span>
             </div>
           </div>
 

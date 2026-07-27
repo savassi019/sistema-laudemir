@@ -50,7 +50,7 @@ export function LoginForm() {
         setServerError(payload.error ?? "Nao foi possivel entrar.");
         return;
       }
-      window.location.href = "/modulos";
+      window.location.href = "/dashboard";
     } catch {
       setServerError("Falha de comunicacao com o servidor local.");
     } finally {

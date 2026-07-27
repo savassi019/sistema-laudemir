@@ -1,7 +1,7 @@
 "use client";
 
-import { ArrowDownLeft, ArrowUpRight, CalendarDays, List, Plus, TrendingDown, TrendingUp, Wallet, X } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { ArrowDownLeft, ArrowUpRight, CalendarDays, CheckCircle2, List, Plus, TrendingDown, TrendingUp, Wallet, X } from "lucide-react";
+import { useMemo, useRef, useState, useTransition } from "react";
 
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatShortDate } from "@/lib/format";
@@ -62,6 +62,8 @@ export function ModuleFinanceSection({
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>("todos");
   const [viewMode, setViewMode] = useState<ViewMode>("lista");
+  const [saved, setSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const totals = useMemo(() => {
     const income = entries.filter((e) => e.direction === "INCOME").reduce((s, e) => s + e.totalAmount, 0);
@@ -112,6 +114,9 @@ export function ModuleFinanceSection({
         setEntries((prev) => [created, ...prev]);
         setFormOpen(false);
         form.reset();
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        setSaved(true);
+        savedTimerRef.current = setTimeout(() => setSaved(false), 3000);
       } catch {
         setError("Não foi possível salvar. Confira os campos e tente novamente.");
       }
@@ -127,6 +132,13 @@ export function ModuleFinanceSection({
 
   return (
     <div className="space-y-4">
+
+      {saved && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-[#6b9d6f]/30 bg-[#0e1c10]/80 px-4 py-3 text-sm font-medium text-[#bfe3c2]">
+          <CheckCircle2 className="size-4 shrink-0 text-[#6b9d6f]" />
+          Lançamento salvo com sucesso!
+        </div>
+      )}
 
       {/* Cards de resumo */}
       <div className="grid grid-cols-3 gap-2">

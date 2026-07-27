@@ -1,7 +1,7 @@
 "use client";
 
-import { Check, ChevronDown, Clock, Inbox, Minus, Plus, X } from "lucide-react";
-import { useMemo, useState, useTransition } from "react";
+import { Check, CheckCircle2, ChevronDown, Clock, Inbox, Minus, Plus, X } from "lucide-react";
+import { useMemo, useRef, useState, useTransition } from "react";
 
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatShortDate } from "@/lib/format";
@@ -40,6 +40,8 @@ export function ModuleAccountsPayable({
   const [formOpen, setFormOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pending = useMemo(
     () => entries.filter((e) => e.status === "PENDING" || e.status === "PARTIAL"),
@@ -85,6 +87,9 @@ export function ModuleAccountsPayable({
         setEntries((prev) => [created, ...prev]);
         setFormOpen(false);
         form.reset();
+        if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
+        setSaved(true);
+        savedTimerRef.current = setTimeout(() => setSaved(false), 3000);
       } catch {
         setError("Não foi possível salvar. Tente novamente.");
       }
@@ -93,6 +98,13 @@ export function ModuleAccountsPayable({
 
   return (
     <div className="space-y-4">
+
+      {saved && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-[#6b9d6f]/30 bg-[#0e1c10]/80 px-4 py-3 text-sm font-medium text-[#bfe3c2]">
+          <CheckCircle2 className="size-4 shrink-0 text-[#6b9d6f]" />
+          Conta registrada com sucesso!
+        </div>
+      )}
 
       {/* Cards resumo */}
       <div className="grid grid-cols-2 gap-2">
