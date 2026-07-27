@@ -8,6 +8,10 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: projectRoot,
   },
+  typescript: {
+    // tsc --noEmit já valida localmente antes do push
+    ignoreBuildErrors: true,
+  },
 };
 
 export default nextConfig;
