@@ -2,11 +2,12 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, CalendarDays, LoaderCircle } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -42,15 +43,21 @@ type ReceiptState = {
   paymentStatus: string;
 };
 
-export function RentalForm({ hideFinancials = false }: { hideFinancials?: boolean } = {}) {
+type LoadedRentalClient = { clientName: string; phone: string; localName: string; document: string };
+
+export function RentalForm({ hideFinancials = false, initialClientName = "", initialPhone = "", initialClientId }: { hideFinancials?: boolean; initialClientName?: string; initialPhone?: string; initialClientId?: string } = {}) {
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [loadedClient, setLoadedClient] = useState<LoadedRentalClient | null>(null);
+  const [clientLoading, setClientLoading] = useState(Boolean(initialClientId));
 
   const form = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
+      clientName: initialClientName,
+      phone: initialPhone,
       signalEnabled: true,
       signalPercentage: 30,
       expenseAmount: 0,
@@ -59,6 +66,22 @@ export function RentalForm({ hideFinancials = false }: { hideFinancials?: boolea
       totalAmount: 0,
     },
   });
+
+  useEffect(() => {
+    if (!initialClientId) return;
+    getClientPrefillDataAction("locacao", initialClientId)
+      .then((data) => {
+        if (!data || data.kind !== "rental-order") return;
+        setLoadedClient({ clientName: data.clientName, phone: data.phone, localName: data.localName, document: data.document });
+        form.setValue("clientName", data.clientName);
+        form.setValue("phone", data.phone);
+        form.setValue("localName", data.localName);
+        form.setValue("document", data.document);
+      })
+      .catch(() => setSaveError("Erro ao carregar dados do cliente."))
+      .finally(() => setClientLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialClientId]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (submittingRef.current) return;
@@ -119,38 +142,50 @@ export function RentalForm({ hideFinancials = false }: { hideFinancials?: boolea
   return (
     <div className="space-y-4">
       <form onSubmit={onSubmit} className="space-y-4">
+        {clientLoading ? (
+          <p className="text-sm text-slate-400">Carregando dados do cliente...</p>
+        ) : loadedClient ? (
+          <div className="rounded-[18px] border border-[#8aa17c]/30 bg-[#1e2e24]/60 p-4 text-sm text-[#dbe6d4] space-y-0.5">
+            <p className="font-semibold text-white">{loadedClient.clientName}</p>
+            <p className="text-[#9a958b]">{loadedClient.phone}</p>
+            <p className="mt-1 text-xs text-[#9a958b]">{loadedClient.localName}{loadedClient.document ? ` · Doc: ${loadedClient.document}` : ""}</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2 md:col-span-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
+                Cadastro de cliente
+              </p>
+              <label className={labelClass} htmlFor="clientName">
+                Cliente
+              </label>
+              <input id="clientName" className={fieldClass} {...form.register("clientName")} />
+            </div>
+
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="phone">
+                Telefone
+              </label>
+              <input id="phone" className={fieldClass} {...form.register("phone")} />
+            </div>
+
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="localName">
+                Local
+              </label>
+              <input id="localName" className={fieldClass} {...form.register("localName")} />
+            </div>
+
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="document">
+                Documento
+              </label>
+              <input id="document" className={fieldClass} {...form.register("document")} />
+            </div>
+          </div>
+        )}
+
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2 md:col-span-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
-              Cadastro de cliente
-            </p>
-            <label className={labelClass} htmlFor="clientName">
-              Cliente
-            </label>
-            <input id="clientName" className={fieldClass} {...form.register("clientName")} />
-          </div>
-
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="phone">
-              Telefone
-            </label>
-            <input id="phone" className={fieldClass} {...form.register("phone")} />
-          </div>
-
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="localName">
-              Local
-            </label>
-            <input id="localName" className={fieldClass} {...form.register("localName")} />
-          </div>
-
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="document">
-              Documento
-            </label>
-            <input id="document" className={fieldClass} {...form.register("document")} />
-          </div>
-
           <div className="space-y-2">
             <label className={labelClass} htmlFor="eventDate">
               Data da locação
@@ -261,6 +296,7 @@ export function RentalForm({ hideFinancials = false }: { hideFinancials?: boolea
             <span>Status: {receipt.paymentStatus}</span>
           </div>
           <WhatsAppReceiptButton
+            autoOpen
             defaultPhone={receipt.phone}
             message={[
               "*Comprovante Locação*",

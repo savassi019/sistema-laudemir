@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, LoaderCircle, Plus, ReceiptText, TriangleAlert, X } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useFieldArray, useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
@@ -11,6 +11,7 @@ import { formatCurrency, formatShortDate } from "@/lib/format";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import { isValidCpf } from "@/lib/validators";
+import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -58,6 +59,7 @@ type FormValues = z.output<typeof schema>;
 type ReceiptState = {
   uniqueMachineNumber: string;
   clientLabel: string;
+  phone?: string;
   occurredAt: string;
   currentIncome: number;
   currentExpense: number;
@@ -75,17 +77,22 @@ const modeLabels: Record<string, string> = {
   NEGATIVE: "Negativo",
 };
 
-export function SlotForm({ hideFinancials = false }: { hideFinancials?: boolean } = {}) {
+type LoadedSlotMachine = { clientName: string; phone: string; uniqueMachineNumber: string; clientSequenceNumber: string; customerDebt: number; ppValue: number; initialAmount: number };
+
+export function SlotForm({ hideFinancials = false, initialClientName = "", initialPhone = "", initialClientId }: { hideFinancials?: boolean; initialClientName?: string; initialPhone?: string; initialClientId?: string } = {}) {
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState<string | null>(null);
+  const [loadedMachine, setLoadedMachine] = useState<LoadedSlotMachine | null>(null);
+  const [machineLoading, setMachineLoading] = useState(Boolean(initialClientId));
 
   const form = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
+      clientName: initialClientName,
       active: true,
       newClient: false,
       initialAmountMode: "NONE",
@@ -107,6 +114,33 @@ export function SlotForm({ hideFinancials = false }: { hideFinancials?: boolean 
       generatedDebtAmount: 0,
     },
   });
+
+  useEffect(() => {
+    if (!initialClientId) return;
+    getClientPrefillDataAction("h-caca-niquel", initialClientId)
+      .then((data) => {
+        if (!data || data.kind !== "slot-machine") return;
+        setLoadedMachine({ clientName: data.clientName, phone: data.phone, uniqueMachineNumber: data.uniqueMachineNumber, clientSequenceNumber: data.clientSequenceNumber, customerDebt: data.customerDebt, ppValue: data.ppValue, initialAmount: data.initialAmount });
+        form.setValue("uniqueMachineNumber", data.uniqueMachineNumber);
+        form.setValue("clientName", data.clientName);
+        form.setValue("phone", data.phone);
+        form.setValue("cpf", data.cpf);
+        form.setValue("cep", data.cep);
+        form.setValue("street", data.street);
+        form.setValue("neighborhood", data.neighborhood);
+        form.setValue("city", data.city);
+        form.setValue("state", data.state);
+        form.setValue("customerDebt", data.customerDebt);
+        form.setValue("ppValue", data.ppValue);
+        form.setValue("initialAmount", data.initialAmount);
+        form.setValue("initialAmountMode", data.initialAmountMode as "NONE" | "DEBT" | "NEGATIVE");
+        form.setValue("optionalGreedAmount", data.optionalGreedAmount);
+        form.setValue("active", data.active);
+      })
+      .catch(() => setSaveError("Erro ao carregar dados da máquina."))
+      .finally(() => setMachineLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialClientId]);
 
   const negativeEntries = useFieldArray({ control: form.control, name: "negativeEntries" });
 
@@ -252,6 +286,7 @@ export function SlotForm({ hideFinancials = false }: { hideFinancials?: boolean 
     setReceipt({
       uniqueMachineNumber: values.uniqueMachineNumber,
       clientLabel,
+      phone: values.phone,
       occurredAt: values.occurredAt,
       currentIncome,
       currentExpense,
@@ -277,17 +312,17 @@ export function SlotForm({ hideFinancials = false }: { hideFinancials?: boolean 
 
       {hideFinancials ? null : (
         <div className="grid gap-3 sm:grid-cols-3">
-          <article className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+          <article className={`rounded-[24px] border p-4 ${netRevenue < 0 ? "border-[#f87171]/20 bg-[#2b1212]/60" : "border-white/8 bg-white/[0.03]"}`}>
             <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Receita líquida</p>
-            <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(netRevenue)}</p>
+            <p className={`mt-2 text-xl font-semibold ${netRevenue < 0 ? "text-[#f87171]" : "text-white"}`}>{formatCurrency(netRevenue)}</p>
           </article>
-          <article className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+          <article className={`rounded-[24px] border p-4 ${clientShareFinal < 0 ? "border-[#f87171]/20 bg-[#2b1212]/60" : "border-white/8 bg-white/[0.03]"}`}>
             <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Cliente</p>
-            <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(clientShareFinal)}</p>
+            <p className={`mt-2 text-xl font-semibold ${clientShareFinal < 0 ? "text-[#f87171]" : "text-white"}`}>{formatCurrency(clientShareFinal)}</p>
           </article>
-          <article className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+          <article className={`rounded-[24px] border p-4 ${houseAmount < 0 ? "border-[#f87171]/20 bg-[#2b1212]/60" : "border-white/8 bg-white/[0.03]"}`}>
             <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Casa</p>
-            <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(houseAmount)}</p>
+            <p className={`mt-2 text-xl font-semibold ${houseAmount < 0 ? "text-[#f87171]" : "text-white"}`}>{formatCurrency(houseAmount)}</p>
           </article>
         </div>
       )}
@@ -317,110 +352,122 @@ export function SlotForm({ hideFinancials = false }: { hideFinancials?: boolean 
           </div>
         </div>
 
-        <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
-          <input type="checkbox" {...form.register("newClient")} />
-          Novo cliente nesta máquina (atribui novo número de sequência e zera a dívida)
-        </label>
+        {machineLoading ? (
+          <p className="text-sm text-slate-400">Carregando dados da máquina...</p>
+        ) : loadedMachine ? (
+          <div className="rounded-[18px] border border-[#d1a04f]/30 bg-[#3a2b18]/60 p-4 text-sm text-[#f3dfae] space-y-0.5">
+            <p className="font-semibold text-white">{loadedMachine.clientName}</p>
+            <p className="text-[#9a958b]">{loadedMachine.phone}</p>
+            <p className="mt-1 text-xs text-[#9a958b]">Máq. {loadedMachine.uniqueMachineNumber} · Seq. {loadedMachine.clientSequenceNumber} · Dívida {formatCurrency(loadedMachine.customerDebt)}</p>
+          </div>
+        ) : (
+          <>
+            <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
+              <input type="checkbox" {...form.register("newClient")} />
+              Novo cliente nesta máquina (atribui novo número de sequência e zera a dívida)
+            </label>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2 md:col-span-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
-              Cadastro de cliente / ponto
-            </p>
-            <label className={labelClass} htmlFor="clientName">
-              Nome do cliente
-            </label>
-            <input id="clientName" className={fieldClass} {...form.register("clientName")} />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="phone">
-              Telefone
-            </label>
-            <input
-              id="phone"
-              className={fieldClass}
-              inputMode="tel"
-              maxLength={15}
-              {...withMask(form.register("phone"), maskPhone)}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="cpf">
-              CPF
-            </label>
-            <input
-              id="cpf"
-              className={fieldClass}
-              inputMode="numeric"
-              maxLength={14}
-              {...withMask(form.register("cpf"), maskCpf)}
-            />
-            {form.formState.errors.cpf ? (
-              <p className="text-[12px] text-[#d59a8b]">{form.formState.errors.cpf.message}</p>
-            ) : null}
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="cep">
-              CEP
-            </label>
-            <div className="flex gap-2">
-              <input
-                id="cep"
-                className={fieldClass}
-                inputMode="numeric"
-                placeholder="00000-000"
-                maxLength={9}
-                {...withMask(form.register("cep"), maskCep)}
-                onBlur={handleCepLookup}
-              />
-              <button
-                type="button"
-                onClick={handleCepLookup}
-                disabled={cepLoading}
-                className="shrink-0 rounded-xl border border-[#d1a04f]/30 bg-[#d1a04f]/10 px-3 text-xs font-semibold text-[#f3dfae] disabled:opacity-60"
-              >
-                {cepLoading ? "..." : "Buscar"}
-              </button>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2 md:col-span-2">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
+                  Cadastro de cliente / ponto
+                </p>
+                <label className={labelClass} htmlFor="clientName">
+                  Nome do cliente
+                </label>
+                <input id="clientName" className={fieldClass} {...form.register("clientName")} />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="phone">
+                  Telefone
+                </label>
+                <input
+                  id="phone"
+                  className={fieldClass}
+                  inputMode="tel"
+                  maxLength={15}
+                  {...withMask(form.register("phone"), maskPhone)}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="cpf">
+                  CPF
+                </label>
+                <input
+                  id="cpf"
+                  className={fieldClass}
+                  inputMode="numeric"
+                  maxLength={14}
+                  {...withMask(form.register("cpf"), maskCpf)}
+                />
+                {form.formState.errors.cpf ? (
+                  <p className="text-[12px] text-[#d59a8b]">{form.formState.errors.cpf.message}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="cep">
+                  CEP
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="cep"
+                    className={fieldClass}
+                    inputMode="numeric"
+                    placeholder="00000-000"
+                    maxLength={9}
+                    {...withMask(form.register("cep"), maskCep)}
+                    onBlur={handleCepLookup}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleCepLookup}
+                    disabled={cepLoading}
+                    className="shrink-0 rounded-xl border border-[#d1a04f]/30 bg-[#d1a04f]/10 px-3 text-xs font-semibold text-[#f3dfae] disabled:opacity-60"
+                  >
+                    {cepLoading ? "..." : "Buscar"}
+                  </button>
+                </div>
+                {cepError ? <p className="text-[12px] text-[#d59a8b]">{cepError}</p> : null}
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="street">
+                  Rua
+                </label>
+                <input id="street" className={fieldClass} {...form.register("street")} />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="neighborhood">
+                  Bairro
+                </label>
+                <input id="neighborhood" className={fieldClass} {...form.register("neighborhood")} />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="city">
+                  Cidade
+                </label>
+                <input id="city" className={fieldClass} {...form.register("city")} />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="state">
+                  Estado
+                </label>
+                <input id="state" className={fieldClass} {...form.register("state")} />
+              </div>
+              {mapsLink ? (
+                <div className="md:col-span-2">
+                  <a
+                    href={mapsLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#8aa17c] underline-offset-2 hover:underline"
+                  >
+                    Ver no mapa
+                  </a>
+                </div>
+              ) : null}
             </div>
-            {cepError ? <p className="text-[12px] text-[#d59a8b]">{cepError}</p> : null}
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="street">
-              Rua
-            </label>
-            <input id="street" className={fieldClass} {...form.register("street")} />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="neighborhood">
-              Bairro
-            </label>
-            <input id="neighborhood" className={fieldClass} {...form.register("neighborhood")} />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="city">
-              Cidade
-            </label>
-            <input id="city" className={fieldClass} {...form.register("city")} />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="state">
-              Estado
-            </label>
-            <input id="state" className={fieldClass} {...form.register("state")} />
-          </div>
-          {mapsLink ? (
-            <div className="md:col-span-2">
-              <a
-                href={mapsLink}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#8aa17c] underline-offset-2 hover:underline"
-              >
-                Ver no mapa
-              </a>
-            </div>
-          ) : null}
-        </div>
+          </>
+        )}
 
         {newClient ? (
           <div className="grid gap-4 md:grid-cols-2">
@@ -481,6 +528,12 @@ export function SlotForm({ hideFinancials = false }: { hideFinancials?: boolean 
               {...form.register("previousIncome")}
             />
           </div>
+          {incomeDifference < 0 ? (
+            <div className="flex items-center gap-2 rounded-xl border border-[#d1a04f]/30 bg-[#3a2b18]/60 px-3 py-2 text-xs text-[#f3dfae] md:col-span-2">
+              <TriangleAlert className="size-3.5 shrink-0" />
+              Entrada atual menor que a anterior — diferença negativa de {formatCurrency(Math.abs(incomeDifference))}.
+            </div>
+          ) : null}
           <div className="space-y-2">
             <label className={labelClass} htmlFor="currentExpense">
               Saída atual
@@ -509,6 +562,12 @@ export function SlotForm({ hideFinancials = false }: { hideFinancials?: boolean 
               {...form.register("previousExpense")}
             />
           </div>
+          {expenseDifference < 0 ? (
+            <div className="flex items-center gap-2 rounded-xl border border-[#d1a04f]/30 bg-[#3a2b18]/60 px-3 py-2 text-xs text-[#f3dfae] md:col-span-2">
+              <TriangleAlert className="size-3.5 shrink-0" />
+              Saída atual menor que a anterior — diferença negativa de {formatCurrency(Math.abs(expenseDifference))}.
+            </div>
+          ) : null}
           <div className="space-y-2">
             <label className={labelClass} htmlFor="percentageSplit">
               Percentual do cliente
@@ -756,6 +815,8 @@ export function SlotForm({ hideFinancials = false }: { hideFinancials?: boolean 
           </div>
           {receipt.notes ? <p className="mt-3 text-sm text-[#dbe6d4]/75">{receipt.notes}</p> : null}
           <WhatsAppReceiptButton
+            defaultPhone={receipt.phone ?? ""}
+            autoOpen={!!receipt.phone}
             message={[
               "*Comprovante H (Caça-Níquel)*",
               `Máquina: ${receipt.uniqueMachineNumber}`,

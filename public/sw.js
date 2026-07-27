@@ -1,7 +1,20 @@
-const CACHE = "laudemir-BUILD_ID_PLACEHOLDER";
+const CACHE = "laudemir-6PK-II9agsRGnofP17dCr";
 
-self.addEventListener("install", () => {
+const PRECACHE_PAGES = [
+  "/dashboard",
+  "/modulos",
+  "/painel",
+  "/relatorio",
+  "/equipe",
+];
+
+self.addEventListener("install", (event) => {
   self.skipWaiting();
+  event.waitUntil(
+    caches.open(CACHE).then((cache) =>
+      Promise.allSettled(PRECACHE_PAGES.map((url) => cache.add(url))),
+    ),
+  );
 });
 
 self.addEventListener("activate", (event) => {
@@ -55,8 +68,47 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Tudo mais: network-first, fallback para cache
+  // Navegação (GET de página): network-first, depois atualiza cache, fallback para versão anterior
+  if (request.method === "GET" && request.mode === "navigate") {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const clone = response.clone();
+          caches.open(CACHE).then((c) => c.put(request, clone));
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached ?? Response.error())),
+    );
+    return;
+  }
+
+  // Tudo mais (server actions, API): network-first, fallback para cache quando disponível
   event.respondWith(
     fetch(request).catch(() => caches.match(request)),
+  );
+});
+
+self.addEventListener("push", (event) => {
+  const data = event.data?.json() ?? {};
+  event.waitUntil(
+    self.registration.showNotification(data.title ?? "Sistema Laudemir", {
+      body: data.body ?? "",
+      icon: "/icon-192.png",
+      badge: "/icon-192.png",
+      data: { url: data.url ?? "/dashboard" },
+      tag: "alertas",
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = event.notification.data?.url ?? "/dashboard";
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+      const found = wins.find((w) => w.url.includes(url));
+      if (found) return found.focus();
+      return self.clients.openWindow(url);
+    }),
   );
 });

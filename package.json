@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev --webpack",
+    "dev": "prisma db push --accept-data-loss && next dev --webpack",
     "build": "next build && node scripts/update-sw-version.mjs",
     "start": "next start",
     "lint": "eslint",

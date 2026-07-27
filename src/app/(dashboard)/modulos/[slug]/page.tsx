@@ -88,16 +88,13 @@ export default async function ModuleDetailPage({
 
   return (
     <div className="space-y-3 md:space-y-4">
-      <div className="flex items-center gap-2">
-        <Link
-          href="/modulos"
-          className="inline-flex shrink-0 items-center gap-2 rounded-full border border-[rgba(245,241,232,0.12)] bg-white/[0.035] px-3 py-1.5 text-[11px] uppercase tracking-[0.22em] text-[#c9c2b4]"
-        >
-          <ArrowLeft className="size-3.5" />
-          Modulos
-        </Link>
-        <p className="truncate text-xs text-[#9a958b]">{item.detail}</p>
-      </div>
+      <Link
+        href="/modulos"
+        className="inline-flex items-center gap-1.5 text-xs text-[#9a958b] transition hover:text-[#c9c2b4]"
+      >
+        <ArrowLeft className="size-3" />
+        Módulos
+      </Link>
 
       <ModuleWorkspace
         slug={item.slug}
@@ -111,12 +108,6 @@ export default async function ModuleDetailPage({
         hideFinancials={hideFinancials}
       />
 
-      <Link
-        href="/modulos"
-        className="inline-flex w-full items-center justify-center rounded-2xl border border-[rgba(245,241,232,0.1)] bg-white/[0.025] px-4 py-3 text-sm font-medium text-[#c9c2b4] transition hover:bg-white/[0.05]"
-      >
-        Voltar para todos os modulos
-      </Link>
     </div>
   );
 }

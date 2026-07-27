@@ -99,7 +99,8 @@ async function uploadFile(file: File, category: string) {
 
 export function MarketingContractForm({
   hideFinancials = false,
-}: { hideFinancials?: boolean } = {}) {
+  onSaved,
+}: { hideFinancials?: boolean; onSaved?: () => void } = {}) {
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
@@ -162,6 +163,7 @@ export function MarketingContractForm({
       });
 
       if (!response.ok) throw new Error("Falha ao salvar o contrato.");
+      onSaved?.();
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }
@@ -483,6 +485,7 @@ export function MarketingContractForm({
             <p className="mt-3 text-sm text-[#c8bef5]/60">{receipt.notes}</p>
           ) : null}
           <WhatsAppReceiptButton
+            autoOpen
             defaultPhone={receipt.phone}
             message={[
               "*Comprovante Marketing*",

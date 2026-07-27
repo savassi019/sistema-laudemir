@@ -138,6 +138,22 @@ enum MaintenanceStatus {
   CANCELLED
 }
 
+enum MarketingPipelineStage {
+  LEAD
+  CONTACTED
+  MEETING_SCHEDULED
+  PROPOSAL_SENT
+  NEGOTIATION
+  CLOSED
+  ACTIVE_CLIENT
+}
+
+enum MarketingContentStatus {
+  PENDING
+  PRODUCED
+  APPROVED
+}
+
 enum BxReceiptStatus {
   RECEIVED
   NOT_RECEIVED
@@ -253,6 +269,7 @@ model Organization {
   machineGuarantees        MachineGuarantee[]
   condominiumMarketEntries CondominiumMarketEntry[]
   marketingContracts       MarketingContract[]
+  marketingContents        MarketingContent[]
   personalFinanceRecords   PersonalFinanceRecord[]
   bxTransactions           BxTransaction[]
   slotMachines             SlotMachine[]
@@ -854,12 +871,32 @@ model MarketingContract {
   signatureFileId  String?
   expenseAmount    Decimal?       @db.Decimal(14, 2)
   paymentMethod    PaymentMethod?
-  status           ContractStatus @default(DRAFT)
-  generatedFileId  String?
-  createdAt        DateTime       @default(now())
-  updatedAt        DateTime       @updatedAt
+  status              ContractStatus         @default(DRAFT)
+  pipelineStage       MarketingPipelineStage @default(LEAD)
+  onboardingChecklist Json?
+  generatedFileId     String?
+  createdAt           DateTime               @default(now())
+  updatedAt           DateTime               @updatedAt
+  contents            MarketingContent[]
 
   @@index([organizationId, contractDate])
+}
+
+model MarketingContent {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contractId     String
+  contract       MarketingContract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  title          String
+  contentDate    DateTime
+  status         MarketingContentStatus @default(PENDING)
+  notes          String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  @@index([contractId])
+  @@index([organizationId])
 }
 
 model PersonalFinanceRecord {

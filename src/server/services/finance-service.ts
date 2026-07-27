@@ -64,6 +64,37 @@ export async function listModuleFinancialEntries(
   }));
 }
 
+export async function updateModuleFinancialEntryStatus(
+  session: SessionData,
+  id: string,
+  status: "PENDING" | "PARTIAL" | "PAID",
+): Promise<ModuleFinancialEntryItem> {
+  const existing = await prisma.financialEntry.findFirstOrThrow({
+    where: { id, organizationId: session.organizationId },
+    select: { totalAmount: true },
+  });
+
+  const entry = await prisma.financialEntry.update({
+    where: { id },
+    data: {
+      status,
+      paidAt: status === "PAID" ? new Date() : null,
+      paidAmount: status === "PAID" ? existing.totalAmount : 0,
+      remainingAmount: status === "PAID" ? 0 : existing.totalAmount,
+    },
+  });
+
+  return {
+    id: entry.id,
+    description: entry.description,
+    direction: entry.direction as "INCOME" | "EXPENSE",
+    status: entry.status as "PENDING" | "PARTIAL" | "PAID",
+    totalAmount: Number(entry.totalAmount),
+    paymentMethod: entry.paymentMethod,
+    createdAt: entry.createdAt.toISOString(),
+  };
+}
+
 export async function createModuleFinancialEntry(
   session: SessionData,
   module: SystemModule,

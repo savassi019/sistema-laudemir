@@ -1078,6 +1078,18 @@ async function saveWithPrisma(
           paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
           generatedFileId: data.contractFileId,
           status: mapContractStatus(data.status),
+          pipelineStage: "LEAD",
+          onboardingChecklist: {
+            contractSigned: false,
+            paymentConfirmed: false,
+            strategicDiagnosis: false,
+            logoReceived: false,
+            photosVideosReceived: false,
+            socialMediaAccess: false,
+            competitorsDefined: false,
+            objectivesDefined: false,
+            contentInspirations: false,
+          },
         },
       });
 
@@ -1654,8 +1666,10 @@ export async function listModuleClients(
 
         return points.map((point) => ({
           id: point.id,
-          name: point.clientName || point.name,
-          subtitle: `${point.name} - ${point.tableModel ?? "Mesa nao informada"}`,
+          name: point.clientName
+            ? `${point.name} · ${point.clientName}`
+            : point.name,
+          subtitle: point.tableModel ?? "Mesa não informada",
           tags: [point.phone, point.cpf, point.cnpj, point.city].filter(Boolean) as string[],
           badge: `${formatCurrency(Number(point.chipValue ?? 0))}/ficha`,
           phone: point.phone ?? undefined,
@@ -2027,4 +2041,49 @@ export async function listModuleVisitTargets(
     balance: 0,
     updatedAt: new Date().toISOString(),
   }));
+}
+
+export type ClientPrefillData =
+  | { kind: "plush-machine"; clientName: string; phone: string; cpf: string; code: string; name: string; machineNumber: string; noteNumber: string; noteiroFixed: string; coinPhotoRule: boolean; giftPhotoRule: boolean; active: boolean }
+  | { kind: "slot-machine"; clientName: string; phone: string; cpf: string; cep: string; street: string; neighborhood: string; city: string; state: string; uniqueMachineNumber: string; clientSequenceNumber: string; customerDebt: number; ppValue: number; initialAmount: number; initialAmountMode: string; optionalGreedAmount: number; active: boolean }
+  | { kind: "bx-transaction"; clientName: string; phone: string; cpf: string; cep: string; street: string; neighborhood: string; city: string; state: string; exceptionClient: boolean }
+  | { kind: "carreta-kids-record"; localName: string; sheetName: string; phone: string }
+  | { kind: "rental-order"; clientName: string; phone: string; localName: string; document: string };
+
+export async function getClientPrefillData(
+  session: SessionData,
+  slug: ModuleSlug,
+  id: string,
+): Promise<ClientPrefillData | null> {
+  const org = session.organizationId;
+
+  switch (slug) {
+    case "maquinas-de-pelucia": {
+      const m = await prisma.plushMachine.findFirst({ where: { id, organizationId: org } });
+      if (!m) return null;
+      return { kind: "plush-machine", clientName: m.clientName ?? "", phone: m.phone ?? "", cpf: m.cpf ?? "", code: m.code, name: m.name, machineNumber: m.machineNumber, noteNumber: m.noteNumber ?? "", noteiroFixed: m.noteiroFixed ?? "01", coinPhotoRule: m.coinPhotoRule, giftPhotoRule: m.giftPhotoRule, active: m.active };
+    }
+    case "h-caca-niquel": {
+      const m = await prisma.slotMachine.findFirst({ where: { id, organizationId: org } });
+      if (!m) return null;
+      return { kind: "slot-machine", clientName: m.clientName ?? "", phone: m.phone ?? "", cpf: m.cpf ?? "", cep: m.cep ?? "", street: m.street ?? "", neighborhood: m.neighborhood ?? "", city: m.city ?? "", state: m.state ?? "", uniqueMachineNumber: m.uniqueMachineNumber, clientSequenceNumber: m.clientSequenceNumber, customerDebt: Number(m.customerDebt ?? 0), ppValue: Number(m.ppValue ?? 0), initialAmount: Number(m.initialAmount ?? 0), initialAmountMode: m.initialAmountMode, optionalGreedAmount: Number(m.optionalGreedAmount ?? 0), active: m.active };
+    }
+    case "bx": {
+      const r = await prisma.bxTransaction.findFirst({ where: { id, organizationId: org } });
+      if (!r) return null;
+      return { kind: "bx-transaction", clientName: r.clientName, phone: r.phone ?? "", cpf: r.cpf ?? "", cep: r.cep ?? "", street: r.street ?? "", neighborhood: r.neighborhood ?? "", city: r.city ?? "", state: r.state ?? "", exceptionClient: r.exceptionClient };
+    }
+    case "carreta-kids": {
+      const r = await prisma.carretaKidsRecord.findFirst({ where: { id, organizationId: org } });
+      if (!r) return null;
+      return { kind: "carreta-kids-record", localName: r.locationName, sheetName: r.sheetName, phone: r.phone ?? "" };
+    }
+    case "locacao": {
+      const r = await prisma.rentalOrder.findFirst({ where: { id, organizationId: org } });
+      if (!r) return null;
+      return { kind: "rental-order", clientName: r.clientName ?? "", phone: r.phone ?? "", localName: r.localName, document: r.document ?? "" };
+    }
+    default:
+      return null;
+  }
 }

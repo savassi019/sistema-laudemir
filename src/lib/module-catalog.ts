@@ -271,9 +271,9 @@ export function getVisibleModuleGroups(activeModules: ModuleName[]) {
     .filter((group) => group.items.length > 0);
 }
 
-export function getVisibleModulesFlat(activeModules: ModuleName[]) {
+export function getVisibleModulesFlat(activeModules: ModuleName[], isOwner = false) {
   return moduleCatalog
-    .filter((item) => !hiddenGroups.includes(item.group) && activeModules.includes(item.module))
+    .filter((item) => !hiddenGroups.includes(item.group) && (isOwner || activeModules.includes(item.module)))
     .sort((a, b) => a.title.localeCompare(b.title, "pt-BR"));
 }
 

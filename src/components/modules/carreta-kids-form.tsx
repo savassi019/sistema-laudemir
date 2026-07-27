@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -66,21 +67,42 @@ type ReceiptState = {
   notes?: string;
 };
 
-export function CarretaKidsForm({ hideFinancials = false }: { hideFinancials?: boolean } = {}) {
+type LoadedCarretaClient = { localName: string; sheetName: string; phone: string };
+
+export function CarretaKidsForm({ hideFinancials = false, initialClientName = "", initialPhone = "", initialClientId }: { hideFinancials?: boolean; initialClientName?: string; initialPhone?: string; initialClientId?: string } = {}) {
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const tierManuallySet = useRef(false);
+  const [loadedClient, setLoadedClient] = useState<LoadedCarretaClient | null>(null);
+  const [clientLoading, setClientLoading] = useState(Boolean(initialClientId));
 
   const form = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
+      localName: initialClientName,
+      phone: initialPhone,
       minutesCharged: "15",
       paymentMethod: "PIX",
       expenseAmount: 0,
     },
   });
+
+  useEffect(() => {
+    if (!initialClientId) return;
+    getClientPrefillDataAction("carreta-kids", initialClientId)
+      .then((data) => {
+        if (!data || data.kind !== "carreta-kids-record") return;
+        setLoadedClient({ localName: data.localName, sheetName: data.sheetName, phone: data.phone });
+        form.setValue("localName", data.localName);
+        form.setValue("sheetName", data.sheetName);
+        form.setValue("phone", data.phone);
+      })
+      .catch(() => setSaveError("Erro ao carregar dados do cliente."))
+      .finally(() => setClientLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialClientId]);
 
   const selectedMinutes = String(
     useWatch({ control: form.control, name: "minutesCharged" }) ?? "15",
@@ -174,18 +196,45 @@ export function CarretaKidsForm({ hideFinancials = false }: { hideFinancials?: b
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="localName">
-              Nome do local
-            </label>
-            <input id="localName" className={fieldClass} {...form.register("localName")} />
-            {form.formState.errors.localName ? (
-              <p className="text-sm text-[#d59a8b]">
-                {form.formState.errors.localName.message}
-              </p>
-            ) : null}
+        {clientLoading ? (
+          <p className="text-sm text-slate-400">Carregando dados do cliente...</p>
+        ) : loadedClient ? (
+          <div className="rounded-[18px] border border-[#c47aab]/30 bg-[#2e1a2a]/60 p-4 text-sm text-[#f3d7ef] space-y-0.5">
+            <p className="font-semibold text-white">{loadedClient.localName}</p>
+            <p className="text-[#9a958b]">{loadedClient.sheetName} · {loadedClient.phone}</p>
           </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="localName">
+                Nome do local
+              </label>
+              <input id="localName" className={fieldClass} {...form.register("localName")} />
+              {form.formState.errors.localName ? (
+                <p className="text-sm text-[#d59a8b]">
+                  {form.formState.errors.localName.message}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2 md:col-span-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
+                Cadastro de cliente
+              </p>
+              <label className={labelClass} htmlFor="sheetName">
+                Nome na ficha
+              </label>
+              <input id="sheetName" className={fieldClass} {...form.register("sheetName")} />
+            </div>
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="phone">
+                Celular
+              </label>
+              <input id="phone" className={fieldClass} {...form.register("phone")} />
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className={labelClass} htmlFor="serviceDate">
               Data
@@ -201,21 +250,6 @@ export function CarretaKidsForm({ hideFinancials = false }: { hideFinancials?: b
                 {form.formState.errors.serviceDate.message}
               </p>
             ) : null}
-          </div>
-          <div className="space-y-2 md:col-span-2">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
-              Cadastro de cliente
-            </p>
-            <label className={labelClass} htmlFor="sheetName">
-              Nome na ficha
-            </label>
-            <input id="sheetName" className={fieldClass} {...form.register("sheetName")} />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="phone">
-              Celular
-            </label>
-            <input id="phone" className={fieldClass} {...form.register("phone")} />
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="entryTime">

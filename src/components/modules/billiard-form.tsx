@@ -26,6 +26,7 @@ import { maskCep, maskCnpj, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import { isValidCnpj, isValidCpf } from "@/lib/validators";
 import {
   createRoutePlanAction,
+  getBilliardPointAction,
   listBilliardPointHistoryAction,
   listBilliardPointsAction,
   listRoutePlansAction,
@@ -35,6 +36,7 @@ import type {
   BilliardPointItem,
 } from "@/server/services/billiard-route-service";
 import { BilliardPointHistoryList } from "./billiard-point-history-list";
+import { PhotoCaptureInput } from "./photo-capture-input";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -216,8 +218,12 @@ function getStatusColor(status: string) {
 export function BilliardForm({
   hideFinancials = false,
   startAtRegistration = false,
-}: { hideFinancials?: boolean; startAtRegistration?: boolean } = {}) {
-  const [activeStep, setActiveStep] = useState<StepKey>(startAtRegistration ? "ponto" : "rota");
+  initialClientId,
+}: { hideFinancials?: boolean; startAtRegistration?: boolean; initialClientId?: string; initialClientName?: string; initialPhone?: string } = {}) {
+  const [activeStep, setActiveStep] = useState<StepKey>(
+    startAtRegistration || initialClientId ? "ponto" : "rota",
+  );
+  const visibleSteps = initialClientId ? steps.filter((s) => s.key !== "rota") : steps;
   const [routePoints, setRoutePoints] = useState<BilliardPointItem[]>([]);
   const [routePlans, setRoutePlans] = useState<RoutePlanOption[]>([]);
   const [loadingPoints, setLoadingPoints] = useState(true);
@@ -237,14 +243,25 @@ export function BilliardForm({
   async function refreshRouteData() {
     setLoadingPoints(true);
     try {
-      const [points, plans] = await Promise.all([
-        listBilliardPointsAction(),
-        listRoutePlansAction(),
-      ]);
-      setRoutePoints(points);
-      setRoutePlans(plans);
-    } catch {
-      setSaveError("Nao foi possivel carregar os pontos da rota.");
+      if (initialClientId) {
+        // Busca direta pelo ponto pré-selecionado — mais rápido e sem carregar a lista inteira
+        const point = await getBilliardPointAction(initialClientId);
+        if (point) {
+          loadRoutePoint(point);
+        } else {
+          setSaveError("Ponto não encontrado. Volte e selecione novamente.");
+        }
+      } else {
+        const [points, plans] = await Promise.all([
+          listBilliardPointsAction(),
+          listRoutePlansAction(),
+        ]);
+        setRoutePoints(points);
+        setRoutePlans(plans);
+      }
+    } catch (err) {
+      console.error("[BilliardForm] refreshRouteData ERRO:", err);
+      setSaveError(`Erro ao carregar pontos: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setLoadingPoints(false);
     }
@@ -552,28 +569,45 @@ export function BilliardForm({
     <div className="min-w-0 max-w-full space-y-3 overflow-x-hidden">
       <div className="grid min-w-0 max-w-full gap-3 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-3">
-          <div className="flex max-w-full gap-2 overflow-x-auto pb-1">
-            {steps.map((step) => {
-              const Icon = step.icon;
-              const active = activeStep === step.key;
+          <div className="space-y-1.5">
+            <div className="flex gap-1.5">
+              {visibleSteps.map((step, idx) => {
+                const active = activeStep === step.key;
+                const activeIdx = visibleSteps.findIndex((s) => s.key === activeStep);
+                const done = activeIdx > idx;
 
-              return (
-                <button
-                  key={step.key}
-                  type="button"
-                  onClick={() => setActiveStep(step.key)}
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-2 rounded-full border px-3 py-2 text-xs font-semibold transition",
-                    active
-                      ? "border-[#d1a04f]/36 bg-[#d1a04f]/14 text-[#f3dfae]"
-                      : "border-white/10 bg-white/[0.025] text-[#aaa396]",
-                  )}
-                >
-                  <Icon className="size-3.5" />
-                  {step.label}
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    key={step.key}
+                    type="button"
+                    onClick={() => setActiveStep(step.key)}
+                    className={cn(
+                      "flex flex-1 flex-col items-center gap-0.5 rounded-xl border px-1.5 py-2 text-[10px] font-semibold transition-all active:scale-95",
+                      active
+                        ? "border-[#d1a04f]/45 bg-[#d1a04f]/14 text-[#f3dfae]"
+                        : done
+                          ? "border-[#4ade80]/25 bg-[#4ade80]/8 text-[#86efac]"
+                          : "border-[rgba(245,241,232,0.09)] bg-white/[0.02] text-[#9a958b]",
+                    )}
+                  >
+                    <span className={cn(
+                      "flex size-5 items-center justify-center rounded-full text-[10px] font-bold leading-none",
+                      active ? "bg-[#d1a04f]/30 text-[#f3dfae]" : done ? "bg-[#4ade80]/20 text-[#86efac]" : "bg-white/[0.06] text-[#9a958b]",
+                    )}>
+                      {done ? "✓" : idx + 1}
+                    </span>
+                    <span className="leading-tight">{step.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+            {/* Barra de progresso */}
+            <div className="h-0.5 overflow-hidden rounded-full bg-white/[0.06]">
+              <div
+                className="h-full rounded-full bg-[#d1a04f] transition-all duration-500"
+                style={{ width: `${((visibleSteps.findIndex((s) => s.key === activeStep) + 1) / visibleSteps.length) * 100}%` }}
+              />
+            </div>
           </div>
 
           <form onSubmit={onSubmit} className="space-y-3">
@@ -689,162 +723,235 @@ export function BilliardForm({
             ) : null}
 
             {activeStep === "ponto" ? (
-              <StepPanel
-                icon={<MapPinned className="size-4" />}
-                title="Cadastro do ponto"
-                helper="Cadastro completo do cliente, mesa e endereço. Depois o funcionário só fecha fichas."
-              >
-                <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-[#d1a04f]/25 bg-[#d1a04f]/10 px-3 py-1 text-xs font-semibold text-[#f3dfae]">
-                  {loadedPoint?.registrationNumber
-                    ? `Ponto #${String(loadedPoint.registrationNumber).padStart(3, "0")}`
-                    : "Novo ponto - número atribuído ao salvar"}
-                </span>
+              loadedPoint ? (
+                /* ── FECHAMENTO de ponto existente ── */
+                <StepPanel
+                  icon={<ClipboardCheck className="size-4" />}
+                  title="Fechamento"
+                  helper="Registre as fichas coletadas e os dados financeiros deste ponto."
+                >
+                  {/* Cabeçalho do ponto (read-only) */}
+                  <div className="mb-4 rounded-xl border border-[#d1a04f]/20 bg-[#d1a04f]/6 px-4 py-3">
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <p className="text-sm font-semibold text-white">
+                          {loadedPoint.registrationNumber ? (
+                            <span className="mr-1 text-[#d1a04f]">
+                              #{String(loadedPoint.registrationNumber).padStart(3, "0")}
+                            </span>
+                          ) : null}
+                          {loadedPoint.name}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[#9a958b]">
+                          {loadedPoint.clientName} · Rota {loadedPoint.routeNumber}
+                          {loadedPoint.tableModel ? ` · ${loadedPoint.tableModel}` : ""}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[#9a958b]">
+                          {formatCurrency(loadedPoint.chipValue)}/ficha · Fichas acumuladas: {loadedPoint.accumulatedChips}
+                        </p>
+                      </div>
+                      <span className={cn("shrink-0 rounded-full border px-2 py-1 text-[11px] font-medium", getStatusColor(loadedPoint.status))}>
+                        {loadedPoint.status}
+                      </span>
+                    </div>
+                  </div>
 
-                <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
-                  Cadastro de cliente
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Nome" error={form.formState.errors.clientName?.message}>
-                    <input className={fieldClass} {...form.register("clientName")} />
-                  </Field>
-                  <Field label="Telefone" error={form.formState.errors.phone?.message}>
-                    <input
-                      className={fieldClass}
-                      inputMode="tel"
-                      maxLength={15}
-                      {...withMask(form.register("phone"), maskPhone)}
-                    />
-                  </Field>
-                  <Field label="CPF" error={form.formState.errors.cpf?.message}>
-                    <input
-                      className={fieldClass}
-                      inputMode="numeric"
-                      maxLength={14}
-                      {...withMask(form.register("cpf"), maskCpf)}
-                    />
-                  </Field>
-                  <Field label="CNPJ" error={form.formState.errors.cnpj?.message}>
-                    <input
-                      className={fieldClass}
-                      inputMode="numeric"
-                      maxLength={18}
-                      {...withMask(form.register("cnpj"), maskCnpj)}
-                    />
-                  </Field>
-                  <Field label="CEP" error={cepError ?? undefined}>
-                    <div className="flex gap-2">
+                  {/* Campos de coleta */}
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">Coleta</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Data do fechamento" error={form.formState.errors.collectionDate?.message}>
+                      <input className={fieldClass} type="date" {...form.register("collectionDate")} />
+                    </Field>
+                    <Field label="Quinzena">
+                      <select className={selectClass} {...form.register("fortnight")}>
+                        <option value="PRIMEIRA">1ª quinzena</option>
+                        <option value="SEGUNDA">2ª quinzena</option>
+                      </select>
+                    </Field>
+                    <Field label="Fichas coletadas" error={form.formState.errors.quantityOfChips?.message}>
                       <input
                         className={fieldClass}
                         inputMode="numeric"
-                        placeholder="00000-000"
-                        maxLength={9}
-                        {...withMask(form.register("cep"), maskCep)}
-                        onBlur={handleCepLookup}
+                        type="number"
+                        min="0"
+                        {...form.register("quantityOfChips")}
                       />
-                      <button
-                        type="button"
-                        onClick={handleCepLookup}
-                        disabled={cepLoading}
-                        className="shrink-0 rounded-xl border border-[#d1a04f]/30 bg-[#d1a04f]/10 px-3 text-xs font-semibold text-[#f3dfae] disabled:opacity-60"
-                      >
-                        {cepLoading ? "..." : "Buscar"}
-                      </button>
-                    </div>
-                  </Field>
-                  <Field label="Rua" error={form.formState.errors.street?.message}>
-                    <input className={fieldClass} {...form.register("street")} />
-                  </Field>
-                  <Field label="Bairro" error={form.formState.errors.neighborhood?.message}>
-                    <input className={fieldClass} {...form.register("neighborhood")} />
-                  </Field>
-                  <Field label="Cidade" error={form.formState.errors.city?.message}>
-                    <input className={fieldClass} {...form.register("city")} />
-                  </Field>
-                  <Field label="Estado" error={form.formState.errors.state?.message}>
-                    <input className={fieldClass} maxLength={2} {...form.register("state")} />
-                  </Field>
-                </div>
-                {mapsLink ? (
-                  <a
-                    href={mapsLink}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-[#8aa17c] underline-offset-2 hover:underline"
-                  >
-                    <MapPinned className="size-3.5" />
-                    Ver no mapa
-                  </a>
-                ) : null}
+                    </Field>
+                    <Field label="Percentual empresa (%)">
+                      <input
+                        className={fieldClass}
+                        inputMode="decimal"
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="0.5"
+                        {...form.register("percentage")}
+                      />
+                    </Field>
+                  </div>
 
-                <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
-                  Mesa e rota
-                </p>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Código do ponto">
-                    <input
-                      className={fieldClass}
-                      placeholder={currentPointCode}
-                      {...form.register("pointCode")}
-                    />
-                  </Field>
-                  <Field label="Nome do ponto" error={form.formState.errors.pointName?.message}>
-                    <input className={fieldClass} {...form.register("pointName")} />
-                  </Field>
-                  <Field label="Modelo da mesa" error={form.formState.errors.tableModel?.message}>
-                    <input className={fieldClass} {...form.register("tableModel")} />
-                  </Field>
-                  <Field label="Valor da ficha" error={form.formState.errors.chipValue?.message}>
-                    <input
-                      className={fieldClass}
-                      inputMode="decimal"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      {...form.register("chipValue")}
-                    />
-                  </Field>
-                  <Field label="Rota" error={form.formState.errors.routeNumber?.message}>
-                    <input
-                      className={fieldClass}
-                      inputMode="numeric"
-                      type="number"
-                      min="1"
-                      {...form.register("routeNumber")}
-                    />
-                  </Field>
-                  <Field label="Rota parcial">
-                    <input
-                      className={fieldClass}
-                      placeholder="Ex: Rota 03 - parte B"
-                      {...form.register("partialRoute")}
-                    />
-                  </Field>
-                </div>
-
-                {loadedPoint ? (
-                  <>
-                    <button
-                      type="button"
-                      onClick={() => setShowPointHistory((current) => !current)}
-                      className="mt-4 inline-flex w-full items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm font-medium text-[#c9c2b4] transition hover:bg-white/[0.05]"
-                    >
-                      <span className="inline-flex items-center gap-2">
-                        <ClipboardList className="size-4" />
-                        Histórico deste ponto
-                      </span>
-                      <span className="text-xs text-[#9a958b]">
-                        {loadingPointHistory ? "Carregando..." : showPointHistory ? "Ocultar" : "Mostrar"}
-                      </span>
-                    </button>
-
-                    {showPointHistory ? (
-                      <div className="mt-3">
-                        <BilliardPointHistoryList entries={pointHistory} hideFinancials={hideFinancials} />
-                      </div>
+                  {/* Desconto */}
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Field label="Desconto (R$)">
+                      <input
+                        className={fieldClass}
+                        inputMode="decimal"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        {...form.register("discountAmount")}
+                      />
+                    </Field>
+                    {Number(watched.discountAmount) > 0 ? (
+                      <Field label="Motivo do desconto" error={form.formState.errors.discountReason?.message}>
+                        <input className={fieldClass} {...form.register("discountReason")} />
+                      </Field>
                     ) : null}
-                  </>
-                ) : null}
-              </StepPanel>
+                  </div>
+
+                  {/* Telhado */}
+                  {loadedPoint.roofOpenDebt > 0 ? (
+                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                      <Field label="Telhado em aberto (R$)">
+                        <input
+                          className={fieldClass}
+                          inputMode="decimal"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          {...form.register("roofDebt")}
+                        />
+                      </Field>
+                      <Field label="Forma de pagamento">
+                        <select className={selectClass} {...form.register("roofPaymentMethod")}>
+                          <option value="ABERTO">Em aberto</option>
+                          <option value="PIX">PIX</option>
+                          <option value="DINHEIRO">Dinheiro</option>
+                          <option value="CARTAO">Cartão</option>
+                        </select>
+                      </Field>
+                    </div>
+                  ) : null}
+
+                  {/* Custos */}
+                  {!hideFinancials ? (
+                    <>
+                      <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">Custos (opcional)</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <Field label="Empregado (R$)">
+                          <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("employeeCost")} />
+                        </Field>
+                        <Field label="Instalação (R$)">
+                          <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("installationCost")} />
+                        </Field>
+                        <Field label="Manutenção (R$)">
+                          <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("maintenanceCost")} />
+                        </Field>
+                        <Field label="Outros (R$)">
+                          <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("otherCost")} />
+                        </Field>
+                      </div>
+                    </>
+                  ) : null}
+
+                  {/* Histórico */}
+                  <button
+                    type="button"
+                    onClick={() => setShowPointHistory((current) => !current)}
+                    className="mt-4 inline-flex w-full items-center justify-between gap-2 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-sm font-medium text-[#c9c2b4] transition hover:bg-white/[0.05]"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <ClipboardList className="size-4" />
+                      Histórico deste ponto
+                    </span>
+                    <span className="text-xs text-[#9a958b]">
+                      {loadingPointHistory ? "Carregando..." : showPointHistory ? "Ocultar" : "Mostrar"}
+                    </span>
+                  </button>
+                  {showPointHistory ? (
+                    <div className="mt-3">
+                      <BilliardPointHistoryList entries={pointHistory} hideFinancials={hideFinancials} />
+                    </div>
+                  ) : null}
+                </StepPanel>
+              ) : initialClientId ? (
+                /* Ponto pré-selecionado ainda carregando */
+                <StepPanel icon={<LoaderCircle className="size-4 animate-spin" />} title="Carregando ponto..." helper="">
+                  <p className={hintClass}>Buscando dados do ponto selecionado...</p>
+                </StepPanel>
+              ) : (
+                /* ── CADASTRO de novo ponto ── */
+                <StepPanel
+                  icon={<MapPinned className="size-4" />}
+                  title="Cadastro do ponto"
+                  helper="Cadastro completo do cliente, mesa e endereço. Depois o funcionário só fecha fichas."
+                >
+                  <span className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-[#d1a04f]/25 bg-[#d1a04f]/10 px-3 py-1 text-xs font-semibold text-[#f3dfae]">
+                    Novo ponto - número atribuído ao salvar
+                  </span>
+
+                  <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
+                    Cadastro de cliente
+                  </p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Nome" error={form.formState.errors.clientName?.message}>
+                      <input className={fieldClass} {...form.register("clientName")} />
+                    </Field>
+                    <Field label="Telefone" error={form.formState.errors.phone?.message}>
+                      <input className={fieldClass} inputMode="tel" maxLength={15} {...withMask(form.register("phone"), maskPhone)} />
+                    </Field>
+                    <Field label="CPF" error={form.formState.errors.cpf?.message}>
+                      <input className={fieldClass} inputMode="numeric" maxLength={14} {...withMask(form.register("cpf"), maskCpf)} />
+                    </Field>
+                    <Field label="CNPJ" error={form.formState.errors.cnpj?.message}>
+                      <input className={fieldClass} inputMode="numeric" maxLength={18} {...withMask(form.register("cnpj"), maskCnpj)} />
+                    </Field>
+                    <Field label="CEP" error={cepError ?? undefined}>
+                      <div className="flex gap-2">
+                        <input className={fieldClass} inputMode="numeric" placeholder="00000-000" maxLength={9} {...withMask(form.register("cep"), maskCep)} onBlur={handleCepLookup} />
+                        <button type="button" onClick={handleCepLookup} disabled={cepLoading} className="shrink-0 rounded-xl border border-[#d1a04f]/30 bg-[#d1a04f]/10 px-3 text-xs font-semibold text-[#f3dfae] disabled:opacity-60">
+                          {cepLoading ? "..." : "Buscar"}
+                        </button>
+                      </div>
+                    </Field>
+                    <Field label="Rua"><input className={fieldClass} {...form.register("street")} /></Field>
+                    <Field label="Bairro" error={form.formState.errors.neighborhood?.message}>
+                      <input className={fieldClass} {...form.register("neighborhood")} />
+                    </Field>
+                    <Field label="Cidade" error={form.formState.errors.city?.message}>
+                      <input className={fieldClass} {...form.register("city")} />
+                    </Field>
+                    <Field label="Estado"><input className={fieldClass} maxLength={2} {...form.register("state")} /></Field>
+                  </div>
+                  {mapsLink ? (
+                    <a href={mapsLink} target="_blank" rel="noopener noreferrer" className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold text-[#8aa17c] underline-offset-2 hover:underline">
+                      <MapPinned className="size-3.5" />Ver no mapa
+                    </a>
+                  ) : null}
+
+                  <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">Mesa e rota</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Código do ponto">
+                      <input className={fieldClass} placeholder={currentPointCode} {...form.register("pointCode")} />
+                    </Field>
+                    <Field label="Nome do ponto" error={form.formState.errors.pointName?.message}>
+                      <input className={fieldClass} {...form.register("pointName")} />
+                    </Field>
+                    <Field label="Modelo da mesa" error={form.formState.errors.tableModel?.message}>
+                      <input className={fieldClass} {...form.register("tableModel")} />
+                    </Field>
+                    <Field label="Valor da ficha" error={form.formState.errors.chipValue?.message}>
+                      <input className={fieldClass} inputMode="decimal" type="number" step="0.01" min="0" {...form.register("chipValue")} />
+                    </Field>
+                    <Field label="Rota" error={form.formState.errors.routeNumber?.message}>
+                      <input className={fieldClass} inputMode="numeric" type="number" min="1" {...form.register("routeNumber")} />
+                    </Field>
+                    <Field label="Rota parcial">
+                      <input className={fieldClass} placeholder="Ex: Rota 03 - parte B" {...form.register("partialRoute")} />
+                    </Field>
+                  </div>
+                </StepPanel>
+              )
             ) : null}
 
             {activeStep === "fotos" ? (
@@ -854,15 +961,13 @@ export function BilliardForm({
                 helper="Tire foto do ponto ou equipamento."
               >
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Foto">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      className={fieldClass}
-                      {...form.register("photo")}
+                  <div className="sm:col-span-2">
+                    <PhotoCaptureInput
+                      registration={form.register("photo")}
+                      label="Foto do ponto"
+                      hint="Tire foto da mesa, equipamento ou local"
                     />
-                  </Field>
+                  </div>
                   <div className="sm:col-span-2">
                     <Field label="Observações">
                       <textarea
@@ -888,33 +993,51 @@ export function BilliardForm({
               >
                 {/* Confirmação pós-salvar */}
                 {receipt ? (
-                  <div className="mb-3 rounded-2xl border border-[#8aa17c]/25 bg-[#1d2e22]/70 p-3 text-sm text-[#dbe6d4]">
-                    <div className="flex items-center gap-2 font-semibold">
-                      <CheckCircle2 className="size-4" />
-                      Cadastro salvo
+                  <div className="mb-3 space-y-3">
+                    <div className="rounded-2xl border border-[#8aa17c]/25 bg-[#1d2e22]/70 p-3 text-sm text-[#dbe6d4]">
+                      <div className="flex items-center gap-2 font-semibold">
+                        <CheckCircle2 className="size-4" />
+                        Cadastro salvo
+                      </div>
+                      <p className="mt-1 text-xs leading-5">
+                        {receipt.pointName} —{" "}
+                        {receipt.source === "database" ? "gravado no servidor" : "salvo localmente"}
+                      </p>
+                      {receipt.photoFileIds.length > 0 ? (
+                        <p className="mt-2 flex flex-wrap gap-2 text-xs">
+                          {receipt.photoFileIds.map((id, index) => (
+                            <a
+                              key={id}
+                              href={`/api/files/${id}`}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline hover:text-white"
+                            >
+                              {receipt.photoNames[index] ?? `arquivo-${index + 1}`}
+                            </a>
+                          ))}
+                        </p>
+                      ) : receipt.photoNames.length > 0 ? (
+                        <p className="mt-1 text-xs text-[#f0c9ad]">
+                          Anexos selecionados mas o envio falhou: {receipt.photoNames.join(", ")}
+                        </p>
+                      ) : null}
                     </div>
-                    <p className="mt-1 text-xs leading-5">
-                      {receipt.pointName} —{" "}
-                      {receipt.source === "database" ? "gravado no servidor" : "salvo localmente"}
-                    </p>
-                    {receipt.photoFileIds.length > 0 ? (
-                      <p className="mt-2 flex flex-wrap gap-2 text-xs">
-                        {receipt.photoFileIds.map((id, index) => (
-                          <a
-                            key={id}
-                            href={`/api/files/${id}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="underline hover:text-white"
-                          >
-                            {receipt.photoNames[index] ?? `arquivo-${index + 1}`}
-                          </a>
-                        ))}
-                      </p>
-                    ) : receipt.photoNames.length > 0 ? (
-                      <p className="mt-1 text-xs text-[#f0c9ad]">
-                        Anexos selecionados mas o envio falhou: {receipt.photoNames.join(", ")}
-                      </p>
+                    {!hideFinancials ? (
+                      <WhatsAppReceiptButton
+                        autoOpen
+                        defaultPhone={receipt.phone}
+                        message={[
+                          "*Comprovante Bilhar/Pebolim*",
+                          `Ponto: ${receipt.pointName}`,
+                          `Cliente: ${receipt.clientName}`,
+                          `Data: ${receipt.collectionDate}`,
+                          `Fichas: ${receipt.quantityOfChips}`,
+                          `*Bruto: ${formatCurrency(receipt.grossAmount)}*`,
+                          `Repasse cliente: ${formatCurrency(receipt.clientShare)}`,
+                          `*Resultado: ${formatCurrency(receipt.finalValue)}*`,
+                        ].join("\n")}
+                      />
                     ) : null}
                   </div>
                 ) : null}
@@ -1119,8 +1242,8 @@ export function BilliardForm({
                 <button
                   type="button"
                   onClick={() => {
-                    const index = steps.findIndex((step) => step.key === activeStep);
-                    setActiveStep(steps[Math.max(index - 1, 0)].key);
+                    const index = visibleSteps.findIndex((step) => step.key === activeStep);
+                    setActiveStep(visibleSteps[Math.max(index - 1, 0)].key);
                   }}
                   className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-[#c9c2b4]"
                 >
@@ -1139,8 +1262,8 @@ export function BilliardForm({
                   <button
                     type="button"
                     onClick={() => {
-                      const index = steps.findIndex((step) => step.key === activeStep);
-                      setActiveStep(steps[Math.min(index + 1, steps.length - 1)].key);
+                      const index = visibleSteps.findIndex((step) => step.key === activeStep);
+                      setActiveStep(visibleSteps[Math.min(index + 1, visibleSteps.length - 1)].key);
                     }}
                     className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#d1a04f] px-4 py-3 text-sm font-semibold text-[#0d0a05] shadow-[0_4px_14px_rgba(209,160,79,0.32)] transition hover:bg-[#daa855]"
                   >

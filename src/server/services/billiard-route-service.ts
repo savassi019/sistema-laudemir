@@ -158,6 +158,61 @@ export async function listBilliardPoints(
   });
 }
 
+export async function getBilliardPoint(
+  session: SessionData,
+  pointId: string,
+): Promise<BilliardPointItem | null> {
+  const point = await prisma.billiardPoint.findFirst({
+    where: { id: pointId, organizationId: session.organizationId },
+    include: {
+      collections: {
+        orderBy: { collectionDate: "desc" },
+        take: 1,
+      },
+    },
+  });
+
+  if (!point) return null;
+
+  const lastCollection = point.collections[0];
+  const roofOpenDebt = Number(point.roofOpenDebt ?? 0);
+
+  let status: BilliardPointItem["status"] = "Pendente";
+  if (point.accumulatedChips >= point.clothChangeAlertAt) {
+    status = "Trocar pano";
+  } else if (roofOpenDebt > 0) {
+    status = "Telhado aberto";
+  } else if (lastCollection) {
+    status = "Coletado";
+  }
+
+  return {
+    id: point.id,
+    registrationNumber: point.registrationNumber,
+    code: point.code,
+    name: point.name,
+    clientName: point.clientName,
+    phone: point.phone,
+    cpf: point.cpf,
+    cnpj: point.cnpj,
+    cep: point.cep,
+    street: point.street,
+    neighborhood: point.neighborhood,
+    city: point.city,
+    state: point.state,
+    tableModel: point.tableModel,
+    chipValue: Number(point.chipValue ?? 0),
+    routeNumber: point.routeNumber,
+    partialRoute: point.partialRoute,
+    accumulatedChips: point.accumulatedChips,
+    clothChangeAlertAt: point.clothChangeAlertAt,
+    roofOpenDebt,
+    status,
+    lastCollectionAt: lastCollection ? lastCollection.collectionDate.toISOString() : null,
+    lastResultAmount: null,
+  };
+}
+
 export type BilliardClientOverviewItem = {
   id: string;
   registrationNumber: number | null;

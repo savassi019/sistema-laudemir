@@ -98,6 +98,62 @@ export async function markReminderDone(
   // DB: no reminder table yet — ignore
 }
 
+export type PainelAlerts = {
+  overdueCount: number;
+  overdueTotal: number;
+  todayVisitCount: number;
+  unvisitedMachineCount: number;
+};
+
+export async function getPainelAlerts(session: SessionData): Promise<PainelAlerts> {
+  if (env.demoMode) {
+    return { overdueCount: 3, overdueTotal: 1250, todayVisitCount: 7, unvisitedMachineCount: 4 };
+  }
+
+  const { organizationId } = session;
+  const todayStart = new Date();
+  todayStart.setHours(0, 0, 0, 0);
+  const fifteenDaysAgo = new Date(Date.now() - 15 * 86_400_000);
+
+  try {
+    const [overdueAgg, todayVisitCount, recentTargets, billiardCount, plushCount, slotCount] =
+      await Promise.all([
+        prisma.financialEntry.aggregate({
+          where: { organizationId, status: "OVERDUE" },
+          _count: { id: true },
+          _sum: { remainingAmount: true },
+        }),
+        prisma.fieldVisit.count({
+          where: { organizationId, occurredAt: { gte: todayStart } },
+        }),
+        prisma.fieldVisit.findMany({
+          where: { organizationId, occurredAt: { gte: fifteenDaysAgo } },
+          select: { targetId: true },
+          distinct: ["targetId"],
+        }),
+        prisma.billiardPoint.count({ where: { organizationId } }),
+        prisma.plushMachine.count({ where: { organizationId, active: true } }),
+        prisma.slotMachine.count({ where: { organizationId, active: true } }),
+      ]);
+
+    const recentTargetIds = new Set(
+      recentTargets.map((r) => r.targetId).filter(Boolean),
+    );
+    const totalActiveMachines = billiardCount + plushCount + slotCount;
+    const unvisitedMachineCount = Math.max(0, totalActiveMachines - recentTargetIds.size);
+
+    return {
+      overdueCount: overdueAgg._count.id,
+      overdueTotal: Number(overdueAgg._sum.remainingAmount ?? 0),
+      todayVisitCount,
+      unvisitedMachineCount,
+    };
+  } catch (error) {
+    console.error("[dashboard-service] getPainelAlerts falhou:", error);
+    return { overdueCount: 0, overdueTotal: 0, todayVisitCount: 0, unvisitedMachineCount: 0 };
+  }
+}
+
 export async function getDashboardOverview(session: SessionData): Promise<DashboardOverview> {
   if (env.demoMode) {
     const completed = completedReminders.get(session.organizationId) ?? new Set<string>();

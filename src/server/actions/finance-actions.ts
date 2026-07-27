@@ -5,6 +5,7 @@ import { getModuleBySlug } from "@/lib/module-catalog";
 import {
   createFinancialEntry,
   createModuleFinancialEntry,
+  updateModuleFinancialEntryStatus,
 } from "@/server/services/finance-service";
 import type { FinanceEntryListItem } from "@/types/app";
 
@@ -27,4 +28,12 @@ export async function createModuleFinancialEntryAction(
   }
 
   return createModuleFinancialEntry(session, moduleItem.module, payload);
+}
+
+export async function updateModuleFinancialEntryStatusAction(
+  id: string,
+  status: "PENDING" | "PARTIAL" | "PAID",
+) {
+  const session = await requireSession();
+  return updateModuleFinancialEntryStatus(session, id, status);
 }

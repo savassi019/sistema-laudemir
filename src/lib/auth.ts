@@ -8,6 +8,12 @@ import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import type { ModuleName, SessionData } from "@/types/app";
 
+const ALL_MODULES: ModuleName[] = [
+  "CORE", "DASHBOARD", "CLIENTS", "FINANCE", "REPORTS", "SETTINGS",
+  "CARRETA_KIDS", "RENTAL", "PLUSH", "BILLIARD", "BRASIL_BETS",
+  "MACHINE", "CONDOMINIUM_MARKET", "MARKETING", "PERSONAL_FINANCE", "BX", "SLOT_H",
+];
+
 const AUTH_COOKIE = "sgm_session";
 const TOKEN_TTL = 60 * 60 * 12;
 
@@ -88,9 +94,12 @@ export async function authenticateUser(email: string, password: string) {
     return null;
   }
 
-  const modules = user.modulePermissions
-    .filter((permission) => permission.canView)
-    .map((permission) => permission.module as ModuleName);
+  const modules: ModuleName[] =
+    user.role === "OWNER"
+      ? ALL_MODULES
+      : user.modulePermissions
+          .filter((permission) => permission.canView)
+          .map((permission) => permission.module as ModuleName);
 
   await prisma.user.update({
     where: { id: user.id },

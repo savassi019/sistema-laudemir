@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function ModulesPage() {
   const session = await requireSession("DASHBOARD");
-  const items = getVisibleModulesFlat(session.modules);
+  const items = getVisibleModulesFlat(session.modules, session.role === "OWNER");
 
   return (
     <div className="space-y-3 md:space-y-6">

@@ -191,25 +191,37 @@ export default async function RelatorioPage(props: {
             {moduleRows.map((row) => (
               <div
                 key={row.slug}
-                className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(245,241,232,0.07)] bg-[#0b0f0e]/55 px-3 py-3"
+                className="rounded-xl border border-[rgba(245,241,232,0.07)] bg-[#0b0f0e]/55 px-3 py-3"
               >
-                <div className="min-w-0">
+                <div className="flex items-center justify-between gap-3">
                   <p className="truncate text-sm font-semibold text-white">{row.title}</p>
-                  <p className="text-xs text-[#9a958b]">
-                    {row.count} {row.count === 1 ? "registro" : "registros"}
+                  <p className={`shrink-0 text-sm font-semibold ${row.total < 0 ? "text-[#f0c9ad]" : "text-[#dbe6d4]"}`}>
+                    {formatCurrency(row.total)}
                   </p>
                 </div>
-                <p
-                  className={`shrink-0 text-sm font-semibold ${
-                    row.total < 0 ? "text-[#f0c9ad]" : "text-[#dbe6d4]"
-                  }`}
-                >
-                  {formatCurrency(row.total)}
-                </p>
+                <div className="mt-1.5 flex items-center gap-3">
+                  <p className="text-[11px] text-[#9a958b]">{row.count} {row.count === 1 ? "registro" : "registros"}</p>
+                  {row.income > 0 && (
+                    <p className="text-[11px] text-[#86efac]">↑ {formatCurrency(row.income)}</p>
+                  )}
+                  {row.expense > 0 && (
+                    <p className="text-[11px] text-[#f87171]">↓ {formatCurrency(row.expense)}</p>
+                  )}
+                </div>
               </div>
             ))}
             <div className="flex items-center justify-between gap-3 rounded-xl border border-[#d1a04f]/20 bg-[#1a1508]/60 px-3 py-3">
-              <p className="text-sm font-semibold text-[#f3dfae]">Total dos módulos</p>
+              <div>
+                <p className="text-sm font-semibold text-[#f3dfae]">Total dos módulos</p>
+                <div className="mt-0.5 flex gap-3">
+                  {moduleRows.reduce((s, r) => s + r.income, 0) > 0 && (
+                    <p className="text-[11px] text-[#86efac]">↑ {formatCurrency(moduleRows.reduce((s, r) => s + r.income, 0))}</p>
+                  )}
+                  {moduleRows.reduce((s, r) => s + r.expense, 0) > 0 && (
+                    <p className="text-[11px] text-[#f87171]">↓ {formatCurrency(moduleRows.reduce((s, r) => s + r.expense, 0))}</p>
+                  )}
+                </div>
+              </div>
               <p className="text-sm font-bold text-[#f3dfae]">{formatCurrency(moduleTotal)}</p>
             </div>
           </div>

@@ -3,6 +3,7 @@
 import { requireSession } from "@/lib/auth";
 import {
   createRoutePlan,
+  getBilliardPoint,
   listBilliardClientsOverview,
   listBilliardPointHistory,
   listBilliardPoints,
@@ -32,6 +33,11 @@ export async function listBilliardPointsAction(routeNumber?: number) {
 export async function listBilliardPointHistoryAction(pointId: string) {
   const session = await requireSession("BILLIARD");
   return listBilliardPointHistory(session, pointId);
+}
+
+export async function getBilliardPointAction(pointId: string) {
+  const session = await requireSession("BILLIARD");
+  return getBilliardPoint(session, pointId);
 }
 
 export async function listBilliardClientsOverviewAction() {

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowDownLeft, ArrowUpRight, Plus, TrendingDown, TrendingUp, Wallet, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, CalendarDays, List, Plus, TrendingDown, TrendingUp, Wallet, X } from "lucide-react";
 import { useMemo, useState, useTransition } from "react";
 
 import { cn } from "@/lib/cn";
@@ -8,6 +8,24 @@ import { formatCurrency, formatShortDate } from "@/lib/format";
 import { createModuleFinancialEntryAction } from "@/server/actions/finance-actions";
 import type { ModuleFinancialEntryItem } from "@/server/services/finance-service";
 import { fieldClass, labelClass, selectClass } from "./styles";
+
+function getWeekMonday(dateStr: string): Date {
+  const d = new Date(dateStr);
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  const monday = new Date(d);
+  monday.setDate(d.getDate() + diff);
+  monday.setHours(0, 0, 0, 0);
+  return monday;
+}
+
+function formatWeekLabel(monday: Date): string {
+  const saturday = new Date(monday);
+  saturday.setDate(monday.getDate() + 5);
+  const fmt = (d: Date) =>
+    `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return `Seg ${fmt(monday)} – Sáb ${fmt(saturday)}`;
+}
 
 const STATUS_LABEL: Record<string, string> = {
   PENDING: "Pendente",
@@ -29,6 +47,7 @@ const METHOD_LABEL: Record<string, string> = {
 };
 
 type FilterKey = "todos" | "entradas" | "despesas" | "pendentes";
+type ViewMode = "lista" | "semanas";
 
 export function ModuleFinanceSection({
   slug,
@@ -42,6 +61,7 @@ export function ModuleFinanceSection({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FilterKey>("todos");
+  const [viewMode, setViewMode] = useState<ViewMode>("lista");
 
   const totals = useMemo(() => {
     const income = entries.filter((e) => e.direction === "INCOME").reduce((s, e) => s + e.totalAmount, 0);
@@ -56,6 +76,22 @@ export function ModuleFinanceSection({
     if (filter === "pendentes") return entries.filter((e) => e.status === "PENDING");
     return entries;
   }, [entries, filter]);
+
+  const weeklyGroups = useMemo(() => {
+    const grouped = new Map<string, { monday: Date; income: number; expense: number; count: number }>();
+    for (const entry of entries) {
+      const monday = getWeekMonday(entry.createdAt);
+      const key = monday.toISOString();
+      if (!grouped.has(key)) {
+        grouped.set(key, { monday, income: 0, expense: 0, count: 0 });
+      }
+      const g = grouped.get(key)!;
+      if (entry.direction === "INCOME") g.income += entry.totalAmount;
+      else g.expense += entry.totalAmount;
+      g.count++;
+    }
+    return Array.from(grouped.values()).sort((a, b) => b.monday.getTime() - a.monday.getTime());
+  }, [entries]);
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -227,89 +263,152 @@ export function ModuleFinanceSection({
               {filtered.length}
             </span>
           </div>
-          {totals.pending > 0 ? (
-            <span className="rounded-full border border-[#c9a84c]/35 bg-[#c9a84c]/10 px-2 py-0.5 text-[11px] font-semibold text-[#f0d98a]">
-              {formatCurrency(totals.pending)} pendente
-            </span>
-          ) : null}
-        </div>
-
-        {/* Filtros */}
-        <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
-          {filterTabs.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setFilter(tab.key)}
-              className={cn(
-                "shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition",
-                filter === tab.key
-                  ? "border-[#d1a04f]/50 bg-[#d1a04f]/15 text-[#f3dfae]"
-                  : "border-[rgba(245,241,232,0.1)] bg-white/[0.025] text-[#9a958b] hover:text-[#c9c2b4]",
-              )}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        {filtered.length === 0 ? (
-          <div className="mt-4 rounded-xl border border-dashed border-[rgba(245,241,232,0.1)] py-8 text-center">
-            <p className="text-sm text-[#5a544c]">Nenhum lançamento encontrado.</p>
+          <div className="flex items-center gap-2">
+            {totals.pending > 0 ? (
+              <span className="rounded-full border border-[#c9a84c]/35 bg-[#c9a84c]/10 px-2 py-0.5 text-[11px] font-semibold text-[#f0d98a]">
+                {formatCurrency(totals.pending)} pendente
+              </span>
+            ) : null}
+            {/* Toggle Lista / Semanas */}
+            <div className="flex rounded-xl border border-[rgba(245,241,232,0.1)] overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setViewMode("lista")}
+                title="Ver como lista"
+                className={cn(
+                  "flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold transition",
+                  viewMode === "lista"
+                    ? "bg-[#d1a04f]/20 text-[#f3dfae]"
+                    : "bg-transparent text-[#9a958b] hover:text-[#c9c2b4]",
+                )}
+              >
+                <List className="size-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("semanas")}
+                title="Ver por semana"
+                className={cn(
+                  "flex items-center gap-1 px-2.5 py-1.5 text-[11px] font-semibold transition border-l border-[rgba(245,241,232,0.1)]",
+                  viewMode === "semanas"
+                    ? "bg-[#d1a04f]/20 text-[#f3dfae]"
+                    : "bg-transparent text-[#9a958b] hover:text-[#c9c2b4]",
+                )}
+              >
+                <CalendarDays className="size-3.5" />
+              </button>
+            </div>
           </div>
-        ) : (
-          <div className="mt-3 space-y-2">
-            {filtered.map((entry) => {
-              const isIncome = entry.direction === "INCOME";
-              return (
-                <div
-                  key={entry.id}
+        </div>
+
+        {viewMode === "lista" ? (
+          <>
+            {/* Filtros */}
+            <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
+              {filterTabs.map((tab) => (
+                <button
+                  key={tab.key}
+                  type="button"
+                  onClick={() => setFilter(tab.key)}
                   className={cn(
-                    "flex items-center gap-3 overflow-hidden rounded-xl border py-3 pl-3 pr-4",
-                    isIncome
-                      ? "border-[#6b9d6f]/20 bg-[#0e1c10]/50"
-                      : "border-[#b46c5d]/20 bg-[#1a0d0d]/50",
+                    "shrink-0 rounded-full border px-3 py-1.5 text-[11px] font-semibold transition",
+                    filter === tab.key
+                      ? "border-[#d1a04f]/50 bg-[#d1a04f]/15 text-[#f3dfae]"
+                      : "border-[rgba(245,241,232,0.1)] bg-white/[0.025] text-[#9a958b] hover:text-[#c9c2b4]",
                   )}
                 >
-                  {/* Ícone */}
-                  <div className={cn(
-                    "flex size-8 shrink-0 items-center justify-center rounded-lg",
-                    isIncome ? "bg-[#6b9d6f]/15" : "bg-[#b46c5d]/15",
-                  )}>
-                    {isIncome
-                      ? <ArrowDownLeft className="size-4 text-[#8cc490]" />
-                      : <ArrowUpRight className="size-4 text-[#d4806f]" />
-                    }
-                  </div>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
 
-                  {/* Descrição + meta */}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-white">{entry.description}</p>
-                    <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-[#9a958b]">
-                      <span>{formatShortDate(entry.createdAt)}</span>
-                      {entry.paymentMethod ? (
-                        <>
-                          <span>·</span>
-                          <span>{METHOD_LABEL[entry.paymentMethod] ?? entry.paymentMethod}</span>
-                        </>
-                      ) : null}
+            {filtered.length === 0 ? (
+              <div className="mt-4 rounded-xl border border-dashed border-[rgba(245,241,232,0.1)] py-8 text-center">
+                <p className="text-sm text-[#5a544c]">Nenhum lançamento encontrado.</p>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {filtered.map((entry) => {
+                  const isIncome = entry.direction === "INCOME";
+                  return (
+                    <div
+                      key={entry.id}
+                      className={cn(
+                        "flex items-center gap-3 overflow-hidden rounded-xl border py-3 pl-3 pr-4",
+                        isIncome
+                          ? "border-[#6b9d6f]/20 bg-[#0e1c10]/50"
+                          : "border-[#b46c5d]/20 bg-[#1a0d0d]/50",
+                      )}
+                    >
+                      <div className={cn(
+                        "flex size-8 shrink-0 items-center justify-center rounded-lg",
+                        isIncome ? "bg-[#6b9d6f]/15" : "bg-[#b46c5d]/15",
+                      )}>
+                        {isIncome
+                          ? <ArrowDownLeft className="size-4 text-[#8cc490]" />
+                          : <ArrowUpRight className="size-4 text-[#d4806f]" />
+                        }
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-medium text-white">{entry.description}</p>
+                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-[#9a958b]">
+                          <span>{formatShortDate(entry.createdAt)}</span>
+                          {entry.paymentMethod ? (
+                            <><span>·</span><span>{METHOD_LABEL[entry.paymentMethod] ?? entry.paymentMethod}</span></>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 flex-col items-end gap-1.5">
+                        <span className={cn("text-sm font-bold", isIncome ? "text-[#bfe3c2]" : "text-[#f0a08f]")}>
+                          {isIncome ? "+" : "-"}{formatCurrency(entry.totalAmount)}
+                        </span>
+                        <span className={cn(
+                          "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
+                          STATUS_COLOR[entry.status] ?? "border-white/10 bg-white/5 text-slate-400",
+                        )}>
+                          {STATUS_LABEL[entry.status] ?? entry.status}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* Valor + status */}
-                  <div className="flex shrink-0 flex-col items-end gap-1.5">
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          /* VIEW SEMANAL */
+          <div className="mt-3 space-y-2">
+            {weeklyGroups.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[rgba(245,241,232,0.1)] py-8 text-center">
+                <p className="text-sm text-[#5a544c]">Nenhum lançamento encontrado.</p>
+              </div>
+            ) : weeklyGroups.map((week) => {
+              const net = week.income - week.expense;
+              return (
+                <div
+                  key={week.monday.toISOString()}
+                  className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#0b0f0e]/50 p-3"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <CalendarDays className="size-3.5 shrink-0 text-[#9a958b]" />
+                      <p className="text-[11px] font-semibold text-[#c9c2b4]">
+                        {formatWeekLabel(week.monday)}
+                      </p>
+                      <span className="rounded-full border border-white/10 bg-white/[0.03] px-1.5 py-0.5 text-[10px] text-[#9a958b]">
+                        {week.count}
+                      </span>
+                    </div>
                     <span className={cn(
                       "text-sm font-bold",
-                      isIncome ? "text-[#bfe3c2]" : "text-[#f0a08f]",
+                      net >= 0 ? "text-[#bfe3c2]" : "text-[#f0a08f]",
                     )}>
-                      {isIncome ? "+" : "-"}{formatCurrency(entry.totalAmount)}
+                      {net >= 0 ? "+" : ""}{formatCurrency(net)}
                     </span>
-                    <span className={cn(
-                      "rounded-full border px-2 py-0.5 text-[10px] font-semibold",
-                      STATUS_COLOR[entry.status] ?? "border-white/10 bg-white/5 text-slate-400",
-                    )}>
-                      {STATUS_LABEL[entry.status] ?? entry.status}
-                    </span>
+                  </div>
+                  <div className="mt-2 flex gap-4 text-xs text-[#9a958b]">
+                    <span className="text-[#8cc490]">↓ {formatCurrency(week.income)}</span>
+                    <span className="text-[#d4806f]">↑ {formatCurrency(week.expense)}</span>
                   </div>
                 </div>
               );

@@ -9,7 +9,9 @@ import { z } from "zod";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { maskCpf, maskPhone, withMask } from "@/lib/masks";
 import { isValidCpf } from "@/lib/validators";
+import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { getContactPhonesAction } from "@/server/actions/settings-actions";
+import { PhotoCaptureInput } from "./photo-capture-input";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -121,26 +123,28 @@ async function uploadFile(file: File, category: string) {
   return result.id;
 }
 
-export function PlushForm({ hideFinancials = false }: { hideFinancials?: boolean } = {}) {
+type LoadedMachine = { clientName: string; phone: string; code: string; name: string; machineNumber: string; coinPhotoRule: boolean; giftPhotoRule: boolean };
+
+export function PlushForm({ hideFinancials = false, initialClientName = "", initialPhone = "", initialClientId }: { hideFinancials?: boolean; initialClientName?: string; initialPhone?: string; initialClientId?: string } = {}) {
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [contactPhones, setContactPhones] = useState({ ownerPhone: "", staffPhone: "" });
   const compensationManuallySet = useRef(false);
+  const [loadedMachine, setLoadedMachine] = useState<LoadedMachine | null>(null);
+  const [machineLoading, setMachineLoading] = useState(Boolean(initialClientId));
 
   useEffect(() => {
-    getContactPhonesAction()
-      .then(setContactPhones)
-      .catch(() => {});
+    getContactPhonesAction().then(setContactPhones).catch(() => {});
   }, []);
 
   const form = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
     defaultValues: {
-      clientName: "",
+      clientName: initialClientName,
       cpf: "",
-      phone: "",
+      phone: initialPhone,
       coinPhotoRule: true,
       giftPhotoRule: true,
       active: true,
@@ -152,6 +156,29 @@ export function PlushForm({ hideFinancials = false }: { hideFinancials?: boolean
       plushCountOut: 0,
     },
   });
+
+  useEffect(() => {
+    if (!initialClientId) return;
+    getClientPrefillDataAction("maquinas-de-pelucia", initialClientId)
+      .then((data) => {
+        if (!data || data.kind !== "plush-machine") return;
+        setLoadedMachine({ clientName: data.clientName, phone: data.phone, code: data.code, name: data.name, machineNumber: data.machineNumber, coinPhotoRule: data.coinPhotoRule, giftPhotoRule: data.giftPhotoRule });
+        form.setValue("clientName", data.clientName);
+        form.setValue("phone", data.phone);
+        form.setValue("cpf", data.cpf);
+        form.setValue("code", data.code);
+        form.setValue("name", data.name);
+        form.setValue("machineNumber", data.machineNumber);
+        form.setValue("noteNumber", data.noteNumber);
+        form.setValue("noteiroFixed", data.noteiroFixed);
+        form.setValue("coinPhotoRule", data.coinPhotoRule);
+        form.setValue("giftPhotoRule", data.giftPhotoRule);
+        form.setValue("active", data.active);
+      })
+      .catch(() => setSaveError("Erro ao carregar dados da máquina."))
+      .finally(() => setMachineLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialClientId]);
 
   const grossAmount = Number(useWatch({ control: form.control, name: "grossAmount" }) ?? 0);
   const commissionPercentage =
@@ -287,85 +314,100 @@ export function PlushForm({ hideFinancials = false }: { hideFinancials?: boolean
       )}
 
       <form onSubmit={onSubmit} className="space-y-4">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
-          Cadastro de cliente
-        </p>
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="clientName">
-              Nome
-            </label>
-            <input id="clientName" className={fieldClass} {...form.register("clientName")} />
-            {form.formState.errors.clientName ? (
-              <p className="text-sm text-[#d59a8b]">{form.formState.errors.clientName.message}</p>
-            ) : null}
+        {machineLoading ? (
+          <p className="text-sm text-slate-400">Carregando dados da máquina...</p>
+        ) : loadedMachine ? (
+          <div className="rounded-[18px] border border-[#8aa17c]/30 bg-[#243528]/60 p-4 text-sm text-[#dbe6d4] space-y-0.5">
+            <p className="font-semibold text-white">{loadedMachine.clientName}</p>
+            <p className="text-[#9a958b]">{loadedMachine.phone}</p>
+            <p className="mt-1 text-xs text-[#9a958b]">{loadedMachine.code} · {loadedMachine.name} · Máq. {loadedMachine.machineNumber}</p>
           </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="phone">
-              Telefone
-            </label>
-            <input
-              id="phone"
-              inputMode="tel"
-              maxLength={15}
-              className={fieldClass}
-              {...withMask(form.register("phone"), maskPhone)}
-            />
-            {form.formState.errors.phone ? (
-              <p className="text-sm text-[#d59a8b]">{form.formState.errors.phone.message}</p>
-            ) : null}
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="cpf">
-              CPF
-            </label>
-            <input
-              id="cpf"
-              inputMode="numeric"
-              maxLength={14}
-              className={fieldClass}
-              {...withMask(form.register("cpf"), maskCpf)}
-            />
-            {form.formState.errors.cpf ? (
-              <p className="text-sm text-[#d59a8b]">{form.formState.errors.cpf.message}</p>
-            ) : null}
-          </div>
-        </div>
+        ) : (
+          <>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
+              Cadastro de cliente
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="clientName">
+                  Nome
+                </label>
+                <input id="clientName" className={fieldClass} {...form.register("clientName")} />
+                {form.formState.errors.clientName ? (
+                  <p className="text-sm text-[#d59a8b]">{form.formState.errors.clientName.message}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="phone">
+                  Telefone
+                </label>
+                <input
+                  id="phone"
+                  inputMode="tel"
+                  maxLength={15}
+                  className={fieldClass}
+                  {...withMask(form.register("phone"), maskPhone)}
+                />
+                {form.formState.errors.phone ? (
+                  <p className="text-sm text-[#d59a8b]">{form.formState.errors.phone.message}</p>
+                ) : null}
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="cpf">
+                  CPF
+                </label>
+                <input
+                  id="cpf"
+                  inputMode="numeric"
+                  maxLength={14}
+                  className={fieldClass}
+                  {...withMask(form.register("cpf"), maskCpf)}
+                />
+                {form.formState.errors.cpf ? (
+                  <p className="text-sm text-[#d59a8b]">{form.formState.errors.cpf.message}</p>
+                ) : null}
+              </div>
+            </div>
 
-        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
-          Máquina
-        </p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
+              Máquina
+            </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="code">
+                  Código
+                </label>
+                <input id="code" className={fieldClass} {...form.register("code")} />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="name">
+                  Nome da máquina
+                </label>
+                <input id="name" className={fieldClass} {...form.register("name")} />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="machineNumber">
+                  Número da máquina
+                </label>
+                <input id="machineNumber" className={fieldClass} {...form.register("machineNumber")} />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="noteNumber">
+                  Número do noteiro
+                </label>
+                <input id="noteNumber" className={fieldClass} {...form.register("noteNumber")} />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="noteiroFixed">
+                  Noteiro fixo
+                </label>
+                <input id="noteiroFixed" className={fieldClass} {...form.register("noteiroFixed")} />
+              </div>
+            </div>
+          </>
+        )}
+
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="code">
-              Código
-            </label>
-            <input id="code" className={fieldClass} {...form.register("code")} />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="name">
-              Nome da máquina
-            </label>
-            <input id="name" className={fieldClass} {...form.register("name")} />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="machineNumber">
-              Número da máquina
-            </label>
-            <input id="machineNumber" className={fieldClass} {...form.register("machineNumber")} />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="noteNumber">
-              Número do noteiro
-            </label>
-            <input id="noteNumber" className={fieldClass} {...form.register("noteNumber")} />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="noteiroFixed">
-              Noteiro fixo
-            </label>
-            <input id="noteiroFixed" className={fieldClass} {...form.register("noteiroFixed")} />
-          </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="collectionDate">
               Data da coleta
@@ -523,22 +565,26 @@ export function PlushForm({ hideFinancials = false }: { hideFinancials?: boolean
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="coinPhoto">
-              Foto de moedas
-            </label>
-            <input id="coinPhoto" type="file" accept="image/*" capture="environment" className={fieldClass} {...form.register("coinPhoto")} />
+          <div className="space-y-1">
+            <PhotoCaptureInput
+              registration={form.register("coinPhoto")}
+              label="Foto de moedas"
+              required={!!form.watch("coinPhotoRule")}
+              hint="Foto do depósito de moedas"
+            />
             {form.formState.errors.coinPhoto ? (
               <p className="text-sm text-[#d59a8b]">
                 {form.formState.errors.coinPhoto.message?.toString()}
               </p>
             ) : null}
           </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="giftPhoto">
-              Foto de brindes
-            </label>
-            <input id="giftPhoto" type="file" accept="image/*" capture="environment" className={fieldClass} {...form.register("giftPhoto")} />
+          <div className="space-y-1">
+            <PhotoCaptureInput
+              registration={form.register("giftPhoto")}
+              label="Foto de brindes"
+              required={!!form.watch("giftPhotoRule")}
+              hint="Foto do estoque de brindes"
+            />
             {form.formState.errors.giftPhoto ? (
               <p className="text-sm text-[#d59a8b]">
                 {form.formState.errors.giftPhoto.message?.toString()}
@@ -615,6 +661,7 @@ export function PlushForm({ hideFinancials = false }: { hideFinancials?: boolean
             return (
               <div className="mt-3 space-y-3">
                 <WhatsAppReceiptButton
+                  autoOpen
                   defaultPhone={receipt.phone}
                   message={message}
                   title="1ª via — Enviar pro cliente"
