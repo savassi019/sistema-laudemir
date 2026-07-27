@@ -32,13 +32,16 @@ export default async function LoginPage() {
               <div className="login-icon-pulse login-icon-scan relative flex size-12 items-center justify-center rounded-2xl border border-[#d1a04f]/25 bg-[#d1a04f]/[0.11] text-[#d1a04f] shadow-[0_0_0_6px_rgba(209,160,79,0.06),0_0_20px_rgba(209,160,79,0.08)]">
                 <ShieldCheck className="size-5" />
               </div>
-              <div className="space-y-1">
-                <p className="text-[10px] uppercase tracking-[0.32em] text-white/35">
+              <div className="space-y-0.5">
+                <p className="text-[9px] uppercase tracking-[0.36em] text-white/30">
                   Sistema Laudemir
                 </p>
                 <h1 className="text-xl font-semibold tracking-tight text-white/95">
                   Entrar no painel
                 </h1>
+                <p className="text-[11px] text-white/30">
+                  Gestão operacional de campo
+                </p>
               </div>
             </div>
 
@@ -49,7 +52,11 @@ export default async function LoginPage() {
           </div>
 
           {/* Divider */}
-          <div className="login-form-step mb-6 h-px bg-gradient-to-r from-transparent via-white/[0.07] to-transparent" style={{ animationDelay: "420ms" }} />
+          <div className="login-form-step mb-6 flex items-center gap-3" style={{ animationDelay: "420ms" }}>
+            <div className="h-px flex-1 bg-gradient-to-r from-transparent to-white/[0.07]" />
+            <span className="text-[9px] uppercase tracking-[0.3em] text-white/15">Identificação</span>
+            <div className="h-px flex-1 bg-gradient-to-l from-transparent to-white/[0.07]" />
+          </div>
 
           <LoginForm />
         </div>

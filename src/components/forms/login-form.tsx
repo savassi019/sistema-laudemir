@@ -28,10 +28,7 @@ export function LoginForm() {
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "", password: "" },
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
@@ -59,28 +56,30 @@ export function LoginForm() {
     }
   });
 
+  const fieldWrap = (hasError: boolean) =>
+    [
+      "flex items-center gap-3 rounded-xl border px-4 py-3.5 transition-all duration-150",
+      "bg-[#080c0b]",
+      hasError
+        ? "border-[#b46c5d]/40 shadow-[0_0_0_3px_rgba(180,108,93,0.07)]"
+        : "border-white/[0.08] focus-within:border-[#d1a04f]/40 focus-within:shadow-[0_0_0_3px_rgba(209,160,79,0.08)]",
+    ].join(" ");
+
   return (
     <form onSubmit={onSubmit} className="space-y-5">
 
-      {/* Email */}
+      {/* E-mail */}
       <div className="login-form-step space-y-2" style={{ animationDelay: "500ms" }}>
         <label className="text-[11px] font-medium uppercase tracking-[0.2em] text-white/35" htmlFor="email">
           E-mail
         </label>
-        <div
-          className={[
-            "flex items-center gap-3 rounded-xl border bg-white/[0.025] px-4 py-3.5 transition-all duration-150",
-            form.formState.errors.email
-              ? "border-[#b46c5d]/40 shadow-[0_0_0_3px_rgba(180,108,93,0.07)]"
-              : "border-white/[0.08] focus-within:border-[#d1a04f]/35 focus-within:bg-[#0b0f0e] focus-within:shadow-[0_0_0_3px_rgba(209,160,79,0.07)]",
-          ].join(" ")}
-        >
-          <Mail className="size-4 shrink-0 text-white/25" />
+        <div className={fieldWrap(!!form.formState.errors.email)}>
+          <Mail className="size-4 shrink-0 text-white/20" />
           <input
             id="email"
             type="email"
             autoComplete="email"
-            className="w-full bg-transparent text-base md:text-sm text-white/90 outline-none placeholder:text-white/20"
+            className="login-input w-full bg-transparent text-base text-white/90 outline-none placeholder:text-white/18 md:text-sm"
             placeholder="voce@empresa.com"
             {...form.register("email")}
           />
@@ -90,32 +89,25 @@ export function LoginForm() {
         ) : null}
       </div>
 
-      {/* Password */}
+      {/* Senha */}
       <div className="login-form-step space-y-2" style={{ animationDelay: "600ms" }}>
         <label className="text-[11px] font-medium uppercase tracking-[0.2em] text-white/35" htmlFor="password">
           Senha
         </label>
-        <div
-          className={[
-            "flex items-center gap-3 rounded-xl border bg-white/[0.025] px-4 py-3.5 transition-all duration-150",
-            form.formState.errors.password
-              ? "border-[#b46c5d]/40 shadow-[0_0_0_3px_rgba(180,108,93,0.07)]"
-              : "border-white/[0.08] focus-within:border-[#d1a04f]/35 focus-within:bg-[#0b0f0e] focus-within:shadow-[0_0_0_3px_rgba(209,160,79,0.07)]",
-          ].join(" ")}
-        >
-          <LockKeyhole className="size-4 shrink-0 text-white/25" />
+        <div className={fieldWrap(!!form.formState.errors.password)}>
+          <LockKeyhole className="size-4 shrink-0 text-white/20" />
           <input
             id="password"
             type={showPassword ? "text" : "password"}
             autoComplete="current-password"
-            className="w-full bg-transparent text-base md:text-sm text-white/90 outline-none placeholder:text-white/20"
+            className="login-input w-full bg-transparent text-base text-white/90 outline-none placeholder:text-white/18 md:text-sm"
             placeholder="••••••••"
             {...form.register("password")}
           />
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="text-white/25 transition hover:text-white/55"
+            className="text-white/20 transition hover:text-white/50"
             aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"}
           >
             {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
@@ -126,14 +118,14 @@ export function LoginForm() {
         )}
       </div>
 
-      {/* Server error */}
+      {/* Erro do servidor */}
       {serverError && (
         <div className="login-form-step rounded-xl border border-[#b46c5d]/20 bg-[#b46c5d]/[0.08] px-4 py-3 text-[13px] text-[#f0c3b9]">
           {serverError}
         </div>
       )}
 
-      {/* Submit */}
+      {/* Botão */}
       <div className="login-form-step pt-1" style={{ animationDelay: "820ms" }}>
         <button
           type="submit"
@@ -141,15 +133,20 @@ export function LoginForm() {
           className="login-primary-button group relative w-full overflow-hidden rounded-xl bg-[#d1a04f] px-4 py-3.5 text-[13px] font-semibold text-[#0d0a05] shadow-[0_8px_28px_rgba(209,160,79,0.38)] transition-all duration-150 hover:bg-[#daa855] hover:shadow-[0_12px_36px_rgba(209,160,79,0.48)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="relative z-10 inline-flex items-center justify-center gap-2">
-            {loading
-              ? <LoaderCircle className="size-4 animate-spin" />
-              : null}
+            {loading ? <LoaderCircle className="size-4 animate-spin" /> : null}
             Entrar no painel
-            {!loading
-              ? <ArrowRight className="size-4 transition-transform duration-150 group-hover:translate-x-0.5" />
-              : null}
+            {!loading ? <ArrowRight className="size-4 transition-transform duration-150 group-hover:translate-x-0.5" /> : null}
           </span>
         </button>
+      </div>
+
+      {/* Rodapé */}
+      <div className="login-form-step pt-2" style={{ animationDelay: "950ms" }}>
+        <div className="flex items-center justify-center gap-3">
+          <div className="h-px flex-1 bg-white/[0.05]" />
+          <p className="text-[10px] text-white/18 tracking-widest uppercase">Acesso restrito</p>
+          <div className="h-px flex-1 bg-white/[0.05]" />
+        </div>
       </div>
 
     </form>

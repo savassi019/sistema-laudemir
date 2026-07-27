@@ -241,6 +241,18 @@ button {
   pointer-events: none;
 }
 
+/* ── Autofill override (mantém fundo escuro quando browser preenche) ── */
+
+.login-input:-webkit-autofill,
+.login-input:-webkit-autofill:hover,
+.login-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: rgba(255, 255, 255, 0.9);
+  -webkit-box-shadow: 0 0 0 1000px #0b0f0e inset;
+  box-shadow: 0 0 0 1000px #0b0f0e inset;
+  caret-color: rgba(255, 255, 255, 0.9);
+  transition: background-color 9999s ease 0s;
+}
+
 /* ── Reduced motion ─────────────────────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
