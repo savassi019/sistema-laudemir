@@ -161,7 +161,7 @@ export default async function DashboardPage() {
             </span>
           </div>
           <div className="divide-y divide-[rgba(255,255,255,0.04)]">
-            {overdueContent.map((cnt) => (
+            {(overdueContent as ContentWithContract[]).map((cnt) => (
               <Link
                 key={cnt.id}
                 href="/modulos/marketing"
@@ -202,7 +202,7 @@ export default async function DashboardPage() {
             </span>
           </div>
           <div className="divide-y divide-[rgba(255,255,255,0.04)]">
-            {soonContent.map((cnt) => (
+            {(soonContent as ContentWithContract[]).map((cnt) => (
               <Link
                 key={cnt.id}
                 href="/modulos/marketing"
