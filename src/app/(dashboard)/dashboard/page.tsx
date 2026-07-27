@@ -43,6 +43,8 @@ export default async function DashboardPage() {
     getTodayVisitCount(session),
   ]);
 
+  type ContentWithContract = { id: string; title: string; contentDate: Date; contract: { name: string } };
+  const emptyContent: ContentWithContract[] = [];
   const [unvisitedClients, overdueContent, soonContent] = await Promise.all([
     !isField ? getUnvisitedClients(session, clients, 15) : Promise.resolve([]),
     !isField ? prisma.marketingContent.findMany({
@@ -50,7 +52,7 @@ export default async function DashboardPage() {
       include: { contract: { select: { name: true } } },
       orderBy: { contentDate: "asc" },
       take: 8,
-    }).catch(() => [] as Awaited<ReturnType<typeof prisma.marketingContent.findMany<{ include: { contract: { select: { name: true } } } }>>>) : Promise.resolve([] as Awaited<ReturnType<typeof prisma.marketingContent.findMany<{ include: { contract: { select: { name: true } } } }>>>),
+    }).catch(() => emptyContent) : Promise.resolve(emptyContent),
     !isField ? prisma.marketingContent.findMany({
       where: {
         organizationId: orgId,
@@ -60,7 +62,7 @@ export default async function DashboardPage() {
       include: { contract: { select: { name: true } } },
       orderBy: { contentDate: "asc" },
       take: 8,
-    }).catch(() => [] as Awaited<ReturnType<typeof prisma.marketingContent.findMany<{ include: { contract: { select: { name: true } } } }>>>) : Promise.resolve([] as Awaited<ReturnType<typeof prisma.marketingContent.findMany<{ include: { contract: { select: { name: true } } } }>>>),
+    }).catch(() => emptyContent) : Promise.resolve(emptyContent),
   ]);
 
   const openReminders   = overview.reminders.filter((r) => r.status === "aberto");
