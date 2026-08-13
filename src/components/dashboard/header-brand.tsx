@@ -28,9 +28,9 @@ export function HeaderBrand() {
   return (
     <div className="leading-tight">
       <p className="hidden text-[11px] uppercase tracking-[0.28em] text-[#d1a04f]/75 sm:block">
-        Sistema Laudemir
+        Infinity ERP
       </p>
-      <p className="text-sm font-semibold text-white">Sistema Laudemir</p>
+      <p className="text-sm font-semibold text-white">Infinity ERP</p>
     </div>
   );
 }

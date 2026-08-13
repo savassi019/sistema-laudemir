@@ -107,7 +107,7 @@ export function LeftSidebar({
           </div>
           {!isCollapsed && (
             <span className="truncate whitespace-nowrap text-sm font-semibold text-white">
-              Sistema LM
+              Infinity ERP
             </span>
           )}
         </Link>

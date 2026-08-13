@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { fetchAddressByCep } from "@/lib/cep";
 import { formatCurrency } from "@/lib/format";
+import { useFormDraft } from "@/hooks/use-form-draft";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import { isValidCpf } from "@/lib/validators";
@@ -146,6 +147,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
       paymentMethod: "PIX",
     },
   });
+  const { clearDraft } = useFormDraft(`bx:${initialClientId ?? "new"}`, form);
 
   useEffect(() => {
     if (!initialClientId) return;
@@ -261,6 +263,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }
 
+    clearDraft();
     setReceipt({
       clientName: values.clientName,
       phone: values.phone,

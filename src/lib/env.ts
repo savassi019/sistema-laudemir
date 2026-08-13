@@ -5,7 +5,7 @@ if (isProduction && !process.env.JWT_SECRET) {
 }
 
 export const env = {
-  appName: process.env.NEXT_PUBLIC_APP_NAME ?? "Sistema Laudemir",
+  appName: process.env.NEXT_PUBLIC_APP_NAME ?? "Infinity ERP",
   demoMode: process.env.DEMO_MODE === "true",
-  jwtSecret: process.env.JWT_SECRET ?? "dev-secret-sistema-laudemir",
+  jwtSecret: process.env.JWT_SECRET ?? "dev-secret-infinity-erp",
 };

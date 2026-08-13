@@ -115,6 +115,12 @@ export async function addMarketingContentAction(
 ): Promise<MarketingContentDetail> {
   const session = await requireSession();
 
+  const contract = await prisma.marketingContract.findFirst({
+    where: { id: contractId, organizationId: session.organizationId },
+    select: { id: true },
+  });
+  if (!contract) throw new Error("Contrato não encontrado.");
+
   const content = await prisma.marketingContent.create({
     data: {
       organizationId: session.organizationId,

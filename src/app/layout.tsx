@@ -1,12 +1,13 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 
+import { ConnectionBanner } from "@/components/connection-banner";
 import { ServiceWorkerRegistration } from "@/components/pwa/service-worker-registration";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  applicationName: "Sistema Laudemir",
-  title: "Sistema Laudemir",
+  applicationName: "Infinity ERP",
+  title: "Infinity ERP",
   description:
     "Sistema modular para operacao, clientes, financeiro e rotinas de campo.",
   manifest: "/manifest.webmanifest",
@@ -16,7 +17,7 @@ export const metadata: Metadata = {
   },
   appleWebApp: {
     capable: true,
-    title: "Sistema Laudemir",
+    title: "Infinity ERP",
     statusBarStyle: "black-translucent",
   },
   formatDetection: {
@@ -38,6 +39,7 @@ export default function RootLayout({
     <html lang="pt-BR" className="h-full antialiased" data-scroll-behavior="smooth">
       <body className="min-h-full flex flex-col bg-[#0b0f0e] text-[#f5f1e8]">
         <ServiceWorkerRegistration />
+        <ConnectionBanner />
         {children}
       </body>
     </html>

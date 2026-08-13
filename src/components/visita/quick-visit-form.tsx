@@ -60,6 +60,7 @@ type VisitReceipt = {
   photo1Name?: string;
   photo2Name?: string;
   notes?: string;
+  assignedToName?: string;
   billiard?: {
     quantityOfChips: number;
     chipValue: number;
@@ -108,11 +109,13 @@ type VisitReceipt = {
 
 export function QuickVisitForm({
   clients,
+  orgUsers = [],
   initialClientId,
   initialVisitType,
   useModuleTarget = false,
 }: {
   clients: ClientListItem[];
+  orgUsers?: { id: string; name: string }[];
   initialClientId?: string;
   initialVisitType?: string;
   useModuleTarget?: boolean;
@@ -121,10 +124,15 @@ export function QuickVisitForm({
   const [selectedClient, setSelectedClient] = useState<ClientListItem | null>(null);
   const [showList, setShowList] = useState(false);
   const [visitType, setVisitType] = useState(initialVisitType ?? "GENERAL");
+  const [assignedToName, setAssignedToName] = useState("");
   const [photo1Label, setPhoto1Label] = useState<string | null>(null);
   const [photo2Label, setPhoto2Label] = useState<string | null>(null);
   const [receipt, setReceipt] = useState<VisitReceipt | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [latitude, setLatitude] = useState<number | null>(null);
+  const [longitude, setLongitude] = useState<number | null>(null);
+  const [pendingCount, setPendingCount] = useState(0);
+  const [syncing, setSyncing] = useState(false);
   const initialized = useRef(false);
   const submittingRef = useRef(false);
 
@@ -235,6 +243,21 @@ export function QuickVisitForm({
   }, [rentalTotalAmount, rentalSignalEnabled, rentalSignalPercentage, rentalExpenseAmount, rentalDiscountAmount]);
 
   useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => { setLatitude(pos.coords.latitude); setLongitude(pos.coords.longitude); },
+        () => {},
+        { timeout: 8000, maximumAge: 60000 },
+      );
+    }
+    try {
+      const raw = localStorage.getItem("pending-visits");
+      const queue: unknown[] = raw ? (JSON.parse(raw) as unknown[]) : [];
+      setPendingCount(queue.length);
+    } catch { /* ignore */ }
+  }, []);
+
+  useEffect(() => {
     if (initialized.current || !initialClientId) return;
     initialized.current = true;
     const client = clients.find((c) => c.id === initialClientId);
@@ -323,6 +346,7 @@ export function QuickVisitForm({
       photo1Name: photo1 && photo1.size > 0 ? photo1.name : undefined,
       photo2Name: photo2 && photo2.size > 0 ? photo2.name : undefined,
       notes: String(fd.get("notes") ?? "").trim() || undefined,
+      assignedToName: assignedToName || undefined,
       billiard: isBilliardModule
         ? {
             quantityOfChips,
@@ -445,7 +469,7 @@ export function QuickVisitForm({
           });
         }
 
-        await saveVisitAction({
+        const visitPayload = {
           clientId: useModuleTarget ? undefined : selectedClient?.id,
           targetId: useModuleTarget ? selectedClient?.id : undefined,
           clientName: receiptData.clientName,
@@ -456,7 +480,21 @@ export function QuickVisitForm({
           incomeAmount: receiptData.incomeAmount,
           expenseAmount: receiptData.expenseAmount,
           notes: receiptData.notes,
-        });
+          assignedToName: receiptData.assignedToName,
+          latitude: latitude ?? undefined,
+          longitude: longitude ?? undefined,
+        };
+        try {
+          await saveVisitAction(visitPayload);
+        } catch {
+          try {
+            const raw = localStorage.getItem("pending-visits");
+            const queue: unknown[] = raw ? (JSON.parse(raw) as unknown[]) : [];
+            queue.push({ ...visitPayload, savedAt: new Date().toISOString() });
+            localStorage.setItem("pending-visits", JSON.stringify(queue));
+            setPendingCount(queue.length);
+          } catch { /* ignore quota errors */ }
+        }
       } finally {
         submittingRef.current = false;
       }
@@ -468,6 +506,7 @@ export function QuickVisitForm({
       `*Visita de campo — ${r.visitType}*`,
       `📅 ${r.occurredAt}`,
       `👤 Cliente: ${r.clientName}`,
+      ...(r.assignedToName ? [`🧑‍🔧 Funcionário: ${r.assignedToName}`] : []),
       ``,
     ];
     const footer = [
@@ -651,7 +690,7 @@ h1{font-size:17px;font-weight:700;padding-bottom:10px;border-bottom:2px solid #1
 <h1>Comprovante de Visita</h1>
 <p class="sub">${r.visitType}${r.clientPhone ? " • " + r.clientPhone : ""}</p>
 ${rows}
-<div class="foot">Sistema LM Gestão • ${new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}</div>
+<div class="foot">Infinity ERP • ${new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" })}</div>
 </body></html>`;
   }
 
@@ -672,6 +711,7 @@ ${rows}
     setSelectedClient(null);
     setClientSearch("");
     setVisitType(initialVisitType ?? "GENERAL");
+    setAssignedToName("");
     setAccumulatedChips(0);
     setQuantityOfChips(0);
     setChipValue(1);
@@ -715,6 +755,9 @@ ${rows}
 
           <div className="grid gap-2 p-5 sm:grid-cols-2">
             <DataRow label="Data" value={receipt.occurredAt} />
+            {receipt.assignedToName ? (
+              <DataRow label="Funcionário" value={receipt.assignedToName} />
+            ) : null}
             {receipt.billiard ? (
               <>
                 <DataRow label="Fichas" value={String(receipt.billiard.quantityOfChips)} />
@@ -816,8 +859,55 @@ ${rows}
     );
   }
 
+  async function syncPending() {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      const raw = localStorage.getItem("pending-visits");
+      const queue: Omit<Parameters<typeof saveVisitAction>[0], "createdBy">[] = raw
+        ? (JSON.parse(raw) as Omit<Parameters<typeof saveVisitAction>[0], "createdBy">[])
+        : [];
+      const remaining: unknown[] = [];
+      for (const item of queue) {
+        try {
+          await saveVisitAction(item as Parameters<typeof saveVisitAction>[0]);
+        } catch {
+          remaining.push(item);
+        }
+      }
+      if (remaining.length === 0) {
+        localStorage.removeItem("pending-visits");
+      } else {
+        localStorage.setItem("pending-visits", JSON.stringify(remaining));
+      }
+      setPendingCount(remaining.length);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
+      {pendingCount > 0 ? (
+        <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#60a5fa]/25 bg-[#0a0f1a] px-4 py-3 text-sm">
+          <span className="text-[#60a5fa]">
+            {pendingCount} visita{pendingCount > 1 ? "s" : ""} salva{pendingCount > 1 ? "s" : ""} localmente
+          </span>
+          <button
+            type="button"
+            onClick={syncPending}
+            disabled={syncing}
+            className="shrink-0 rounded-xl border border-[#60a5fa]/30 bg-[#60a5fa]/10 px-3 py-1.5 text-xs font-semibold text-[#60a5fa] disabled:opacity-50"
+          >
+            {syncing ? "Sincronizando..." : "Sincronizar"}
+          </button>
+        </div>
+      ) : null}
+      {latitude !== null ? (
+        <div className="flex items-center gap-2 rounded-xl border border-[#8aa17c]/20 bg-[#1d2e22]/50 px-3 py-2 text-xs text-[#8aa17c]">
+          <span>📍 GPS capturado ({latitude.toFixed(4)}, {longitude?.toFixed(4)})</span>
+        </div>
+      ) : null}
       {/* Client selector */}
       <div className="space-y-2">
         <p className={labelClass}>Cliente</p>
@@ -1532,6 +1622,25 @@ ${rows}
           </div>
         </div>
       )}
+
+      {orgUsers.length > 0 ? (
+        <div className="space-y-2">
+          <label className={labelClass} htmlFor="assignedToName">
+            Funcionário responsável <span className="text-[#9a958b]">opcional</span>
+          </label>
+          <select
+            id="assignedToName"
+            className={selectClass}
+            value={assignedToName}
+            onChange={(e) => setAssignedToName(e.target.value)}
+          >
+            <option value="">— Nenhum —</option>
+            {orgUsers.map((u) => (
+              <option key={u.id} value={u.name}>{u.name}</option>
+            ))}
+          </select>
+        </div>
+      ) : null}
 
       <div className="space-y-2">
         <label className={labelClass} htmlFor="notes">

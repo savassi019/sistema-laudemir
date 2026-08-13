@@ -35,8 +35,14 @@ export async function GET(
   }
 
   const url = new URL(request.url);
-  const take = Math.min(Number(url.searchParams.get("take") ?? 8), 30);
-  const records = await listModuleRecords(session, slug, take);
+  const take = Math.min(Number(url.searchParams.get("take") ?? 8), 50);
+  const fromParam = url.searchParams.get("from");
+  const toParam   = url.searchParams.get("to");
+  const range = {
+    from: fromParam ? new Date(fromParam) : undefined,
+    to:   toParam   ? new Date(toParam)   : undefined,
+  };
+  const records = await listModuleRecords(session, slug, take, range);
 
   return NextResponse.json({ records });
 }

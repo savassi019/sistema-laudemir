@@ -3,6 +3,7 @@ import { ClipboardCheck } from "lucide-react";
 import { QuickVisitForm } from "@/components/visita/quick-visit-form";
 import { requireSession } from "@/lib/auth";
 import { listClients } from "@/server/services/client-service";
+import { listOrgUsersAction } from "@/server/actions/visit-actions";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,10 @@ export default async function VisitaRapidaPage(props: {
 }) {
   const searchParams = await props.searchParams;
   const session = await requireSession();
-  const clients = await listClients(session);
+  const [clients, orgUsers] = await Promise.all([
+    listClients(session),
+    listOrgUsersAction(),
+  ]);
   const initialClientId = searchParams.clientId;
 
   return (
@@ -41,7 +45,7 @@ export default async function VisitaRapidaPage(props: {
             </p>
           </div>
         </div>
-        <QuickVisitForm clients={clients} initialClientId={initialClientId} />
+        <QuickVisitForm clients={clients} orgUsers={orgUsers} initialClientId={initialClientId} />
       </section>
     </div>
   );

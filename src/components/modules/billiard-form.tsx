@@ -47,15 +47,15 @@ const schema = z
     clientName: z.string().min(2, "Informe o cliente."),
     cpf: z.string().optional(),
     cnpj: z.string().optional(),
-    phone: z.string().min(8, "Informe um telefone valido."),
+    phone: z.string().optional(),
     cep: z.string().optional(),
     street: z.string().optional(),
-    city: z.string().min(2, "Informe a cidade."),
-    neighborhood: z.string().min(2, "Informe o bairro."),
-    state: z.string().min(2, "Informe o estado."),
+    city: z.string().optional(),
+    neighborhood: z.string().optional(),
+    state: z.string().optional(),
     pointCode: z.string().optional(),
     pointName: z.string().min(2, "Informe o ponto."),
-    tableModel: z.string().min(2, "Informe o modelo da mesa."),
+    tableModel: z.string().optional(),
     chipValue: z.coerce.number().min(0.01, "Informe o valor da ficha."),
     routeNumber: z.coerce.number().min(1, "Informe a rota."),
     partialRoute: z.string().optional(),
@@ -238,6 +238,7 @@ export function BilliardForm({
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [stepError, setStepError] = useState<string | null>(null);
   const submittingRef = useRef(false);
 
   async function refreshRouteData() {
@@ -382,6 +383,26 @@ export function BilliardForm({
     roofDebt,
     structureCost,
   ]);
+
+  function validateCurrentStep(): string | null {
+    if (activeStep === "rota") {
+      if (!loadedPoint) return "Selecione um ponto da rota para continuar.";
+    }
+    if (activeStep === "ponto") {
+      if (loadedPoint) {
+        if (!watched.collectionDate) return "Informe a data do fechamento.";
+      } else {
+        if (String(watched.clientName ?? "").trim().length < 2) return "Informe o nome do cliente.";
+        if (String(watched.pointName ?? "").trim().length < 2) return "Informe o nome do ponto.";
+        if (Number(watched.chipValue) <= 0) return "Informe o valor da ficha.";
+        if (Number(watched.routeNumber) < 1) return "Informe o número da rota.";
+      }
+    }
+    if (activeStep === "fotos") {
+      if (!getFile(watched.photo)) return "Tire uma foto do ponto antes de continuar.";
+    }
+    return null;
+  }
 
   async function handleCepLookup() {
     const cep = String(form.getValues("cep") ?? "");
@@ -580,7 +601,16 @@ export function BilliardForm({
                   <button
                     key={step.key}
                     type="button"
-                    onClick={() => setActiveStep(step.key)}
+                    onClick={() => {
+                      const activeIdx = visibleSteps.findIndex((s) => s.key === activeStep);
+                      const targetIdx = visibleSteps.findIndex((s) => s.key === step.key);
+                      if (targetIdx > activeIdx) {
+                        const err = validateCurrentStep();
+                        if (err) { setStepError(err); return; }
+                      }
+                      setStepError(null);
+                      setActiveStep(step.key);
+                    }}
                     className={cn(
                       "flex flex-1 flex-col items-center gap-0.5 rounded-xl border px-1.5 py-2 text-[10px] font-semibold transition-all active:scale-95",
                       active
@@ -809,29 +839,27 @@ export function BilliardForm({
                     ) : null}
                   </div>
 
-                  {/* Telhado */}
-                  {loadedPoint.roofOpenDebt > 0 ? (
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      <Field label="Telhado em aberto (R$)">
-                        <input
-                          className={fieldClass}
-                          inputMode="decimal"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          {...form.register("roofDebt")}
-                        />
-                      </Field>
-                      <Field label="Forma de pagamento">
-                        <select className={selectClass} {...form.register("roofPaymentMethod")}>
-                          <option value="ABERTO">Em aberto</option>
-                          <option value="PIX">PIX</option>
-                          <option value="DINHEIRO">Dinheiro</option>
-                          <option value="CARTAO">Cartão</option>
-                        </select>
-                      </Field>
-                    </div>
-                  ) : null}
+                  {/* Telhado — sempre visível para permitir registrar nova dívida */}
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                    <Field label={loadedPoint.roofOpenDebt > 0 ? `Telhado em aberto (R$) — atual: ${formatCurrency(loadedPoint.roofOpenDebt)}` : "Telhado (R$)"}>
+                      <input
+                        className={fieldClass}
+                        inputMode="decimal"
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        {...form.register("roofDebt")}
+                      />
+                    </Field>
+                    <Field label="Forma de pagamento">
+                      <select className={selectClass} {...form.register("roofPaymentMethod")}>
+                        <option value="ABERTO">Em aberto</option>
+                        <option value="PIX">PIX</option>
+                        <option value="DINHEIRO">Dinheiro</option>
+                        <option value="CARTAO">Cartão</option>
+                      </select>
+                    </Field>
+                  </div>
 
                   {/* Custos */}
                   {!hideFinancials ? (
@@ -1238,10 +1266,17 @@ export function BilliardForm({
             ) : null}
 
             <div className="sticky bottom-20 z-10 rounded-2xl border border-white/10 bg-[#090d0c]/92 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur md:static md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-0">
+              {stepError ? (
+                <div className="mb-2 flex items-center gap-2 rounded-xl border border-[#9d6b50]/35 bg-[#2b1e19]/70 px-3 py-2 text-xs font-medium text-[#f0c9ad]">
+                  <TriangleAlert className="size-3.5 shrink-0" />
+                  {stepError}
+                </div>
+              ) : null}
               <div className="grid grid-cols-2 gap-2">
                 <button
                   type="button"
                   onClick={() => {
+                    setStepError(null);
                     const index = visibleSteps.findIndex((step) => step.key === activeStep);
                     setActiveStep(visibleSteps[Math.max(index - 1, 0)].key);
                   }}
@@ -1262,6 +1297,9 @@ export function BilliardForm({
                   <button
                     type="button"
                     onClick={() => {
+                      const err = validateCurrentStep();
+                      if (err) { setStepError(err); return; }
+                      setStepError(null);
                       const index = visibleSteps.findIndex((step) => step.key === activeStep);
                       setActiveStep(visibleSteps[Math.min(index + 1, visibleSteps.length - 1)].key);
                     }}

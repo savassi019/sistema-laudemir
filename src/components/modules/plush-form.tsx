@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { useFormDraft } from "@/hooks/use-form-draft";
 import { maskCpf, maskPhone, withMask } from "@/lib/masks";
 import { isValidCpf } from "@/lib/validators";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
@@ -156,6 +157,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       plushCountOut: 0,
     },
   });
+  const { clearDraft } = useFormDraft(`plush:${initialClientId ?? "new"}`, form);
 
   useEffect(() => {
     if (!initialClientId) return;
@@ -260,6 +262,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }
 
+    clearDraft();
     setReceipt({
       clientName: values.clientName,
       phone: values.phone,

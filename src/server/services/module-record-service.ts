@@ -239,6 +239,7 @@ const createSlotSchema = z.object({
   generatedDebtAmount: z.number().optional(),
   debtMode: z.enum(["NONE", "DEBT", "NEGATIVE"]),
   paymentMethod: z.string().optional(),
+  screenPhotoFileId: z.string().optional(),
   notes: z.string().optional(),
 });
 
@@ -460,7 +461,7 @@ async function saveWithPrisma(
     case "carreta-kids": {
       const data = createCarretaSchema.parse(payload);
       const basePrice = data.minutesCharged === "15" ? 20 : data.minutesCharged === "30" ? 30 : 40;
-      const totalAmount = basePrice - (data.expenseAmount ?? 0);
+      const totalAmount = Math.max(0, basePrice - (data.expenseAmount ?? 0));
       const record = await prisma.carretaKidsRecord.create({
         data: {
           organizationId: session.organizationId,
@@ -569,6 +570,7 @@ async function saveWithPrisma(
           noteiro: data.noteiro,
           coinPhotoId: data.coinPhotoFileId,
           giftPhotoId: data.giftPhotoFileId,
+          notes: data.notes,
         },
         include: {
           plushMachine: true,
@@ -796,6 +798,7 @@ async function saveWithPrisma(
           receiptStatus: data.receiptStatus as BxReceiptStatus,
           screenPhotoId: data.screenPhotoFileId,
           paperPhotoId: data.paperPhotoFileId,
+          notes: data.notes,
         },
       });
 
@@ -934,6 +937,8 @@ async function saveWithPrisma(
           generatedDebtAmount: data.generatedDebtAmount,
           debtMode: data.debtMode,
           paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
+          screenPhotoId: data.screenPhotoFileId,
+          notes: data.notes,
         },
         include: { slotMachine: true },
       });
@@ -1343,7 +1348,8 @@ export async function listModuleRecords(
             Number(record.installationCost ?? 0) -
             Number(record.maintenanceCost ?? 0) -
             Number(record.otherCost ?? 0) -
-            Number(record.roofAmount ?? 0);
+            Number(record.roofAmount ?? 0) -
+            Number(record.discountAmount ?? 0);
 
           return {
             id: record.id,

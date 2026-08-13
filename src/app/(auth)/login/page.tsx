@@ -34,7 +34,7 @@ export default async function LoginPage() {
               </div>
               <div className="space-y-0.5">
                 <p className="text-[9px] uppercase tracking-[0.36em] text-white/30">
-                  Sistema Laudemir
+                  Infinity ERP
                 </p>
                 <h1 className="text-xl font-semibold tracking-tight text-white/95">
                   Entrar no painel

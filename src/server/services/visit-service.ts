@@ -70,12 +70,15 @@ export async function saveVisit(
         clientName: data.clientName || undefined,
         clientPhone: data.clientPhone || undefined,
         createdById: session.userId,
+        assignedToName: data.assignedToName || undefined,
         visitType: typeKey,
         occurredAt: new Date(data.occurredAt),
         checkedItems: data.checkedItems,
         incomeAmount: data.incomeAmount,
         expenseAmount: data.expenseAmount,
         notes: data.notes || undefined,
+        latitude: data.latitude ?? undefined,
+        longitude: data.longitude ?? undefined,
       },
     });
   } catch (error) {
@@ -115,6 +118,7 @@ export async function listVisits(
       expenseAmount: Number(r.expenseAmount),
       notes: r.notes ?? undefined,
       createdBy: r.createdBy?.name ?? undefined,
+      assignedToName: r.assignedToName ?? undefined,
       createdAt: r.createdAt.toISOString(),
     }));
   } catch (error) {
@@ -150,6 +154,7 @@ export async function getClientVisits(
       expenseAmount: Number(r.expenseAmount),
       notes: r.notes ?? undefined,
       createdBy: r.createdBy?.name ?? undefined,
+      assignedToName: r.assignedToName ?? undefined,
       createdAt: r.createdAt.toISOString(),
     }));
   } catch (error) {
@@ -386,6 +391,7 @@ export async function listVisitsInRange(
       expenseAmount: Number(r.expenseAmount),
       notes: r.notes ?? undefined,
       createdBy: r.createdBy?.name ?? undefined,
+      assignedToName: r.assignedToName ?? undefined,
       createdAt: r.createdAt.toISOString(),
     }));
   } catch (error) {

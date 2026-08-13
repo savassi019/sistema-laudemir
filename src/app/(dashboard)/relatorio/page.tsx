@@ -1,6 +1,7 @@
-import { CalendarRange, Download, FileText, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import { CalendarRange, Download, FileText, TrendingDown, TrendingUp, UserCheck, Wallet } from "lucide-react";
 
 import { requireSession } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { getModuleReportSummary, getWeeklyFinancialSummary } from "@/server/services/module-report-service";
 import { listVisitsInRange } from "@/server/services/visit-service";
@@ -22,22 +23,45 @@ export default async function RelatorioPage(props: {
   const from = searchParams.from ?? defaultFrom;
   const to = searchParams.to ?? defaultTo;
 
-  const visits = await listVisitsInRange(session, from, to);
-  const moduleRows = await getModuleReportSummary(
-    session,
-    new Date(`${from}T00:00:00`),
-    new Date(`${to}T23:59:59`),
-  );
+  const fromDate = new Date(`${from}T00:00:00`);
+  const toDate = new Date(`${to}T23:59:59`);
+
+  const [visits, moduleRows, weeklySummary, finEntries] = await Promise.all([
+    listVisitsInRange(session, from, to),
+    getModuleReportSummary(session, fromDate, toDate),
+    getWeeklyFinancialSummary(session, fromDate, toDate),
+    process.env.DEMO_MODE !== "false" ? Promise.resolve([]) : prisma.financialEntry.findMany({
+      where: { organizationId: session.organizationId, issueDate: { gte: fromDate, lte: toDate } },
+      select: { status: true, direction: true, totalAmount: true, remainingAmount: true, paidAmount: true },
+    }).catch(() => [] as { status: string; direction: string; totalAmount: unknown; remainingAmount: unknown; paidAmount: unknown }[]),
+  ]);
+
   const moduleTotal = moduleRows.reduce((sum, row) => sum + row.total, 0);
-  const weeklySummary = await getWeeklyFinancialSummary(
-    session,
-    new Date(`${from}T00:00:00`),
-    new Date(`${to}T23:59:59`),
-  );
 
   const totalIncome = visits.reduce((s, v) => s + v.incomeAmount, 0);
   const totalExpense = visits.reduce((s, v) => s + v.expenseAmount, 0);
   const totalNet = totalIncome - totalExpense;
+
+  // Financial entries summary
+  type FinStatus = { paid: number; pending: number; overdue: number; paidCount: number; pendingCount: number; overdueCount: number };
+  const finSummary = finEntries.reduce<FinStatus>((acc, e) => {
+    const amount = Number(e.totalAmount ?? 0);
+    const remaining = Number(e.remainingAmount ?? 0);
+    if (e.status === "PAID") { acc.paid += amount; acc.paidCount++; }
+    else if (e.status === "OVERDUE") { acc.overdue += remaining; acc.overdueCount++; }
+    else { acc.pending += remaining; acc.pendingCount++; }
+    return acc;
+  }, { paid: 0, pending: 0, overdue: 0, paidCount: 0, pendingCount: 0, overdueCount: 0 });
+
+  // Per-staff breakdown
+  const byStaff = visits.reduce<Record<string, { name: string; count: number; income: number }>>((acc, v) => {
+    const key = v.assignedToName || v.createdBy || "—";
+    if (!acc[key]) acc[key] = { name: key, count: 0, income: 0 };
+    acc[key].count++;
+    acc[key].income += v.incomeAmount - v.expenseAmount;
+    return acc;
+  }, {});
+  const staffRows = Object.values(byStaff).sort((a, b) => b.count - a.count);
 
   const byType = visits.reduce<Record<string, number>>((acc, v) => {
     acc[v.visitType] = (acc[v.visitType] ?? 0) + 1;
@@ -272,6 +296,57 @@ export default async function RelatorioPage(props: {
         )}
       </div>
 
+      {/* Financial entries summary */}
+      {(finSummary.paid > 0 || finSummary.pending > 0 || finSummary.overdue > 0) && (
+        <div className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/72 p-4">
+          <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
+            Lançamentos financeiros
+          </p>
+          <div className="grid grid-cols-3 gap-2">
+            <div className="rounded-xl border border-[#86efac]/20 bg-[#0a1a0f]/60 p-3 text-center">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#86efac]/70">Recebido</p>
+              <p className="mt-1 text-base font-bold text-[#86efac]">{formatCurrency(finSummary.paid)}</p>
+              <p className="text-[10px] text-[#9a958b]">{finSummary.paidCount} lanç.</p>
+            </div>
+            <div className="rounded-xl border border-[#d1a04f]/20 bg-[#1a1508]/60 p-3 text-center">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#f3dfae]/70">Pendente</p>
+              <p className="mt-1 text-base font-bold text-[#f3dfae]">{formatCurrency(finSummary.pending)}</p>
+              <p className="text-[10px] text-[#9a958b]">{finSummary.pendingCount} lanç.</p>
+            </div>
+            <div className="rounded-xl border border-[#f87171]/20 bg-[#1a0a0a]/60 p-3 text-center">
+              <p className="text-[10px] font-semibold uppercase tracking-wider text-[#f87171]/70">Atrasado</p>
+              <p className="mt-1 text-base font-bold text-[#f87171]">{formatCurrency(finSummary.overdue)}</p>
+              <p className="text-[10px] text-[#9a958b]">{finSummary.overdueCount} lanç.</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Per-staff breakdown */}
+      {staffRows.length > 1 && (
+        <div className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/72 p-4">
+          <div className="mb-3 flex items-center gap-2">
+            <UserCheck className="size-3.5 text-[#d1a04f]" />
+            <p className="text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
+              Por funcionário
+            </p>
+          </div>
+          <div className="space-y-2">
+            {staffRows.map((s) => (
+              <div key={s.name} className="flex items-center justify-between gap-3 rounded-xl border border-[rgba(245,241,232,0.07)] bg-[#0b0f0e]/55 px-3 py-2.5">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">{s.name}</p>
+                  <p className="text-xs text-[#9a958b]">{s.count} {s.count === 1 ? "visita" : "visitas"}</p>
+                </div>
+                <p className={`shrink-0 text-sm font-semibold ${s.income < 0 ? "text-[#f0c9ad]" : "text-[#dbe6d4]"}`}>
+                  {formatCurrency(s.income)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Visit list */}
       <div className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/72 p-4">
         <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
@@ -293,7 +368,7 @@ export default async function RelatorioPage(props: {
                   <p className="truncate text-sm font-semibold text-white">{v.clientName}</p>
                   <p className="text-xs text-[#9a958b]">
                     {v.visitType} · {formatShortDate(v.occurredAt)}
-                    {v.createdBy ? ` · ${v.createdBy}` : ""}
+                    {v.assignedToName ? ` · 🧑‍🔧 ${v.assignedToName}` : v.createdBy ? ` · ${v.createdBy}` : ""}
                   </p>
                   {v.notes ? (
                     <p className="mt-0.5 truncate text-xs text-[#7e786d]">{v.notes}</p>

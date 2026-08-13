@@ -209,23 +209,26 @@ enum EntityType {
 }
 
 model FieldVisit {
-  id             String         @id @default(cuid())
-  organizationId String
-  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId       String?
-  client         Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  targetId       String?
-  clientName     String?
-  clientPhone    String?
-  createdById    String?
-  createdBy      User?          @relation("VisitCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  visitType      FieldVisitType @default(GENERAL)
-  occurredAt     DateTime
-  checkedItems   String[]
-  incomeAmount   Decimal        @default(0) @db.Decimal(14, 2)
-  expenseAmount  Decimal        @default(0) @db.Decimal(14, 2)
-  notes          String?
-  createdAt      DateTime       @default(now())
+  id               String         @id @default(cuid())
+  organizationId   String
+  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId         String?
+  client           Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  targetId         String?
+  clientName       String?
+  clientPhone      String?
+  createdById      String?
+  createdBy        User?          @relation("VisitCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  assignedToName   String?
+  visitType        FieldVisitType @default(GENERAL)
+  occurredAt       DateTime
+  checkedItems     String[]
+  incomeAmount     Decimal        @default(0) @db.Decimal(14, 2)
+  expenseAmount    Decimal        @default(0) @db.Decimal(14, 2)
+  notes            String?
+  latitude         Float?
+  longitude        Float?
+  createdAt        DateTime       @default(now())
 
   @@index([organizationId, occurredAt])
   @@index([clientId])
@@ -676,6 +679,7 @@ model PlushCollection {
   noteiro              String?
   coinPhotoId          String?
   giftPhotoId          String?
+  notes                String?
   createdById          String?
   createdAt            DateTime                  @default(now())
   updatedAt            DateTime                  @updatedAt
@@ -948,6 +952,7 @@ model BxTransaction {
   paperPhotoId      String?
   exceptionClient   Boolean         @default(false)
   receiptStatus     BxReceiptStatus @default(NOT_RECEIVED)
+  notes             String?
   createdById       String?
   createdAt         DateTime        @default(now())
 
@@ -1004,8 +1009,22 @@ model SlotCollection {
   generatedDebtAmount    Decimal?       @db.Decimal(14, 2)
   debtMode               SlotDebtMode   @default(NONE)
   paymentMethod          PaymentMethod?
+  screenPhotoId          String?
+  notes                  String?
   createdById            String?
   createdAt              DateTime       @default(now())
 
   @@index([organizationId, occurredAt])
+}
+
+model PushSubscription {
+  id             String   @id @default(cuid())
+  organizationId String
+  userId         String
+  endpoint       String   @unique
+  p256dh         String
+  auth           String
+  createdAt      DateTime @default(now())
+
+  @@index([organizationId])
 }

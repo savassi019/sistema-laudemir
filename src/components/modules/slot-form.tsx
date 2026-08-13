@@ -8,10 +8,12 @@ import { z } from "zod";
 
 import { fetchAddressByCep } from "@/lib/cep";
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { useFormDraft } from "@/hooks/use-form-draft";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import { isValidCpf } from "@/lib/validators";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
+import { PhotoCaptureInput } from "./photo-capture-input";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -46,15 +48,37 @@ const schema = z
     generatedDebtAmount: z.coerce.number().min(0),
     debtMode: z.enum(["NONE", "DEBT", "NEGATIVE"]),
     paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
+    screenPhoto: z.any().optional(),
     notes: z.string().optional(),
   })
   .refine((data) => !data.cpf?.trim() || isValidCpf(data.cpf), {
     message: "CPF invalido.",
     path: ["cpf"],
+  })
+  .superRefine((data, ctx) => {
+    const photo = (data.screenPhoto as FileList | undefined)?.[0];
+    if (!photo) {
+      ctx.addIssue({ code: "custom", path: ["screenPhoto"], message: "Tire uma foto da tela antes de salvar." });
+    }
   });
 
 type FormInput = z.input<typeof schema>;
 type FormValues = z.output<typeof schema>;
+
+function getFile(value: unknown) {
+  const file = Array.isArray(value) ? value[0] : (value as FileList | undefined)?.[0];
+  return file instanceof File ? file : undefined;
+}
+
+async function uploadFile(file: File, category: string) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("category", category);
+  const response = await fetch("/api/upload", { method: "POST", body: formData });
+  if (!response.ok) return null;
+  const result = (await response.json()) as { id: string };
+  return result.id;
+}
 
 type ReceiptState = {
   uniqueMachineNumber: string;
@@ -114,6 +138,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
       generatedDebtAmount: 0,
     },
   });
+  const { clearDraft } = useFormDraft(`slot:${initialClientId ?? "new"}`, form);
 
   useEffect(() => {
     if (!initialClientId) return;
@@ -234,6 +259,9 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
     let clientLabel = values.clientName || values.uniqueMachineNumber;
 
     try {
+      const screenPhotoFile = getFile(values.screenPhoto);
+      const screenPhotoFileId = screenPhotoFile ? await uploadFile(screenPhotoFile, "PHOTO") : null;
+
       const response = await fetch("/api/modules/h-caca-niquel/records", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -267,6 +295,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
           generatedDebtAmount: Number(values.generatedDebtAmount),
           debtMode: values.debtMode,
           paymentMethod: values.paymentMethod,
+          screenPhotoFileId: screenPhotoFileId ?? undefined,
           notes: values.notes,
         }),
       });
@@ -283,6 +312,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }
 
+    clearDraft();
     setReceipt({
       uniqueMachineNumber: values.uniqueMachineNumber,
       clientLabel,
@@ -776,6 +806,19 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
             </p>
           </div>
         )}
+
+        <div className="space-y-1">
+          <PhotoCaptureInput
+            registration={form.register("screenPhoto")}
+            label="Foto da tela da máquina"
+            hint="Obrigatório para salvar o fechamento"
+          />
+          {form.formState.errors.screenPhoto ? (
+            <p className="text-sm text-[#d59a8b]">
+              {form.formState.errors.screenPhoto.message?.toString()}
+            </p>
+          ) : null}
+        </div>
 
         <button
           type="submit"

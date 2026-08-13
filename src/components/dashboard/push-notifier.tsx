@@ -30,7 +30,7 @@ export function PushNotifier({ alertCount, unvisitedCount, overdueContentCount, 
       if (openRemindersCount > 0)
         parts.push(`${openRemindersCount} cobrança${openRemindersCount !== 1 ? "s" : ""} em aberto`);
 
-      reg.showNotification("Sistema Laudemir · Atenção necessária", {
+      reg.showNotification("Infinity ERP · Atenção necessária", {
         body: parts.join(" · "),
         icon: "/icon-192.png",
         badge: "/icon-192.png",

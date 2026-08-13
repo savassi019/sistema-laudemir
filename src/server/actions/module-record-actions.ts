@@ -4,13 +4,11 @@ import { requireSession } from "@/lib/auth";
 import {
   getClientPrefillData,
   listModuleClientRecords,
+  listModuleRecords,
   moduleSlugs,
-  type ClientPrefillData,
   type ModuleSlug,
 } from "@/server/services/module-record-service";
 import { getModuleReport } from "@/server/services/module-report-service";
-
-export type { ClientPrefillData };
 
 export async function listModuleClientRecordsAction(
   slug: string,
@@ -30,6 +28,20 @@ export async function getClientPrefillDataAction(slug: string, id: string) {
   const session = await requireSession();
   if (!moduleSlugs.includes(slug as ModuleSlug)) throw new Error("Modulo invalido.");
   return getClientPrefillData(session, slug as ModuleSlug, id);
+}
+
+export async function listModuleRecordsAction(
+  slug: string,
+  from?: string,
+  to?: string,
+  take = 30,
+) {
+  const session = await requireSession();
+  if (!moduleSlugs.includes(slug as ModuleSlug)) throw new Error("Modulo invalido.");
+  return listModuleRecords(session, slug as ModuleSlug, take, {
+    from: from ? new Date(from) : undefined,
+    to:   to   ? new Date(to)   : undefined,
+  });
 }
 
 export async function getModuleReportAction(slug: string, from?: string, to?: string) {

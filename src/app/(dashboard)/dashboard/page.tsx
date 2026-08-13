@@ -7,6 +7,7 @@ import {
   Eye,
   MapPin,
   Megaphone,
+  TrendingDown,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -42,6 +43,35 @@ export default async function DashboardPage() {
     listClients(session),
     getTodayVisitCount(session),
   ]);
+
+  const MODULE_LABELS: Record<string, string> = {
+    BILLIARD: "Bilhar", PLUSH: "Pelúcia", BX: "BX", SLOT_H: "H/Caça-níquel",
+    CARRETA_KIDS: "Carreta Kids", RENTAL: "Locação", MARKETING: "Marketing",
+    FINANCE: "Financeiro", GENERAL: "Geral",
+  };
+
+  type OverdueByModule = { module: string; total: number; count: number };
+  const [overdueByModule, delinquentCount] = await (!isField ? Promise.all([
+    prisma.financialEntry.groupBy({
+      by: ["module"],
+      where: { organizationId: orgId, status: "OVERDUE" },
+      _sum: { remainingAmount: true },
+      _count: { id: true },
+    }).catch(() => [] as { module: string; _sum: { remainingAmount: unknown }; _count: { id: number } }[]),
+    prisma.client.count({ where: { organizationId: orgId, status: "DELINQUENT" } }).catch(() => 0),
+  ]) : Promise.resolve([[], 0] as [never[], number]));
+
+  const overdueModules: OverdueByModule[] = (!isField && Array.isArray(overdueByModule))
+    ? overdueByModule
+        .map((r: { module: string; _sum: { remainingAmount: unknown }; _count: { id: number } }) => ({
+          module: MODULE_LABELS[r.module] ?? r.module,
+          total: Number(r._sum.remainingAmount ?? 0),
+          count: r._count.id,
+        }))
+        .filter((r: OverdueByModule) => r.total > 0)
+        .sort((a: OverdueByModule, b: OverdueByModule) => b.total - a.total)
+    : [];
+  const totalOverdue = overdueModules.reduce((s: number, r: OverdueByModule) => s + r.total, 0);
 
   type ContentWithContract = { id: string; title: string; contentDate: Date; contract: { name: string } };
   const emptyContent: ContentWithContract[] = [];
@@ -296,6 +326,53 @@ export default async function DashboardPage() {
           <div className="border-t border-[rgba(255,255,255,0.04)] px-4 py-2.5">
             <Link href="/financeiro" className="flex items-center gap-1 text-xs font-medium text-[#f3dfae]/60 transition hover:text-[#f3dfae]">
               Abrir Financeiro <ChevronRight className="size-3" />
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {/* ━━━━━━ INADIMPLÊNCIA ━━━━━━ */}
+      {!isField && totalOverdue > 0 && (
+        <section className="overflow-hidden rounded-2xl border border-[#f87171]/20 bg-[#180c0c]">
+          <div className="flex items-center gap-3 bg-[#f87171]/10 px-4 py-3.5">
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-[#f87171]/18">
+              <TrendingDown className="size-4 text-[#f87171]" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-bold text-[#f87171]">Inadimplência</p>
+              <p className="text-xs text-[#9a958b]">
+                {delinquentCount > 0 ? `${delinquentCount} cliente${delinquentCount !== 1 ? "s" : ""} inadimplente${delinquentCount !== 1 ? "s" : ""} · ` : ""}
+                Total em atraso
+              </p>
+            </div>
+            <span className="shrink-0 text-right">
+              <p className="text-sm font-bold text-[#f87171]">
+                {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(totalOverdue)}
+              </p>
+              <p className="text-[10px] text-[#9a958b]">{overdueModules.reduce((s, r) => s + r.count, 0)} lançamentos</p>
+            </span>
+          </div>
+          <div className="divide-y divide-[rgba(255,255,255,0.04)]">
+            {overdueModules.slice(0, 5).map((m) => (
+              <Link
+                key={m.module}
+                href="/financeiro"
+                className="flex items-center gap-3 px-4 py-3 transition hover:bg-white/[0.03]"
+              >
+                <div className="size-1.5 shrink-0 rounded-full bg-[#f87171]" />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-white">{m.module}</p>
+                  <p className="text-xs text-[#9a958b]">{m.count} lançamento{m.count !== 1 ? "s" : ""}</p>
+                </div>
+                <span className="shrink-0 rounded-lg bg-[#f87171]/12 px-2 py-0.5 text-xs font-semibold text-[#f87171]">
+                  {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(m.total)}
+                </span>
+              </Link>
+            ))}
+          </div>
+          <div className="border-t border-[rgba(255,255,255,0.04)] px-4 py-2.5">
+            <Link href="/financeiro" className="flex items-center gap-1 text-xs font-medium text-[#f87171]/70 transition hover:text-[#f87171]">
+              Ver todos no Financeiro <ChevronRight className="size-3" />
             </Link>
           </div>
         </section>

@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { useFormDraft } from "@/hooks/use-form-draft";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
@@ -88,6 +89,7 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
       expenseAmount: 0,
     },
   });
+  const { clearDraft } = useFormDraft(`carreta-kids:${initialClientId ?? "new"}`, form);
 
   useEffect(() => {
     if (!initialClientId) return;
@@ -130,7 +132,7 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
     setLoading(true);
     setSaveError(null);
 
-    const totalValue = baseValue - Number(values.expenseAmount);
+    const totalValue = Math.max(0, baseValue - Number(values.expenseAmount));
 
     try {
       const response = await fetch("/api/modules/carreta-kids/records", {
@@ -157,6 +159,7 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }
 
+    clearDraft();
     setReceipt({
       localName: values.localName,
       serviceDate: values.serviceDate,

@@ -11,6 +11,7 @@ import {
   Inbox,
   MapPin,
   Receipt,
+  Search,
   UserPlus,
   WalletCards,
 } from "lucide-react";
@@ -279,58 +280,13 @@ export function ModuleWorkspace({
         ) : null}
 
         {activeSection === "clientes" ? (
-          <div className="space-y-3">
-            <div className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <h3 className="text-sm font-semibold text-white">Clientes cadastrados</h3>
-                  <p className="mt-0.5 text-xs text-[#9a958b]">Cadastre aqui mesmo, sem trocar de tela.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setShowRegisterForm((x) => !x)}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#d1a04f] px-3 py-2 text-xs font-semibold text-[#0d0a05] shadow-[0_4px_14px_rgba(209,160,79,0.28)] transition hover:bg-[#daa855]"
-                >
-                  <UserPlus className="size-3.5" />
-                  {showRegisterForm ? "Ocultar" : "Novo"}
-                </button>
-              </div>
-              {showRegisterForm && Form ? (
-                <div className="mt-4 border-t border-[rgba(245,241,232,0.08)] pt-4">
-                  <Form hideFinancials={hideFinancials} startAtRegistration />
-                </div>
-              ) : null}
-            </div>
-            {moduleClients.length === 0 ? (
-              <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[rgba(245,241,232,0.14)] bg-white/[0.02] px-4 py-10 text-center">
-                <Inbox className="mb-3 size-7 text-[#5a544c]" />
-                <p className="text-sm text-[#9a958b]">Nenhum cliente cadastrado ainda.</p>
-              </div>
-            ) : (
-              <div className="grid gap-2">
-                {moduleClients.map((item) => (
-                  <article key={item.id} className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-white/[0.025] p-3.5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="truncate text-sm font-semibold text-white">{item.name}</p>
-                        {item.subtitle ? <p className="mt-0.5 truncate text-xs text-[#9a958b]">{item.subtitle}</p> : null}
-                      </div>
-                      {item.badge ? (
-                        <span className="shrink-0 rounded-full border border-[#d1a04f]/25 bg-[#d1a04f]/10 px-2 py-1 text-[11px] font-medium text-[#f3dfae]">
-                          {item.badge}
-                        </span>
-                      ) : null}
-                    </div>
-                    {item.tags.length > 0 ? (
-                      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#9a958b]">
-                        {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
-                      </div>
-                    ) : null}
-                  </article>
-                ))}
-              </div>
-            )}
-          </div>
+          <ClientesSection
+            moduleClients={moduleClients}
+            showRegisterForm={showRegisterForm}
+            setShowRegisterForm={setShowRegisterForm}
+            Form={Form}
+            hideFinancials={hideFinancials}
+          />
         ) : null}
 
         {activeSection === "financeiro" ? (
@@ -453,5 +409,100 @@ export function ModuleWorkspace({
         })}
       </div>
     </section>
+  );
+}
+
+// ── Aba Clientes com busca ────────────────────────────────────────────────────
+
+function ClientesSection({
+  moduleClients,
+  showRegisterForm,
+  setShowRegisterForm,
+  Form,
+  hideFinancials,
+}: {
+  moduleClients: ModuleClientItem[];
+  showRegisterForm: boolean;
+  setShowRegisterForm: (fn: (x: boolean) => boolean) => void;
+  Form: ComponentType<{ hideFinancials?: boolean; startAtRegistration?: boolean }> | null;
+  hideFinancials: boolean;
+}) {
+  const [query, setQuery] = useState("");
+  const filtered = query.trim()
+    ? moduleClients.filter((c) =>
+        c.name.toLowerCase().includes(query.toLowerCase()) ||
+        c.subtitle?.toLowerCase().includes(query.toLowerCase()),
+      )
+    : moduleClients;
+
+  return (
+    <div className="space-y-3">
+      <div className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-white">Clientes cadastrados</h3>
+            <p className="mt-0.5 text-xs text-[#9a958b]">Cadastre aqui mesmo, sem trocar de tela.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowRegisterForm((x) => !x)}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#d1a04f] px-3 py-2 text-xs font-semibold text-[#0d0a05] shadow-[0_4px_14px_rgba(209,160,79,0.28)] transition hover:bg-[#daa855]"
+          >
+            <UserPlus className="size-3.5" />
+            {showRegisterForm ? "Ocultar" : "Novo"}
+          </button>
+        </div>
+        {showRegisterForm && Form ? (
+          <div className="mt-4 border-t border-[rgba(245,241,232,0.08)] pt-4">
+            <Form hideFinancials={hideFinancials} startAtRegistration />
+          </div>
+        ) : null}
+      </div>
+
+      {moduleClients.length > 4 ? (
+        <div className="relative">
+          <Search className="absolute left-3.5 top-1/2 size-3.5 -translate-y-1/2 text-[#5a544c]" />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar por nome ou código..."
+            className="w-full rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.04] py-2.5 pl-9 pr-4 text-sm text-white outline-none placeholder:text-[#5a544c] focus:border-[#d1a04f]/40 focus:ring-1 focus:ring-[#d1a04f]/20"
+          />
+        </div>
+      ) : null}
+
+      {filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[rgba(245,241,232,0.14)] bg-white/[0.02] px-4 py-10 text-center">
+          <Inbox className="mb-3 size-7 text-[#5a544c]" />
+          <p className="text-sm text-[#9a958b]">
+            {query ? "Nenhum cliente encontrado para essa busca." : "Nenhum cliente cadastrado ainda."}
+          </p>
+        </div>
+      ) : (
+        <div className="grid gap-2">
+          {filtered.map((item) => (
+            <article key={item.id} className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-white/[0.025] p-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">{item.name}</p>
+                  {item.subtitle ? <p className="mt-0.5 truncate text-xs text-[#9a958b]">{item.subtitle}</p> : null}
+                </div>
+                {item.badge ? (
+                  <span className="shrink-0 rounded-full border border-[#d1a04f]/25 bg-[#d1a04f]/10 px-2 py-1 text-[11px] font-medium text-[#f3dfae]">
+                    {item.badge}
+                  </span>
+                ) : null}
+              </div>
+              {item.tags.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#9a958b]">
+                  {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
+                </div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }

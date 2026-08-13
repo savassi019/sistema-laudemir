@@ -121,6 +121,9 @@ export type VisitRecord = {
   expenseAmount: number;
   notes?: string;
   createdBy?: string;
+  assignedToName?: string;
+  latitude?: number;
+  longitude?: number;
   createdAt: string;
 };
 

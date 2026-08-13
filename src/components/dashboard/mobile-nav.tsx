@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
+  CalendarDays,
   ClipboardCheck,
   FileBarChart2,
   LayoutDashboard,
@@ -15,16 +16,16 @@ import { cn } from "@/lib/cn";
 
 const ownerItems = [
   { href: "/dashboard",  label: "Início",   icon: LayoutDashboard },
-  { href: "/painel",     label: "Controle", icon: Shield },
+  { href: "/agenda",     label: "Agenda",   icon: CalendarDays },
   { href: "/modulos",    label: "Módulos",  icon: LayoutGrid },
   { href: "/relatorio",  label: "Relatório", icon: FileBarChart2 },
 ] as const;
 
 const staffItems = [
-  { href: "/visita-rapida", label: "Visita", icon: ClipboardCheck },
-  { href: "/dashboard", label: "Painel", icon: LayoutDashboard },
-  { href: "/clientes", label: "Clientes", icon: Users },
-  { href: "/modulos", label: "Módulos", icon: LayoutGrid },
+  { href: "/visita-rapida", label: "Visita",  icon: ClipboardCheck },
+  { href: "/agenda",        label: "Agenda",  icon: CalendarDays },
+  { href: "/clientes",      label: "Clientes", icon: Users },
+  { href: "/modulos",       label: "Módulos",  icon: LayoutGrid },
 ] as const;
 
 type Role = "OWNER" | "ADMIN" | "STAFF";

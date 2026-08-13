@@ -1,6 +1,6 @@
 {
-  "name": "Sistema Laudemir",
-  "short_name": "Laudemir",
+  "name": "Infinity ERP",
+  "short_name": "Infinity",
   "description": "Sistema modular para operacao, clientes e financeiro.",
   "start_url": "/dashboard",
   "scope": "/",
