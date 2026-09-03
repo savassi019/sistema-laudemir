@@ -15,9 +15,10 @@ if (VAPID_PUBLIC && VAPID_PRIVATE) {
 }
 
 export async function POST(req: NextRequest) {
-  // Require a shared secret so only the server cron can trigger this
+  // Fail closed: without a configured secret the endpoint stays shut,
+  // otherwise anyone reaching it could push to every subscriber.
   const auth = req.headers.get("x-cron-secret") ?? "";
-  if (CRON_SECRET && auth !== CRON_SECRET) {
+  if (!CRON_SECRET || auth !== CRON_SECRET) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
