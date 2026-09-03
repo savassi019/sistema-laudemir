@@ -58,12 +58,13 @@ export function PhotoCaptureInput({ registration, label, hint, required }: Props
     const prev = URL.createObjectURL(compressed);
     setPreview((old) => { if (old) URL.revokeObjectURL(old); return prev; });
 
-    // Replace native FileList with compressed file so RHF receives the right file
+    // Swap the compressed file into the real input, then hand RHF the untouched
+    // event — its target is that input, so it already carries name/type/files.
     const dt = new DataTransfer();
     dt.items.add(compressed);
     if (inputRef.current) inputRef.current.files = dt.files;
 
-    onChange({ ...e, target: { ...e.target, files: dt.files } } as React.ChangeEvent<HTMLInputElement>);
+    onChange(e);
   }
 
   function handleClear() {
