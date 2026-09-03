@@ -3,7 +3,8 @@
 import { Bell } from "lucide-react";
 import { useEffect, useState } from "react";
 
-const STORAGE_KEY = "lm_last_notif_date";
+const STORAGE_KEY      = "lm_last_notif_date";
+const SUB_STORED_KEY   = "lm_push_subscribed";
 
 type Props = {
   alertCount: number;
@@ -12,10 +13,40 @@ type Props = {
   openRemindersCount: number;
 };
 
+async function subscribeToPush() {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return;
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_KEY;
+  if (!publicKey) return;
+
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      const raw = Uint8Array.from(atob(publicKey.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0));
+      sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw });
+    }
+    const json = sub.toJSON();
+    await fetch("/api/push/subscribe", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: sub.endpoint, keys: json.keys }),
+    });
+    localStorage.setItem(SUB_STORED_KEY, "1");
+  } catch {
+    // ignore — permission denied or browser unsupported
+  }
+}
+
 export function PushNotifier({ alertCount, unvisitedCount, overdueContentCount, openRemindersCount }: Props) {
   useEffect(() => {
     if (!("Notification" in window) || !("serviceWorker" in navigator)) return;
     if (Notification.permission !== "granted") return;
+
+    // Register/refresh push subscription with server
+    if (!localStorage.getItem(SUB_STORED_KEY)) {
+      subscribeToPush();
+    }
+
     if (alertCount === 0) return;
 
     const today = new Date().toISOString().slice(0, 10);
@@ -30,7 +61,7 @@ export function PushNotifier({ alertCount, unvisitedCount, overdueContentCount, 
       if (openRemindersCount > 0)
         parts.push(`${openRemindersCount} cobrança${openRemindersCount !== 1 ? "s" : ""} em aberto`);
 
-      reg.showNotification("Infinity ERP · Atenção necessária", {
+      reg.showNotification("Sistema LM · Atenção necessária", {
         body: parts.join(" · "),
         icon: "/icon-192.png",
         badge: "/icon-192.png",
@@ -56,7 +87,10 @@ export function NotificationPermissionBanner() {
   if (!show) return null;
 
   function request() {
-    Notification.requestPermission().then(() => setShow(false));
+    Notification.requestPermission().then((result) => {
+      setShow(false);
+      if (result === "granted") subscribeToPush();
+    });
   }
 
   return (

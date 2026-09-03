@@ -1,6 +1,6 @@
 "use client";
 
-import { Camera, CheckCircle2, ImagePlus, X } from "lucide-react";
+import { Camera, CheckCircle2, ImagePlus, Loader2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { UseFormRegisterReturn } from "react-hook-form";
 
@@ -11,23 +11,59 @@ type Props = {
   required?: boolean;
 };
 
+async function compressImage(file: File, maxPx = 1200, quality = 0.82): Promise<File> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      const { width, height } = img;
+      const scale = Math.min(1, maxPx / Math.max(width, height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(width * scale);
+      canvas.height = Math.round(height * scale);
+      canvas.getContext("2d")!.drawImage(img, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) { resolve(file); return; }
+          resolve(new File([blob], file.name.replace(/\.[^.]+$/, ".jpg"), { type: "image/jpeg" }));
+        },
+        "image/jpeg",
+        quality
+      );
+    };
+    img.onerror = () => resolve(file);
+    img.src = url;
+  });
+}
+
 export function PhotoCaptureInput({ registration, label, hint, required }: Props) {
   const { ref: regRef, onChange, ...restReg } = registration;
   const inputRef = useRef<HTMLInputElement | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
   const [fileName, setFileName] = useState<string | null>(null);
+  const [compressing, setCompressing] = useState(false);
+  const [compressedSize, setCompressedSize] = useState<string | null>(null);
 
-  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
-    if (file) {
-      setFileName(file.name);
-      const prev = URL.createObjectURL(file);
-      setPreview((old) => {
-        if (old) URL.revokeObjectURL(old);
-        return prev;
-      });
-    }
-    onChange(e);
+    if (!file) { onChange(e); return; }
+
+    setCompressing(true);
+    const compressed = await compressImage(file);
+    setCompressing(false);
+
+    setFileName(compressed.name);
+    setCompressedSize((compressed.size / 1024).toFixed(0) + " KB");
+    const prev = URL.createObjectURL(compressed);
+    setPreview((old) => { if (old) URL.revokeObjectURL(old); return prev; });
+
+    // Replace native FileList with compressed file so RHF receives the right file
+    const dt = new DataTransfer();
+    dt.items.add(compressed);
+    if (inputRef.current) inputRef.current.files = dt.files;
+
+    onChange({ ...e, target: { ...e.target, files: dt.files } } as React.ChangeEvent<HTMLInputElement>);
   }
 
   function handleClear() {
@@ -37,6 +73,7 @@ export function PhotoCaptureInput({ registration, label, hint, required }: Props
       return null;
     });
     setFileName(null);
+    setCompressedSize(null);
     // Notify RHF that the field is now empty
     onChange({
       target: { ...inputRef.current, files: null, value: "", type: "file", name: restReg.name },
@@ -96,7 +133,12 @@ export function PhotoCaptureInput({ registration, label, hint, required }: Props
           <div className="flex items-center justify-between gap-2 px-3 py-2.5">
             <div className="flex min-w-0 items-center gap-2">
               <CheckCircle2 className="size-3.5 shrink-0 text-[#8aa17c]" />
-              <p className="truncate text-xs text-[#9a958b]">{fileName}</p>
+              <p className="truncate text-xs text-[#9a958b]">
+                {fileName}
+                {compressedSize && (
+                  <span className="ml-1 text-[#5a544c]">· {compressedSize}</span>
+                )}
+              </p>
             </div>
             <button
               type="button"
@@ -105,6 +147,16 @@ export function PhotoCaptureInput({ registration, label, hint, required }: Props
             >
               Trocar
             </button>
+          </div>
+        </div>
+      ) : compressing ? (
+        <div className="flex w-full items-center gap-3 rounded-2xl border border-dashed border-[rgba(245,241,232,0.14)] bg-white/[0.02] px-4 py-5">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-white/[0.06]">
+            <Loader2 className="size-5 animate-spin text-[#d1a04f]" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-[#c9c2b4]">Comprimindo foto…</p>
+            <p className="text-[11px] text-[#5a544c]">Aguarde um instante</p>
           </div>
         </div>
       ) : (
