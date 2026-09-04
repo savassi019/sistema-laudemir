@@ -9,8 +9,12 @@ const nextConfig: NextConfig = {
     root: projectRoot,
   },
   typescript: {
-    // tsc --noEmit já valida localmente antes do push
-    ignoreBuildErrors: true,
+    // Ligado de volta em 2026-09-04, com o projeto em zero erros. Ignorar
+    // deixava erro real de tipo passar pro ar em silencio — foi assim que
+    // campos opcionais viraram `undefined` no comprovante do cliente.
+    // Se um build falhar por tipo, o deploy para e a versao antiga segue
+    // no ar: e o comportamento desejado, nao um transtorno.
+    ignoreBuildErrors: false,
   },
 };
 
