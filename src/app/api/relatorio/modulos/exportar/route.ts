@@ -19,6 +19,12 @@ export async function GET(request: NextRequest) {
     return new Response("Nao autenticado.", { status: 401 });
   }
 
+  // Mesmo motivo do /api/finance/summary: sem isto o CSV com os valores
+  // sai pela API mesmo com a pagina de relatorio bloqueada.
+  if (session.role === "STAFF") {
+    return new Response("Sem permissao.", { status: 403 });
+  }
+
   const { searchParams } = request.nextUrl;
 
   const now = new Date();

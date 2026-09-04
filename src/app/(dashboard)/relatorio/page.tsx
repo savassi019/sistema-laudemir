@@ -1,4 +1,5 @@
 import { CalendarRange, Download, FileText, TrendingDown, TrendingUp, UserCheck, Wallet } from "lucide-react";
+import { redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -12,6 +13,13 @@ export default async function RelatorioPage(props: {
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
   const session = await requireSession("DASHBOARD");
+
+  // Exigia so DASHBOARD, que todo funcionario recebe automaticamente na
+  // criacao — entao qualquer um da equipe via entrada, saida e liquido.
+  if (session.role === "STAFF") {
+    redirect("/dashboard?denied=1");
+  }
+
   const searchParams = await props.searchParams;
 
   const now = new Date();

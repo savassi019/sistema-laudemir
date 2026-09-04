@@ -1,4 +1,5 @@
 import { ArrowLeftRight, ReceiptText } from "lucide-react";
+import { redirect } from "next/navigation";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { FinanceEntries } from "@/components/financeiro/finance-entries";
@@ -10,6 +11,14 @@ export const dynamic = "force-dynamic";
 
 export default async function FinancePage() {
   const session = await requireSession("FINANCE");
+
+  // Funcionario de campo nao ve valores em lugar nenhum. Nas telas de modulo
+  // isso ja valia (hideFinancials), mas esta pagina so checava o modulo —
+  // bastava liberar Financeiro pra ele ver o caixa inteiro.
+  if (session.role === "STAFF") {
+    redirect("/dashboard?denied=1");
+  }
+
   const finance = await getFinanceOverview(session);
 
   return (
