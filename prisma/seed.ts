@@ -32,14 +32,16 @@ async function main() {
   const staffHash = await bcrypt.hash("Staff@12345", 10);
 
   // ── Usuário dono ─────────────────────────────────────────────────────────────
+  // ATENCAO: o update abaixo redefine a senha do dono para a de seed.
+  // Rodar este seed contra producao derruba o acesso do cliente.
   const owner = await prisma.user.upsert({
-    where: { email: "admin@lmgestao.local" },
+    where: { email: "laudemir@lmgestao.local" },
     update: { name: "Laudemir Admin", passwordHash: hash, organizationId: org.id, role: UserRole.OWNER },
     create: {
       organizationId: org.id,
       role: UserRole.OWNER,
       name: "Laudemir Admin",
-      email: "admin@lmgestao.local",
+      email: "laudemir@lmgestao.local",
       phone: "(11) 99000-0001",
       passwordHash: hash,
     },
@@ -524,7 +526,7 @@ async function main() {
 
   console.log("\n✅ Seed concluído!");
   console.log("─────────────────────────────────────────────");
-  console.log("Login dono   : admin@lmgestao.local / Admin@12345");
+  console.log("Login dono   : laudemir@lmgestao.local / Admin@12345");
   console.log("Login staff  : joao@lmgestao.local  / Staff@12345");
   console.log("─────────────────────────────────────────────");
   console.log("Dados criados:");

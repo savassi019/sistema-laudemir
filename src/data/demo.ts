@@ -17,13 +17,13 @@ export const demoAccounts: DemoAccount[] = [
   {
     label: "Administrador",
     helper: "Acesso completo ao sistema",
-    email: "admin@lmgestao.local",
+    email: "laudemir@lmgestao.local",
     password: "Admin@12345",
     session: {
       userId: "lmgestao000000000000000002",
       organizationId: "lmgestao000000000000000001",
       name: "Administrador LM",
-      email: "admin@lmgestao.local",
+      email: "laudemir@lmgestao.local",
       role: "OWNER",
       modules: [
         "CORE",
