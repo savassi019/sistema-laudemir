@@ -1,0 +1,115 @@
+name: Vigia externo
+
+# Roda nos servidores do GitHub, fora da VPS — e o unico jeito de saber
+# se a VPS inteira caiu, porque nesse caso nada que roda nela consegue avisar.
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  checar:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checar se o sistema responde
+        id: check
+        run: |
+          set +e
+          # Duas tentativas antes de acusar: evita alarme por soluco de rede.
+          for tentativa in 1 2; do
+            CODE=$(curl -s -o corpo.txt -w "%{http_code}" --max-time 25 \
+              https://erpinfinity.com.br/api/health)
+            BODY=$(cat corpo.txt 2>/dev/null | head -c 300)
+            if [ "$CODE" = "200" ] && echo "$BODY" | grep -q '"database":"up"'; then
+              echo "estado=ok" >> $GITHUB_OUTPUT
+              echo "OK · $BODY"
+              exit 0
+            fi
+            [ "$tentativa" = "1" ] && sleep 30
+          done
+
+          # Separa "site fora do ar" de "site no ar mas banco caido":
+          # sao problemas diferentes e exigem acoes diferentes.
+          if [ "$CODE" = "200" ]; then
+            DETALHE="A aplicacao respondeu, mas o banco de dados nao esta acessivel."
+          elif [ "$CODE" = "000" ]; then
+            DETALHE="Sem resposta do servidor (fora do ar, DNS ou certificado)."
+          else
+            DETALHE="A aplicacao respondeu HTTP $CODE."
+          fi
+          {
+            echo "estado=falha"
+            echo "codigo=$CODE"
+            echo "detalhe=$DETALHE"
+          } >> $GITHUB_OUTPUT
+          echo "FALHA · HTTP $CODE · $BODY"
+
+      - name: Abrir aviso se estiver fora do ar
+        if: steps.check.outputs.estado == 'falha'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marcador = '<!-- vigia-externo -->';
+            const { owner, repo } = context.repo;
+            const abertas = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', labels: 'fora-do-ar',
+            });
+            const jaAberta = abertas.data.find(i => i.body?.includes(marcador));
+            const detalhe = ${{ toJSON(steps.check.outputs.detalhe) }};
+            const agora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+            const corpo = [
+              marcador,
+              '**O sistema nao esta respondendo.**',
+              '',
+              detalhe,
+              '',
+              `Verificado em ${agora} (horario de Brasilia), apos duas tentativas.`,
+              '',
+              'Passos na VPS:',
+              '```',
+              'ssh svs@77.42.34.72',
+              'pm2 logs sistema-laudemir --err --lines 40',
+              'pm2 restart sistema-laudemir --update-env',
+              'tail -20 ~/sistema-laudemir-cron/watchdog.log',
+              '```',
+              '',
+              'Esta issue fecha sozinha quando o sistema voltar.',
+            ].join('\n');
+
+            if (jaAberta) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: jaAberta.number,
+                body: `Ainda fora do ar em ${agora}. ${detalhe}`,
+              });
+            } else {
+              await github.rest.issues.create({
+                owner, repo,
+                title: 'Sistema fora do ar',
+                body: corpo,
+                labels: ['fora-do-ar'],
+              });
+            }
+
+      - name: Fechar o aviso quando voltar
+        if: steps.check.outputs.estado == 'ok'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const marcador = '<!-- vigia-externo -->';
+            const { owner, repo } = context.repo;
+            const abertas = await github.rest.issues.listForRepo({
+              owner, repo, state: 'open', labels: 'fora-do-ar',
+            });
+            const agora = new Date().toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' });
+            for (const issue of abertas.data.filter(i => i.body?.includes(marcador))) {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: issue.number,
+                body: `Sistema voltou a responder em ${agora}.`,
+              });
+              await github.rest.issues.update({
+                owner, repo, issue_number: issue.number, state: 'closed',
+              });
+            }
