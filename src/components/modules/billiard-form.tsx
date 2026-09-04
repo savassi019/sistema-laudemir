@@ -1075,7 +1075,9 @@ export function BilliardForm({
                     <div className="rounded-2xl border border-[#8aa17c]/25 bg-[#1d2e22]/70 p-3 text-sm text-[#dbe6d4]">
                       <div className="flex items-center gap-2 font-semibold">
                         <CheckCircle2 className="size-4" />
-                        Cadastro salvo
+                        {receipt.source === "database"
+                          ? "Cadastro salvo"
+                          : "Salvo só neste aparelho — ainda não foi pro servidor"}
                       </div>
                       <p className="mt-1 text-xs leading-5">
                         {receipt.pointName} —{" "}

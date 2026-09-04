@@ -425,10 +425,20 @@ export function MachineContractForm({ hideFinancials = false }: { hideFinancials
       ) : null}
 
       {receipt ? (
-        <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">
-          <div className="flex items-center gap-2 text-[#dbe6d4]">
+        <article
+          className={
+            saveError
+              ? "rounded-[28px] border border-[#b46c5d]/35 bg-[#2b1e19]/72 p-5"
+              : "rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5"
+          }
+        >
+          {/* Nao dizer "salvo" quando nao salvou: em campo o cartao verde e
+              lido de relance e o contrato se perde sem ninguem notar. */}
+          <div className={saveError ? "flex items-center gap-2 text-[#f0c9ad]" : "flex items-center gap-2 text-[#dbe6d4]"}>
             <ReceiptText className="size-4" />
-            <p className="font-medium">Contrato salvo</p>
+            <p className="font-medium">
+              {saveError ? "NÃO salvo no servidor — confira a conexão" : "Contrato salvo"}
+            </p>
           </div>
           <div className="mt-4 grid gap-3 text-sm text-[#dbe6d4]/85 md:grid-cols-2">
             <p>Código: {receipt.clientCode}</p>

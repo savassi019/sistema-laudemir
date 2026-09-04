@@ -139,8 +139,8 @@ const createPlushSchema = z.object({
   compensationStatus: z.enum(["WORTH_IT", "NOT_WORTH_IT"]),
   noteiro: z.string().optional(),
   notes: z.string().optional(),
-  coinPhotoFileId: z.string().optional(),
-  giftPhotoFileId: z.string().optional(),
+  coinPhotoFileId: z.string().nullish(),
+  giftPhotoFileId: z.string().nullish(),
 });
 
 const createBilliardSchema = z.object({
@@ -205,8 +205,8 @@ const createBxSchema = z.object({
   receiptStatus: z.string(),
   exceptionClient: z.boolean(),
   notes: z.string().optional(),
-  screenPhotoFileId: z.string().optional(),
-  paperPhotoFileId: z.string().optional(),
+  screenPhotoFileId: z.string().nullish(),
+  paperPhotoFileId: z.string().nullish(),
 });
 
 const createSlotSchema = z.object({
@@ -239,7 +239,7 @@ const createSlotSchema = z.object({
   generatedDebtAmount: z.number().optional(),
   debtMode: z.enum(["NONE", "DEBT", "NEGATIVE"]),
   paymentMethod: z.string().optional(),
-  screenPhotoFileId: z.string().optional(),
+  screenPhotoFileId: z.string().nullish(),
   notes: z.string().optional(),
 });
 
@@ -254,7 +254,7 @@ const createMachineContractSchema = z.object({
   installmentFixed: z.boolean(),
   guaranteeEnabled: z.boolean(),
   signatureLink: z.string().optional(),
-  signatureFileId: z.string().optional(),
+  signatureFileId: z.string().nullish(),
   streetLoanAmount: z.number().optional(),
   monthlyInterestTotal: z.number().optional(),
   generalPercentageAvg: z.number().optional(),
@@ -286,10 +286,10 @@ const createMarketingSchema = z.object({
   phone: z.string().optional(),
   email: z.string().optional(),
   signatureLink: z.string().optional(),
-  signatureFileId: z.string().optional(),
+  signatureFileId: z.string().nullish(),
   expenseAmount: z.number().optional(),
   paymentMethod: z.string().optional(),
-  contractFileId: z.string().optional(),
+  contractFileId: z.string().nullish(),
   status: z.string(),
   notes: z.string().optional(),
 });

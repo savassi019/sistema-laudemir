@@ -254,7 +254,7 @@ export function PersonalFinanceForm({
         <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">
           <div className="flex items-center gap-2 text-[#dbe6d4]">
             <CalendarCheck2 className="size-4" />
-            <p className="font-medium">Lançamento salvo</p>
+            <p className="font-medium">{saveError ? "NAO salvo no servidor — confira a conexão" : "Lançamento salvo"}</p>
           </div>
           <div className="mt-4 grid gap-3 text-sm text-[#dbe6d4]/85 md:grid-cols-2">
             <p>Descrição: {receipt.title}</p>

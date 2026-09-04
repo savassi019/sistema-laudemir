@@ -445,7 +445,7 @@ export function MarketingContractForm({
         <article className="rounded-[28px] border border-[#7b6fc0]/30 bg-[#1e1b35]/80 p-5">
           <div className="flex items-center gap-2 text-[#c8bef5]">
             <ReceiptText className="size-4" />
-            <p className="font-medium">Contrato salvo</p>
+            <p className="font-medium">{saveError ? "NAO salvo no servidor — confira a conexão" : "Contrato salvo"}</p>
             <span className={cn(
               "ml-auto rounded-full border px-2 py-0.5 text-[10px] font-semibold",
               STATUS_COLOR[receipt.status] ?? "",
