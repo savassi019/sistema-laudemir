@@ -6,6 +6,11 @@ on:
   schedule:
     - cron: "*/10 * * * *"
   workflow_dispatch:
+    inputs:
+      url_teste:
+        description: "URL alternativa, so para testar se o alarme dispara de verdade"
+        required: false
+        default: ""
 
 permissions:
   issues: write
@@ -16,12 +21,15 @@ jobs:
     steps:
       - name: Checar se o sistema responde
         id: check
+        env:
+          URL_TESTE: ${{ github.event.inputs.url_teste }}
         run: |
           set +e
+          ALVO="${URL_TESTE:-https://erpinfinity.com.br/api/health}"
+          echo "Consultando: $ALVO"
           # Duas tentativas antes de acusar: evita alarme por soluco de rede.
           for tentativa in 1 2; do
-            CODE=$(curl -s -o corpo.txt -w "%{http_code}" --max-time 25 \
-              https://erpinfinity.com.br/api/health)
+            CODE=$(curl -s -o corpo.txt -w "%{http_code}" --max-time 25 "$ALVO")
             BODY=$(cat corpo.txt 2>/dev/null | head -c 300)
             if [ "$CODE" = "200" ] && echo "$BODY" | grep -q '"database":"up"'; then
               echo "estado=ok" >> $GITHUB_OUTPUT
