@@ -176,7 +176,15 @@ export function ModuleWorkspace({
         ) : null}
 
         {activeSection === "rotas" ? (
-          <RoutesSection hideFinancials={hideFinancials} />
+          <RoutesSection
+            hideFinancials={hideFinancials}
+            onAbrirPonto={(p) => {
+              // Vai direto pro fechamento daquele ponto, sem passar pela
+              // lista da Visita — o ponto ja foi escolhido aqui.
+              setVisitPreset({ id: p.id, name: p.name, phone: p.phone ?? "" });
+              setActiveSection("visita");
+            }}
+          />
         ) : null}
 
         {activeSection === "visita" ? (
