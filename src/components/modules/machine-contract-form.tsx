@@ -371,7 +371,16 @@ export function MachineContractForm({ hideFinancials = false }: { hideFinancials
             <label className={labelClass} htmlFor="signatureFile">
               Anexar PDF assinado
             </label>
-            <input id="signatureFile" type="file" className={fieldClass} {...form.register("signatureFile")} />
+            {/* Sem accept o seletor abre tudo; em campo e comum fotografar o
+                contrato assinado, entao aceita PDF e imagem — o servidor
+                barra acima de 10MB com mensagem clara. */}
+            <input
+              id="signatureFile"
+              type="file"
+              accept=".pdf,image/*"
+              className={fieldClass}
+              {...form.register("signatureFile")}
+            />
           </div>
         </div>
 
