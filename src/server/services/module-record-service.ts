@@ -1640,6 +1640,8 @@ export type ModuleClientItem = {
   tags: string[];
   badge?: string;
   phone?: string;
+  /** So o Bilhar usa rota hoje; os demais modulos deixam indefinido. */
+  routeNumber?: number | null;
 };
 
 function dedupeByKey<T>(items: T[], keyFn: (item: T) => string): T[] {
@@ -1679,6 +1681,7 @@ export async function listModuleClients(
           tags: [point.phone, point.cpf, point.cnpj, point.city].filter(Boolean) as string[],
           badge: `${formatCurrency(Number(point.chipValue ?? 0))}/ficha`,
           phone: point.phone ?? undefined,
+          routeNumber: point.routeNumber,
         }));
       }
       case "bx": {
@@ -2046,6 +2049,7 @@ export async function listModuleVisitTargets(
     status: item.badge === "Inativa" ? ("inativo" as const) : ("ativo" as const),
     balance: 0,
     updatedAt: new Date().toISOString(),
+    routeNumber: item.routeNumber,
   }));
 }
 

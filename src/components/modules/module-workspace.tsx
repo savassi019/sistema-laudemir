@@ -124,6 +124,7 @@ export function ModuleWorkspace({
   const [showRegisterForm, setShowRegisterForm] = useState(false);
   const [visitPreset, setVisitPreset] = useState<{ id?: string; name: string; phone: string } | null>(null);
   const [clientSearch, setClientSearch] = useState("");
+  const [rotaVisita, setRotaVisita] = useState<number | null>(null);
 
   const Form = formMap[slug];
 
@@ -192,11 +193,21 @@ export function ModuleWorkspace({
             {/* Etapa 1 – Selecionar ponto (lista unificada com badges de atraso) */}
             {needsClientPreselect && visitPreset === null ? (() => {
               const overdueMap = new Map(overdueClients.map((c) => [c.clientId, c.daysSinceVisit]));
-              const filtered = clients.filter((c) =>
-                c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
-                c.city?.toLowerCase().includes(clientSearch.toLowerCase()),
-              );
+              const filtered = clients.filter((c) => {
+                const busca =
+                  c.name.toLowerCase().includes(clientSearch.toLowerCase()) ||
+                  c.city?.toLowerCase().includes(clientSearch.toLowerCase());
+                const naRota =
+                  rotaVisita === null || (c.routeNumber ?? 0) === rotaVisita;
+                return busca && naRota;
+              });
               const overdueCount = clients.filter((c) => overdueMap.has(c.id)).length;
+              // O funcionario faz uma rota por vez: agrupar encurta a lista.
+              const rotasDaLista = hasRoutes
+                ? [...new Set(clients.map((c) => c.routeNumber ?? 0))]
+                    .filter((n) => n > 0)
+                    .sort((a, b) => a - b)
+                : [];
               return (
                 <div className="space-y-2">
                   <div className="flex items-center gap-2 px-1">
@@ -210,12 +221,46 @@ export function ModuleWorkspace({
                       </span>
                     )}
                   </div>
+
+                  {rotasDaLista.length > 1 && (
+                    <div className="flex gap-1.5 overflow-x-auto pb-1">
+                      <button
+                        type="button"
+                        onClick={() => setRotaVisita(null)}
+                        className={cn(
+                          "shrink-0 rounded-full border px-3 py-1.5 text-xs transition",
+                          rotaVisita === null
+                            ? "border-[#a78bfa]/40 bg-[#a78bfa]/15 text-[#c4b5fd]"
+                            : "border-white/10 bg-white/[0.03] text-[#c9c2b4]",
+                        )}
+                      >
+                        Todas ({clients.length})
+                      </button>
+                      {rotasDaLista.map((n) => (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setRotaVisita(n)}
+                          className={cn(
+                            "shrink-0 rounded-full border px-3 py-1.5 text-xs transition",
+                            rotaVisita === n
+                              ? "border-[#a78bfa]/40 bg-[#a78bfa]/15 text-[#c4b5fd]"
+                              : "border-white/10 bg-white/[0.03] text-[#c9c2b4]",
+                          )}
+                        >
+                          Rota {String(n).padStart(2, "0")} (
+                          {clients.filter((c) => (c.routeNumber ?? 0) === n).length})
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
                   <input
                     type="search"
                     placeholder="Buscar pelo nome..."
                     value={clientSearch}
                     onChange={(e) => setClientSearch(e.target.value)}
-                    className="w-full rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.04] px-3 py-2.5 text-sm text-white placeholder:text-[#9a958b] focus:border-[#a78bfa]/40 focus:outline-none"
+                    className="w-full rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.04] px-3 py-3 text-base text-white placeholder:text-[#9a958b] focus:border-[#a78bfa]/40 focus:outline-none md:text-sm"
                   />
                   <div className="space-y-1.5">
                     {filtered.map((c) => {

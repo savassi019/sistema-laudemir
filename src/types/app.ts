@@ -80,6 +80,8 @@ export type ClientListItem = {
   status: "ativo" | "inativo" | "inadimplente" | "excecao";
   balance: number;
   updatedAt: string;
+  /** So o Bilhar usa rota hoje; os demais modulos deixam indefinido. */
+  routeNumber?: number | null;
 };
 
 export type DelinquencyInfo = {
