@@ -11,6 +11,7 @@ import {
   Inbox,
   MapPin,
   Receipt,
+  Route,
   Search,
   UserPlus,
   WalletCards,
@@ -32,6 +33,7 @@ import { PersonalFinanceForm } from "@/components/modules/personal-finance-form"
 import { PlatformOnlineForm } from "@/components/modules/platform-online-form";
 import { PlushForm } from "@/components/modules/plush-form";
 import { RentalForm } from "@/components/modules/rental-form";
+import { RoutesSection } from "@/components/modules/routes-section";
 import { SlotForm } from "@/components/modules/slot-form";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
@@ -40,7 +42,7 @@ import type { ModuleClientItem, ModuleRecordItem } from "@/server/services/modul
 import type { ModuleScopeSummary } from "@/server/services/module-scope-service";
 import type { ClientListItem, ClientVisitSummary } from "@/types/app";
 
-type SectionKey = "operacao" | "visita" | "clientes" | "financeiro" | "contas-pagar" | "historico" | "relatorio";
+type SectionKey = "operacao" | "visita" | "rotas" | "clientes" | "financeiro" | "contas-pagar" | "historico" | "relatorio";
 
 type ModuleFormProps = {
   hideFinancials?: boolean;
@@ -76,6 +78,7 @@ type SectionCfg = {
 const SECTION_CFG: Record<SectionKey, SectionCfg> = {
   operacao:      { label: "Operação",   description: "Registrar fechamento",    icon: ClipboardList, accent: "#d1a04f", accentBg: "bg-[#d1a04f]/15", accentText: "text-[#f3dfae]" },
   visita:        { label: "Visita",     description: "Fechar ponto e registrar visita", icon: MapPin, accent: "#a78bfa", accentBg: "bg-[#a78bfa]/15", accentText: "text-[#c4b5fd]" },
+  rotas:         { label: "Rotas",      description: "Pontos agrupados por rota", icon: Route,  accent: "#a78bfa", accentBg: "bg-[#a78bfa]/15", accentText: "text-[#c4b5fd]" },
   clientes:      { label: "Clientes",   description: "Pontos cadastrados",      icon: UserPlus,      accent: "#60a5fa", accentBg: "bg-[#60a5fa]/15", accentText: "text-[#93c5fd]" },
   financeiro:    { label: "Financeiro", description: "Entradas e saídas",       icon: WalletCards,   accent: "#4ade80", accentBg: "bg-[#4ade80]/15", accentText: "text-[#86efac]" },
   "contas-pagar":{ label: "Contas",     description: "A pagar e receber",       icon: Receipt,       accent: "#fb923c", accentBg: "bg-[#fb923c]/15", accentText: "text-[#fdba74]" },
@@ -83,9 +86,11 @@ const SECTION_CFG: Record<SectionKey, SectionCfg> = {
   relatorio:     { label: "Relatório",  description: "Resumo financeiro",       icon: BarChart2,     accent: "#2dd4bf", accentBg: "bg-[#2dd4bf]/15", accentText: "text-[#5eead4]" },
 };
 
-const ALL_SECTIONS: SectionKey[] = ["operacao", "visita", "clientes", "financeiro", "contas-pagar", "historico", "relatorio"];
+const ALL_SECTIONS: SectionKey[] = ["operacao", "visita", "rotas", "clientes", "financeiro", "contas-pagar", "historico", "relatorio"];
 
 const slugsWithoutClientConcept = new Set(["mercado-autonomo", "plataforma-online", "financas-pessoais"]);
+// Rotas de campo hoje so existem no Bilhar (RoutePlan/BilliardPoint).
+const slugsWithRoutes = new Set(["bilhar-pebolim"]);
 const slugsWithVisitTracking = new Set([
   "bilhar-pebolim", "maquinas-de-pelucia", "bx", "h-caca-niquel", "carreta-kids", "locacao",
 ]);
@@ -113,6 +118,7 @@ export function ModuleWorkspace({
 }) {
   const hasClientConcept = !slugsWithoutClientConcept.has(slug);
   const hasVisitTracking = slugsWithVisitTracking.has(slug);
+  const hasRoutes = slugsWithRoutes.has(slug);
   const needsClientPreselect = hasVisitTracking;
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
   const [showRegisterForm, setShowRegisterForm] = useState(false);
@@ -124,6 +130,7 @@ export function ModuleWorkspace({
   const visibleSections = ALL_SECTIONS.filter((k) => {
     if (k === "operacao"      && hasVisitTracking)    return false; // Visita absorve o fechamento
     if (k === "visita"        && !hasVisitTracking)   return false;
+    if (k === "rotas"         && !hasRoutes)          return false;
     if (k === "clientes"      && !hasClientConcept)   return false;
     if (k === "financeiro"    && hideFinancials)       return false;
     if (k === "contas-pagar"  && hideFinancials)       return false;
@@ -166,6 +173,10 @@ export function ModuleWorkspace({
               <p className="text-sm text-[#9a958b]">Formulário pendente.</p>
             )}
           </div>
+        ) : null}
+
+        {activeSection === "rotas" ? (
+          <RoutesSection hideFinancials={hideFinancials} />
         ) : null}
 
         {activeSection === "visita" ? (

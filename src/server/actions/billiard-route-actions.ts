@@ -8,11 +8,17 @@ import {
   listBilliardPointHistory,
   listBilliardPoints,
   listRoutePlans,
+  listRoutesOverview,
 } from "@/server/services/billiard-route-service";
 
 export async function listRoutePlansAction() {
   const session = await requireSession("BILLIARD");
   return listRoutePlans(session);
+}
+
+export async function listRoutesOverviewAction() {
+  const session = await requireSession("BILLIARD");
+  return listRoutesOverview(session);
 }
 
 export async function createRoutePlanAction(data: {

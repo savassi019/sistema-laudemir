@@ -158,6 +158,66 @@ export async function listBilliardPoints(
   });
 }
 
+export type RouteOverviewItem = {
+  routeNumber: number;
+  name: string | null;
+  code: string | null;
+  description: string | null;
+  registered: boolean;
+  totalPoints: number;
+  needsClothChange: number;
+  roofOpen: number;
+  collected: number;
+  pending: number;
+  points: BilliardPointItem[];
+};
+
+/**
+ * Junta as rotas cadastradas (RoutePlan) com os pontos que carregam aquele
+ * numero de rota. Um ponto pode apontar pra uma rota que nunca foi cadastrada
+ * — nesse caso ela aparece mesmo assim, marcada como nao registrada, senao o
+ * ponto sumiria da tela.
+ */
+export async function listRoutesOverview(session: SessionData): Promise<RouteOverviewItem[]> {
+  const [plans, points] = await Promise.all([
+    listRoutePlans(session),
+    listBilliardPoints(session),
+  ]);
+
+  const porNumero = new Map<number, BilliardPointItem[]>();
+  for (const point of points) {
+    const n = point.routeNumber ?? 0;
+    const atual = porNumero.get(n);
+    if (atual) atual.push(point);
+    else porNumero.set(n, [point]);
+  }
+
+  const numeros = new Set<number>([
+    ...plans.map((p) => p.routeNumber),
+    ...porNumero.keys(),
+  ]);
+
+  return [...numeros]
+    .sort((a, b) => a - b)
+    .map((routeNumber) => {
+      const plan = plans.find((p) => p.routeNumber === routeNumber);
+      const doGrupo = porNumero.get(routeNumber) ?? [];
+      return {
+        routeNumber,
+        name: plan?.name ?? null,
+        code: plan?.code ?? null,
+        description: plan?.description ?? null,
+        registered: Boolean(plan),
+        totalPoints: doGrupo.length,
+        needsClothChange: doGrupo.filter((p) => p.status === "Trocar pano").length,
+        roofOpen: doGrupo.filter((p) => p.status === "Telhado aberto").length,
+        collected: doGrupo.filter((p) => p.status === "Coletado").length,
+        pending: doGrupo.filter((p) => p.status === "Pendente").length,
+        points: doGrupo,
+      };
+    });
+}
+
 export async function getBilliardPoint(
   session: SessionData,
   pointId: string,

@@ -225,6 +225,7 @@ export function BilliardForm({
   );
   const visibleSteps = initialClientId ? steps.filter((s) => s.key !== "rota") : steps;
   const [routePoints, setRoutePoints] = useState<BilliardPointItem[]>([]);
+  const [rotaSelecionada, setRotaSelecionada] = useState<number | null>(null);
   const [routePlans, setRoutePlans] = useState<RoutePlanOption[]>([]);
   const [loadingPoints, setLoadingPoints] = useState(true);
   const [newRouteOpen, setNewRouteOpen] = useState(false);
@@ -383,6 +384,32 @@ export function BilliardForm({
     roofDebt,
     structureCost,
   ]);
+
+  // As rotas saem dos proprios pontos, nao do RoutePlan: um ponto pode ter
+  // numero de rota sem que a rota tenha sido cadastrada, e nesse caso ele
+  // precisa continuar aparecendo no filtro.
+  const rotasDisponiveis = useMemo(() => {
+    const contagem = new Map<number, number>();
+    for (const p of routePoints) {
+      const n = p.routeNumber ?? 0;
+      contagem.set(n, (contagem.get(n) ?? 0) + 1);
+    }
+    return [...contagem.entries()]
+      .map(([numero, total]) => ({
+        numero,
+        total,
+        nome: routePlans.find((pl) => pl.routeNumber === numero)?.name ?? null,
+      }))
+      .sort((a, b) => a.numero - b.numero);
+  }, [routePoints, routePlans]);
+
+  const pontosVisiveis = useMemo(
+    () =>
+      rotaSelecionada === null
+        ? routePoints
+        : routePoints.filter((p) => (p.routeNumber ?? 0) === rotaSelecionada),
+    [routePoints, rotaSelecionada],
+  );
 
   function validateCurrentStep(): string | null {
     if (activeStep === "rota") {
@@ -647,15 +674,35 @@ export function BilliardForm({
                 title="Rota de campo"
                 helper="Abra o ponto da rota e lance somente o fechamento necessário."
               >
-                {routePlans.length > 0 ? (
+                {rotasDisponiveis.length > 0 ? (
                   <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-                    {routePlans.map((plan) => (
-                      <span
-                        key={plan.id}
-                        className="shrink-0 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1.5 text-xs text-[#c9c2b4]"
+                    <button
+                      type="button"
+                      onClick={() => setRotaSelecionada(null)}
+                      className={cn(
+                        "shrink-0 rounded-full border px-3 py-1.5 text-xs transition",
+                        rotaSelecionada === null
+                          ? "border-[#d1a04f]/40 bg-[#d1a04f]/15 text-[#f3dfae]"
+                          : "border-white/10 bg-white/[0.03] text-[#c9c2b4]",
+                      )}
+                    >
+                      Todas ({routePoints.length})
+                    </button>
+                    {rotasDisponiveis.map((r) => (
+                      <button
+                        key={r.numero}
+                        type="button"
+                        onClick={() => setRotaSelecionada(r.numero)}
+                        className={cn(
+                          "shrink-0 rounded-full border px-3 py-1.5 text-xs transition",
+                          rotaSelecionada === r.numero
+                            ? "border-[#d1a04f]/40 bg-[#d1a04f]/15 text-[#f3dfae]"
+                            : "border-white/10 bg-white/[0.03] text-[#c9c2b4]",
+                        )}
                       >
-                        Rota {String(plan.routeNumber).padStart(2, "0")} - {plan.name}
-                      </span>
+                        Rota {String(r.numero).padStart(2, "0")}
+                        {r.nome ? ` - ${r.nome}` : ""} ({r.total})
+                      </button>
                     ))}
                   </div>
                 ) : null}
@@ -666,9 +713,11 @@ export function BilliardForm({
                   <p className={hintClass}>
                     Nenhum ponto cadastrado ainda. Toque em &quot;Novo ponto&quot; para começar.
                   </p>
+                ) : pontosVisiveis.length === 0 ? (
+                  <p className={hintClass}>Nenhum ponto nesta rota.</p>
                 ) : (
                   <div className="grid gap-2">
-                    {routePoints.map((point) => (
+                    {pontosVisiveis.map((point) => (
                       <button
                         key={point.id}
                         type="button"
