@@ -32,6 +32,18 @@ jobs:
             CODE=$(curl -s -o corpo.txt -w "%{http_code}" --max-time 25 "$ALVO")
             BODY=$(cat corpo.txt 2>/dev/null | head -c 300)
             if [ "$CODE" = "200" ] && echo "$BODY" | grep -q '"database":"up"'; then
+              # Site no ar e banco ok, mas o vigia da VPS pode ter achado
+              # outra coisa (login quebrado, config trocada, backup faltando).
+              if echo "$BODY" | grep -qE '"checks":"(degradado|parado)"'; then
+                echo "estado=falha" >> $GITHUB_OUTPUT
+                if echo "$BODY" | grep -q '"checks":"parado"'; then
+                  echo 'detalhe=O site responde, mas o vigia interno parou de rodar ha mais de 30 min.' >> $GITHUB_OUTPUT
+                else
+                  echo 'detalhe=O site responde, mas o vigia interno da VPS detectou problema. Veja watchdog.log.' >> $GITHUB_OUTPUT
+                fi
+                echo "DEGRADADO · $BODY"
+                exit 0
+              fi
               echo "estado=ok" >> $GITHUB_OUTPUT
               echo "OK · $BODY"
               exit 0
