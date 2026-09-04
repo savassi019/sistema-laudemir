@@ -1,14 +1,35 @@
 "use client";
 
-import { Activity, Plus, Shield, User, X } from "lucide-react";
+import { Activity, Check, Plus, Shield, User, X } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 
 import { fieldClass, labelClass, selectClass } from "@/components/modules/styles";
 import { moduleCatalog } from "@/lib/module-catalog";
+import {
+  PASSWORD_MIN,
+  REQUISITOS_SENHA,
+  normalizarEmail,
+  validarEmail,
+  validarNome,
+  validarSenha,
+} from "@/lib/user-validation";
 import { createStaffAction } from "@/server/actions/user-actions";
 import type { ModuleName, StaffMember } from "@/types/app";
 
 const assignableModules = moduleCatalog.filter((item) => item.group !== "core");
+
+/** Senha legível: sem 0/O/1/l, que geram confusão ao ditar por telefone. */
+function gerarSenha() {
+  const letras = "abcdefghijkmnpqrstuvwxyz";
+  const maius = "ABCDEFGHJKLMNPQRSTUVWXYZ";
+  const nums = "23456789";
+  const todos = letras + maius + nums;
+  const sorteia = (s: string) => s[Math.floor(Math.random() * s.length)];
+  // Garante o que os requisitos pedem, depois completa até 10.
+  const base = [sorteia(maius), sorteia(letras), sorteia(nums), sorteia(nums)];
+  while (base.length < 10) base.push(sorteia(todos));
+  return base.sort(() => Math.random() - 0.5).join("");
+}
 
 type VisitStats = Record<string, { count: number; lastVisitAt?: string }>;
 
@@ -31,6 +52,9 @@ export function StaffManagement({
   const [isPending, startTransition] = useTransition();
   const formRef = useRef<HTMLFormElement>(null);
   const submittingRef = useRef(false);
+  const [senhaDigitada, setSenhaDigitada] = useState("");
+  const [emailDigitado, setEmailDigitado] = useState("");
+  const [mostrarSenha, setMostrarSenha] = useState(false);
 
   function setAllModules(checked: boolean) {
     formRef.current
@@ -53,18 +77,19 @@ export function StaffManagement({
       modules: fd.getAll("modules") as ModuleName[],
     };
 
-    if (!data.name || !data.email || !data.password) {
-      setError("Nome, e-mail e senha são obrigatórios.");
-      return;
-    }
-    if (data.password.length < 8) {
-      setError("A senha deve ter ao menos 8 caracteres.");
+    const problema =
+      validarNome(data.name) ??
+      validarEmail(data.email) ??
+      (validarSenha(data.password) ? `Senha: ${validarSenha(data.password)}` : null);
+    if (problema) {
+      setError(problema);
       return;
     }
     if (data.modules.length === 0) {
       setError("Selecione ao menos um módulo para este funcionário.");
       return;
     }
+    data.email = normalizarEmail(data.email);
 
     setError(null);
     submittingRef.current = true;
@@ -72,9 +97,12 @@ export function StaffManagement({
       try {
         const member = await createStaffAction(data);
         setStaff((prev) => [member, ...prev]);
-        setMessage(`${member.name} adicionado com sucesso.`);
+        setMessage(`${member.name} adicionado. Login: ${member.email}`);
         setFormOpen(false);
         (event.target as HTMLFormElement).reset();
+        setSenhaDigitada("");
+        setEmailDigitado("");
+        setMostrarSenha(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Falha ao criar funcionário.");
       } finally {
@@ -124,8 +152,26 @@ export function StaffManagement({
               <input name="name" required className={fieldClass} placeholder="Nome completo" />
             </label>
             <label className="block space-y-2">
-              <span className={labelClass}>E-mail</span>
-              <input name="email" type="email" required className={fieldClass} placeholder="email@exemplo.com" />
+              <span className={labelClass}>E-mail de acesso</span>
+              <input
+                name="email"
+                type="email"
+                inputMode="email"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                required
+                value={emailDigitado}
+                onChange={(e) => setEmailDigitado(e.target.value)}
+                className={fieldClass}
+                placeholder="nome@empresa.com"
+              />
+              <span className="block text-[11px] text-[#5a544c]">
+                É com este e-mail que a pessoa entra no sistema.
+                {emailDigitado !== emailDigitado.toLowerCase() && (
+                  <span className="text-[#fdba74]"> Será salvo em minúsculas.</span>
+                )}
+              </span>
             </label>
             <label className="block space-y-2">
               <span className={labelClass}>Telefone</span>
@@ -138,17 +184,73 @@ export function StaffManagement({
                 <option value="ADMIN">Administrador</option>
               </select>
             </label>
-            <label className="block space-y-2 sm:col-span-2">
-              <span className={labelClass}>Senha inicial</span>
-              <input
-                name="password"
-                type="password"
-                required
-                minLength={8}
-                className={fieldClass}
-                placeholder="Mín. 8 caracteres"
-              />
-            </label>
+            <div className="space-y-2 sm:col-span-2">
+              <label className="block space-y-2">
+                <span className={labelClass}>Senha inicial</span>
+                <input
+                  name="password"
+                  type={mostrarSenha ? "text" : "password"}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  required
+                  minLength={PASSWORD_MIN}
+                  value={senhaDigitada}
+                  onChange={(e) => setSenhaDigitada(e.target.value)}
+                  className={fieldClass}
+                  placeholder="Crie uma senha"
+                />
+              </label>
+
+              {/* Requisitos marcando ao vivo: erra menos do que descobrir no submit */}
+              <ul className="grid grid-cols-2 gap-x-3 gap-y-1">
+                {REQUISITOS_SENHA.map((r) => {
+                  const ok = r.ok(senhaDigitada);
+                  return (
+                    <li
+                      key={r.id}
+                      className={`flex items-center gap-1.5 text-[11px] ${
+                        senhaDigitada.length === 0
+                          ? "text-[#5a544c]"
+                          : ok
+                            ? "text-[#86efac]"
+                            : "text-[#f0c9ad]"
+                      }`}
+                    >
+                      {senhaDigitada.length > 0 && ok ? (
+                        <Check className="size-3 shrink-0" />
+                      ) : (
+                        <span className="size-1 shrink-0 rounded-full bg-current" />
+                      )}
+                      {r.label}
+                    </li>
+                  );
+                })}
+              </ul>
+
+              <div className="flex items-center justify-between gap-2">
+                <button
+                  type="button"
+                  onClick={() => setMostrarSenha((v) => !v)}
+                  className="text-[11px] font-medium text-[#d1a04f] hover:underline"
+                >
+                  {mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSenhaDigitada(gerarSenha());
+                    setMostrarSenha(true);
+                  }}
+                  className="text-[11px] font-medium text-[#d1a04f] hover:underline"
+                >
+                  Gerar senha
+                </button>
+              </div>
+              <p className="text-[11px] text-[#5a544c]">
+                Anote e passe esta senha para a pessoa — ela não aparece depois.
+              </p>
+            </div>
           </div>
 
           <div className="mt-4 space-y-2">

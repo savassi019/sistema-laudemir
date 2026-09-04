@@ -3,6 +3,7 @@ import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
+import { normalizarEmail } from "@/lib/user-validation";
 import type { ModuleName, SessionData, StaffMember } from "@/types/app";
 
 const globalForUsers = globalThis as unknown as {
@@ -88,11 +89,15 @@ export async function createStaff(
     const passwordHash = await bcrypt.hash(data.password, 10);
     const grantedModules = Array.from(new Set<ModuleName>(["DASHBOARD", ...data.modules]));
 
+    // authenticateUser busca por email.toLowerCase(): gravar com maiuscula
+    // deixaria o funcionario sem conseguir entrar, sem mensagem que explique.
+    const email = normalizarEmail(data.email);
+
     const user = await prisma.user.create({
       data: {
         organizationId: session.organizationId,
         name: data.name,
-        email: data.email,
+        email,
         phone: data.phone || undefined,
         passwordHash,
         role: data.role,
