@@ -157,7 +157,11 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
         setLoadedClient({ clientName: data.clientName, phone: data.phone });
         form.setValue("clientName", data.clientName);
         form.setValue("phone", data.phone);
-        form.setValue("cpf", data.cpf);
+        // CPF invalido gravado antes da validacao existir travava o
+        // fechamento: o campo nao aparece nesta tela, entao o erro nao tinha
+        // onde ser exibido e o botao Salvar simplesmente nao respondia.
+        // O cadastro do cliente mantem o CPF; aqui ele so nao entra.
+        form.setValue("cpf", data.cpf && isValidCpf(data.cpf) ? data.cpf : "");
         form.setValue("cep", data.cep);
         form.setValue("street", data.street);
         form.setValue("neighborhood", data.neighborhood);
@@ -604,6 +608,19 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           </label>
           <textarea id="notes" className={textareaClass} {...form.register("notes")} />
         </div>
+
+        {/* Sem isto, um campo invalido que nao esta visivel na tela faz o
+            botao Salvar nao responder, sem explicacao nenhuma. */}
+        {Object.keys(form.formState.errors).length > 0 ? (
+          <div className="rounded-2xl border border-[#b46c5d]/35 bg-[#2b1e19]/70 p-3 text-sm text-[#f0c9ad]">
+            <p className="font-medium">Falta corrigir para salvar:</p>
+            <ul className="mt-1 list-disc space-y-0.5 pl-4 text-[13px]">
+              {Object.entries(form.formState.errors).map(([campo, erro]) => (
+                <li key={campo}>{(erro as { message?: string })?.message ?? campo}</li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
 
         <button
           type="submit"
