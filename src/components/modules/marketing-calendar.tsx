@@ -61,6 +61,8 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
   const [mes, setMes] = useState(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1));
   const [diaSel, setDiaSel] = useState<string>(() => chaveDia(new Date()));
   const [novoAberto, setNovoAberto] = useState(false);
+  // null = todos os clientes. Com varios clientes o mes vira sopa sem isto.
+  const [clienteFiltro, setClienteFiltro] = useState<string | null>(null);
 
   async function carregar() {
     try {
@@ -78,6 +80,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
   const porDia = useMemo(() => {
     const mapa = new Map<string, Tarefa[]>();
     for (const cliente of clientes) {
+      if (clienteFiltro && cliente.id !== clienteFiltro) continue;
       for (const c of cliente.contents) {
         const d = new Date(c.contentDate);
         if (Number.isNaN(d.getTime())) continue;
@@ -97,7 +100,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
       }
     }
     return mapa;
-  }, [clientes, hoje]);
+  }, [clientes, hoje, clienteFiltro]);
 
   // Grade do mês começando no domingo, completando as semanas.
   const semanas = useMemo(() => {
@@ -140,6 +143,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
     return { atrasados, pendentes, total };
   }, [porDia, mes]);
 
+  const selecionado = clienteFiltro ? clientes.find((c) => c.id === clienteFiltro) ?? null : null;
   const tarefasDoDia = porDia.get(diaSel) ?? [];
 
   async function avancar(t: Tarefa) {
@@ -188,12 +192,70 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
         </button>
       </div>
 
-      {/* Saúde da agência — some para funcionário, que não vê valores */}
+      {/* Filtrando um cliente, os cartoes falam dele; sem filtro, da agencia.
+          Some para funcionário, que não vê valores. */}
       {!hideFinancials && clientes.length > 0 && (
         <div className="grid grid-cols-3 gap-2 md:gap-3">
-          <MiniCartao rotulo="Ativos" rotuloLargo="Clientes ativos" valor={String(agencia.ativos)} cor="text-[#4ade80]" />
-          <MiniCartao rotulo="Receita" rotuloLargo="Receita mensal" valor={formatCurrency(agencia.receita)} cor="text-[#f3dfae]" />
-          <MiniCartao rotulo="Prospecção" rotuloLargo="Em prospecção" valor={String(agencia.prospeccao)} cor="text-[#93c5fd]" />
+          {selecionado ? (
+            <>
+              <MiniCartao rotulo="Serviço" rotuloLargo="Serviço" valor={selecionado.serviceType || "—"} cor="text-[#c9c2b4]" />
+              <MiniCartao rotulo="Contrato" rotuloLargo="Valor do contrato" valor={formatCurrency(selecionado.contractValue)} cor="text-[#f3dfae]" />
+              <MiniCartao
+                rotulo="A fazer"
+                rotuloLargo="Pendentes"
+                valor={String(selecionado.contents.filter((i) => i.status !== "APPROVED").length)}
+                cor="text-[#93c5fd]"
+              />
+            </>
+          ) : (
+            <>
+              <MiniCartao rotulo="Ativos" rotuloLargo="Clientes ativos" valor={String(agencia.ativos)} cor="text-[#4ade80]" />
+              <MiniCartao rotulo="Receita" rotuloLargo="Receita mensal" valor={formatCurrency(agencia.receita)} cor="text-[#f3dfae]" />
+              <MiniCartao rotulo="Prospecção" rotuloLargo="Em prospecção" valor={String(agencia.prospeccao)} cor="text-[#93c5fd]" />
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Filtro por cliente: com varios clientes o mes fica ilegivel sem isto */}
+      {clientes.length > 1 && (
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+          <button
+            type="button"
+            onClick={() => setClienteFiltro(null)}
+            className={cn(
+              "flex min-h-11 shrink-0 items-center rounded-xl border px-3 text-xs font-medium transition",
+              clienteFiltro === null
+                ? "border-[#d1a04f]/40 bg-[#d1a04f]/12 text-[#f3dfae]"
+                : "border-white/10 bg-white/[0.03] text-[#9a958b] active:bg-white/[0.07]",
+            )}
+          >
+            Todos ({clientes.length})
+          </button>
+          {clientes.map((c) => {
+            const pendentes = c.contents.filter((i) => i.status !== "APPROVED").length;
+            const ativo = clienteFiltro === c.id;
+            return (
+              <button
+                key={c.id}
+                type="button"
+                onClick={() => setClienteFiltro(ativo ? null : c.id)}
+                className={cn(
+                  "flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition",
+                  ativo
+                    ? "border-[#d1a04f]/40 bg-[#d1a04f]/12 text-[#f3dfae]"
+                    : "border-white/10 bg-white/[0.03] text-[#9a958b] active:bg-white/[0.07]",
+                )}
+              >
+                {c.name}
+                {pendentes > 0 && (
+                  <span className="rounded-full bg-white/[0.08] px-1.5 text-[10px] font-semibold">
+                    {pendentes}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -339,7 +401,8 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] text-white">{t.titulo}</p>
                 <p className="truncate text-[11px] text-[#9a958b]">
-                  {TIPOS[t.kind].label} · {t.cliente}
+                  {TIPOS[t.kind].label}
+                  {!clienteFiltro && ` · ${t.cliente}`}
                   {t.atrasado && <span className="text-[#f87171]"> · atrasado</span>}
                 </p>
               </div>
@@ -376,6 +439,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
         ) : novoAberto ? (
           <NovoCompromisso
             clientes={clientes}
+            clientePadrao={clienteFiltro}
             data={dataSel}
             onCriado={() => { setNovoAberto(false); carregar(); }}
             onCancelar={() => setNovoAberto(false)}
@@ -417,18 +481,21 @@ const campoCls =
  */
 function NovoCompromisso({
   clientes,
+  clientePadrao,
   data,
   onCriado,
   onCancelar,
 }: {
   clientes: MarketingClientDetail[];
+  clientePadrao: string | null;
   data: Date;
   onCriado: () => void;
   onCancelar: () => void;
 }) {
   const [tipo, setTipo] = useState<MarketingContentKind>("MEETING");
   const [titulo, setTitulo] = useState("");
-  const [clienteId, setClienteId] = useState(clientes[0]?.id ?? "");
+  // Filtrando um cliente, marcar compromisso ja assume esse cliente.
+  const [clienteId, setClienteId] = useState(clientePadrao ?? clientes[0]?.id ?? "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
