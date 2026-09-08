@@ -160,7 +160,7 @@ export function MarketingCalendar() {
           type="button"
           onClick={() => mudarMes(-1)}
           aria-label="Mês anterior"
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-[#c9c2b4] transition active:bg-white/[0.08]"
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-[#c9c2b4] transition active:bg-white/[0.08]"
         >
           <ChevronLeft className="size-4" />
         </button>
@@ -171,7 +171,7 @@ export function MarketingCalendar() {
           type="button"
           onClick={() => mudarMes(1)}
           aria-label="Próximo mês"
-          className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-[#c9c2b4] transition active:bg-white/[0.08]"
+          className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] text-[#c9c2b4] transition active:bg-white/[0.08]"
         >
           <ChevronRight className="size-4" />
         </button>
@@ -202,7 +202,7 @@ export function MarketingCalendar() {
             setMes(new Date(h.getFullYear(), h.getMonth(), 1));
             setDiaSel(chaveDia(h));
           }}
-          className="ml-auto rounded-full border border-white/10 px-2.5 py-0.5 font-medium text-[#c9c2b4] transition active:bg-white/[0.08]"
+          className="ml-auto flex min-h-11 items-center rounded-full border border-white/10 px-3.5 font-medium text-[#c9c2b4] transition active:bg-white/[0.08]"
         >
           Hoje
         </button>
@@ -212,7 +212,7 @@ export function MarketingCalendar() {
       <div className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 p-2">
         <div className="mb-1 grid grid-cols-7">
           {DIAS_SEMANA.map((d, i) => (
-            <span key={i} className="text-center text-[10px] font-semibold text-[#5a544c]">{d}</span>
+            <span key={i} className="text-center text-[11px] font-semibold text-[#5a544c]">{d}</span>
           ))}
         </div>
 
@@ -266,7 +266,7 @@ export function MarketingCalendar() {
 
       {/* Tarefas do dia escolhido */}
       <div className="space-y-1.5">
-        <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
+        <p className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#9a958b]">
           {dataSel.getDate()} de {MESES[dataSel.getMonth()]}
           {tarefasDoDia.length > 0 && ` · ${tarefasDoDia.length} item${tarefasDoDia.length !== 1 ? "s" : ""}`}
         </p>
@@ -298,7 +298,7 @@ export function MarketingCalendar() {
                 onClick={() => avancar(t)}
                 disabled={salvando === t.id}
                 className={cn(
-                  "flex shrink-0 items-center gap-1 rounded-full border px-2.5 py-1 text-[10px] font-semibold transition active:scale-95 disabled:opacity-60",
+                  "flex min-h-11 shrink-0 items-center gap-1 rounded-full border px-3.5 text-[11px] font-semibold transition active:scale-95 disabled:opacity-60",
                   STATUS[t.status].chip,
                 )}
               >
@@ -334,7 +334,7 @@ export function MarketingCalendar() {
           <button
             type="button"
             onClick={() => setNovoAberto(true)}
-            className="inline-flex w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/12 bg-white/[0.02] px-4 py-2.5 text-[11px] font-medium text-[#9a958b] transition active:border-[#d1a04f]/30 active:text-[#f3dfae]"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/12 bg-white/[0.02] px-4 text-xs font-medium text-[#9a958b] transition active:border-[#d1a04f]/30 active:text-[#f3dfae]"
           >
             <Plus className="size-3.5" />
             Marcar neste dia
@@ -402,7 +402,7 @@ function NovoCompromisso({
               type="button"
               onClick={() => setTipo(k)}
               className={cn(
-                "flex items-center justify-center gap-1 rounded-xl border px-2 py-2 text-[11px] font-medium transition",
+                "flex min-h-11 items-center justify-center gap-1 rounded-xl border px-2 text-[11px] font-medium transition",
                 ativo
                   ? "border-[#d1a04f]/45 bg-[#d1a04f]/15 text-[#f3dfae]"
                   : "border-white/10 bg-white/[0.03] text-[#9a958b]",

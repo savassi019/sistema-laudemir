@@ -162,7 +162,7 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
             {dados.atrasados.slice(0, 3).map((a) => {
               const Icone = ICONE_TIPO[a.kind];
               return (
-                <div key={a.id} className="flex items-center gap-2.5 px-3 py-2">
+                <div key={a.id} className="flex min-h-12 items-center gap-2.5 px-3 py-2">
                   <Icone className="size-3.5 shrink-0 text-[#f87171]/70" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] text-white">{a.titulo}</p>
@@ -197,7 +197,7 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
               const Icone = ICONE_TIPO[s.kind];
               const ehHoje = s.data.getTime() === dados.hoje.getTime();
               return (
-                <div key={s.id} className="flex items-center gap-2.5 px-3 py-2">
+                <div key={s.id} className="flex min-h-12 items-center gap-2.5 px-3 py-2">
                   <Icone className="size-3.5 shrink-0 text-[#93c5fd]" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[13px] text-white">{s.titulo}</p>
@@ -224,7 +224,7 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
 function Cartao({ rotulo, valor, cor }: { rotulo: string; valor: string; cor: string }) {
   return (
     <div className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0c100f]/80 px-3 py-3">
-      <p className="text-[9px] font-semibold uppercase tracking-[0.15em] text-[#9a958b]">{rotulo}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9a958b]">{rotulo}</p>
       <p className={cn("mt-1 text-base font-bold leading-tight", cor)}>{valor}</p>
     </div>
   );
