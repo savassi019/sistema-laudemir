@@ -183,7 +183,7 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     detail: "Receitas, despesas, contas a pagar, notas, agenda e totais por período.",
     group: "business",
     stage: "Fase 3",
-    emoji: "📓",
+    emoji: "💵",
     href: "/modulos/financas-pessoais",
   },
   {
@@ -205,7 +205,7 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     detail: "Telefone, documento, endereço, anexos e timeline completa.",
     group: "transversal",
     stage: "Base pronta",
-    emoji: "👥",
+    emoji: "🪪",
     href: "/clientes",
   },
   {
