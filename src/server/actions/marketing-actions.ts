@@ -112,6 +112,16 @@ export async function updateMarketingChecklistAction(
   });
 }
 
+/**
+ * Data sem hora (AAAA-MM-DD) vira meio-dia UTC, nao meia-noite.
+ * `new Date("2026-09-08")` e meia-noite UTC = dia 7 as 21h no Brasil, entao
+ * o compromisso aparecia no dia anterior no calendario. Meio-dia mantem o
+ * mesmo dia do calendario de UTC-11 a UTC+12.
+ */
+function dataDoCompromisso(valor: string): Date {
+  return /^\d{4}-\d{2}-\d{2}$/.test(valor) ? new Date(`${valor}T12:00:00Z`) : new Date(valor);
+}
+
 export async function addMarketingContentAction(
   contractId: string,
   title: string,
@@ -133,7 +143,7 @@ export async function addMarketingContentAction(
       organizationId: session.organizationId,
       contractId,
       title,
-      contentDate: new Date(contentDate),
+      contentDate: dataDoCompromisso(contentDate),
       kind,
       status,
       notes: notes || null,
