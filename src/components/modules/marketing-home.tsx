@@ -107,19 +107,19 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
   const estagiosComGente = FUNIL.filter((e) => (dados.porEstagio.get(e.key) ?? 0) > 0);
 
   return (
-    <div className="space-y-2.5">
+    <div className="space-y-2.5 md:space-y-4">
       {/* Números da agência — nao do caixa */}
-      <div className={cn("grid gap-2", hideFinancials ? "grid-cols-3" : "grid-cols-2")}>
+      <div className={cn("grid gap-2 md:gap-4", hideFinancials ? "grid-cols-3" : "grid-cols-2 md:grid-cols-4")}>
         <Cartao rotulo="Clientes ativos" valor={String(dados.ativos)} cor="text-[#4ade80]" />
         {!hideFinancials && (
           <Cartao rotulo="Receita mensal" valor={formatCurrency(dados.receita)} cor="text-[#f3dfae]" />
         )}
-        {hideFinancials && (
-          <>
-            <Cartao rotulo="Atrasados" valor={String(dados.atrasados.length)} cor={dados.atrasados.length ? "text-[#f87171]" : "text-[#86efac]"} />
-            <Cartao rotulo="Na semana" valor={String(dados.semana.length)} cor="text-[#93c5fd]" />
-          </>
-        )}
+        <Cartao
+          rotulo="Atrasados"
+          valor={String(dados.atrasados.length)}
+          cor={dados.atrasados.length ? "text-[#f87171]" : "text-[#86efac]"}
+        />
+        <Cartao rotulo="Na semana" valor={String(dados.semana.length)} cor="text-[#93c5fd]" />
       </div>
 
       {/* Funil */}
@@ -144,6 +144,9 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
         </button>
       )}
 
+      {/* No desktop as duas listas convivem lado a lado; empilhadas no celular
+          elas viravam uma faixa larga e vazia. */}
+      <div className="grid gap-2.5 md:grid-cols-2 md:items-start md:gap-4">
       {/* Atrasados: o que dói primeiro */}
       {dados.atrasados.length > 0 && (
         <button
@@ -162,10 +165,10 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
             {dados.atrasados.slice(0, 3).map((a) => {
               const Icone = ICONE_TIPO[a.kind];
               return (
-                <div key={a.id} className="flex min-h-12 items-center gap-2.5 px-3 py-2">
+                <div key={a.id} className="flex min-h-12 items-center gap-2.5 px-3 py-2 md:px-4 md:py-3">
                   <Icone className="size-3.5 shrink-0 text-[#f87171]/70" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] text-white">{a.titulo}</p>
+                    <p className="truncate text-[13px] text-white md:text-sm">{a.titulo}</p>
                     <p className="truncate text-[11px] text-[#9a958b]">{a.cliente}</p>
                   </div>
                   <span className="shrink-0 rounded-lg bg-[#f87171]/12 px-2 py-0.5 text-[11px] font-semibold text-[#f87171]">
@@ -197,10 +200,10 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
               const Icone = ICONE_TIPO[s.kind];
               const ehHoje = s.data.getTime() === dados.hoje.getTime();
               return (
-                <div key={s.id} className="flex min-h-12 items-center gap-2.5 px-3 py-2">
+                <div key={s.id} className="flex min-h-12 items-center gap-2.5 px-3 py-2 md:px-4 md:py-3">
                   <Icone className="size-3.5 shrink-0 text-[#93c5fd]" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[13px] text-white">{s.titulo}</p>
+                    <p className="truncate text-[13px] text-white md:text-sm">{s.titulo}</p>
                     <p className="truncate text-[11px] text-[#9a958b]">{NOME_TIPO[s.kind]} · {s.cliente}</p>
                   </div>
                   <span
@@ -217,15 +220,16 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
           </div>
         )}
       </button>
+      </div>
     </div>
   );
 }
 
 function Cartao({ rotulo, valor, cor }: { rotulo: string; valor: string; cor: string }) {
   return (
-    <div className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0c100f]/80 px-3 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9a958b]">{rotulo}</p>
-      <p className={cn("mt-1 text-base font-bold leading-tight", cor)}>{valor}</p>
+    <div className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0c100f]/80 px-3 py-3 md:px-5 md:py-4">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9a958b] md:text-[11px]">{rotulo}</p>
+      <p className={cn("mt-1 text-base font-bold leading-tight md:mt-2 md:text-2xl", cor)}>{valor}</p>
     </div>
   );
 }

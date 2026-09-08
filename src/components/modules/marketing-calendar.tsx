@@ -208,8 +208,11 @@ export function MarketingCalendar() {
         </button>
       </div>
 
+      {/* No desktop a grade e o detalhe do dia convivem lado a lado. */}
+      <div className="md:grid md:grid-cols-[minmax(0,1fr)_340px] md:items-start md:gap-4">
+
       {/* Grade */}
-      <div className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 p-2">
+      <div className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 p-2 md:p-3">
         <div className="mb-1 grid grid-cols-7">
           {DIAS_SEMANA.map((d, i) => (
             <span key={i} className="text-center text-[11px] font-semibold text-[#5a544c]">{d}</span>
@@ -234,17 +237,18 @@ export function MarketingCalendar() {
                     onClick={() => setDiaSel(k)}
                     className={cn(
                       "flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg text-xs transition",
+                      "md:aspect-auto md:min-h-[92px] md:items-stretch md:justify-start md:p-1.5",
                       foraDoMes ? "text-[#3a352f]" : "text-[#c9c2b4]",
                       selecionado ? "bg-[#d1a04f]/20 ring-1 ring-[#d1a04f]/50 text-white" : "active:bg-white/[0.06]",
                       !selecionado && ehHoje ? "ring-1 ring-white/20" : "",
                     )}
                   >
-                    <span className={cn(ehHoje && "font-bold text-white", temAtraso && !selecionado && "text-[#f87171]")}>
+                    <span className={cn("md:self-start md:px-0.5", ehHoje && "font-bold text-white", temAtraso && !selecionado && "text-[#f87171]")}>
                       {dia.getDate()}
                     </span>
                     {/* Pontos por status; acima de 3 vira contagem pra não estourar a célula */}
                     {itens.length > 0 && (
-                      <span className="flex h-1.5 items-center gap-0.5">
+                      <span className="flex h-1.5 items-center gap-0.5 md:hidden">
                         {itens.length <= 3 ? (
                           itens.map((it) => (
                             <span key={it.id} className={cn("size-1.5 rounded-full", it.atrasado ? "bg-[#f87171]" : STATUS[it.status].ponto)} />
@@ -252,6 +256,32 @@ export function MarketingCalendar() {
                         ) : (
                           <span className={cn("text-[9px] font-bold leading-none", temAtraso ? "text-[#f87171]" : "text-[#f3dfae]")}>
                             {itens.length}
+                          </span>
+                        )}
+                      </span>
+                    )}
+
+                    {/* Desktop: mostra o que e, nao so que existe algo */}
+                    {itens.length > 0 && (
+                      <span className="mt-1 hidden w-full flex-col gap-0.5 md:flex">
+                        {itens.slice(0, 2).map((it) => (
+                          <span
+                            key={it.id}
+                            className={cn(
+                              "truncate rounded px-1 py-0.5 text-left text-[10px] leading-tight",
+                              it.atrasado
+                                ? "bg-[#f87171]/15 text-[#f87171]"
+                                : it.status === "APPROVED"
+                                  ? "bg-[#4ade80]/12 text-[#86efac]"
+                                  : "bg-[#d1a04f]/12 text-[#f3dfae]",
+                            )}
+                          >
+                            {it.titulo}
+                          </span>
+                        ))}
+                        {itens.length > 2 && (
+                          <span className="px-1 text-left text-[10px] text-[#5a544c]">
+                            +{itens.length - 2}
                           </span>
                         )}
                       </span>
@@ -265,7 +295,7 @@ export function MarketingCalendar() {
       </div>
 
       {/* Tarefas do dia escolhido */}
-      <div className="space-y-1.5">
+      <div className="mt-2.5 space-y-1.5 md:mt-0 md:sticky md:top-4">
         <p className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#9a958b]">
           {dataSel.getDate()} de {MESES[dataSel.getMonth()]}
           {tarefasDoDia.length > 0 && ` · ${tarefasDoDia.length} item${tarefasDoDia.length !== 1 ? "s" : ""}`}
@@ -340,6 +370,7 @@ export function MarketingCalendar() {
             Marcar neste dia
           </button>
         )}
+      </div>
       </div>
     </div>
   );
