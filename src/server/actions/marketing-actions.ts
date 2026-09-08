@@ -2,7 +2,11 @@
 
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import type { MarketingPipelineStage, MarketingContentStatus } from "@prisma/client";
+import type {
+  MarketingPipelineStage,
+  MarketingContentStatus,
+  MarketingContentKind,
+} from "@prisma/client";
 
 export type OnboardingChecklist = {
   contractSigned: boolean;
@@ -32,6 +36,7 @@ export type MarketingContentDetail = {
   id: string;
   title: string;
   contentDate: string;
+  kind: MarketingContentKind;
   status: MarketingContentStatus;
   notes?: string | null;
 };
@@ -76,6 +81,7 @@ export async function getMarketingClientsAction(): Promise<MarketingClientDetail
       id: cnt.id,
       title: cnt.title,
       contentDate: cnt.contentDate.toISOString(),
+      kind: cnt.kind,
       status: cnt.status,
       notes: cnt.notes,
     })),
@@ -112,6 +118,7 @@ export async function addMarketingContentAction(
   contentDate: string,
   status: MarketingContentStatus,
   notes?: string,
+  kind: MarketingContentKind = "POST",
 ): Promise<MarketingContentDetail> {
   const session = await requireSession();
 
@@ -127,6 +134,7 @@ export async function addMarketingContentAction(
       contractId,
       title,
       contentDate: new Date(contentDate),
+      kind,
       status,
       notes: notes || null,
     },
@@ -136,6 +144,7 @@ export async function addMarketingContentAction(
     id: content.id,
     title: content.title,
     contentDate: content.contentDate.toISOString(),
+    kind: content.kind,
     status: content.status,
     notes: content.notes,
   };

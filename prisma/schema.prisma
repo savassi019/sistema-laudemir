@@ -154,6 +154,13 @@ enum MarketingContentStatus {
   APPROVED
 }
 
+/// O que esta marcado na agenda do Marketing. Registros antigos viram POST.
+enum MarketingContentKind {
+  POST
+  MEETING
+  TASK
+}
+
 enum BxReceiptStatus {
   RECEIVED
   NOT_RECEIVED
@@ -894,6 +901,7 @@ model MarketingContent {
   contract       MarketingContract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
   title          String
   contentDate    DateTime
+  kind           MarketingContentKind   @default(POST)
   status         MarketingContentStatus @default(PENDING)
   notes          String?
   createdAt      DateTime               @default(now())

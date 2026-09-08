@@ -9,6 +9,7 @@ import {
   ClipboardList,
   History,
   Inbox,
+  CalendarDays,
   MapPin,
   Receipt,
   Route,
@@ -24,6 +25,7 @@ import { BxForm } from "@/components/modules/bx-form";
 import { CarretaKidsForm } from "@/components/modules/carreta-kids-form";
 import { MachineContractForm } from "@/components/modules/machine-contract-form";
 import { MarketEntryForm } from "@/components/modules/market-entry-form";
+import { MarketingCalendar } from "@/components/modules/marketing-calendar";
 import { MarketingCrmView } from "@/components/modules/marketing-crm-view";
 import { ModuleAccountsPayable } from "@/components/modules/module-accounts-payable";
 import { ModuleFinanceSection } from "@/components/modules/module-finance-section";
@@ -42,7 +44,7 @@ import type { ModuleClientItem, ModuleRecordItem } from "@/server/services/modul
 import type { ModuleScopeSummary } from "@/server/services/module-scope-service";
 import type { ClientListItem, ClientVisitSummary } from "@/types/app";
 
-type SectionKey = "operacao" | "visita" | "rotas" | "clientes" | "financeiro" | "contas-pagar" | "historico" | "relatorio";
+type SectionKey = "operacao" | "visita" | "rotas" | "calendario" | "clientes" | "financeiro" | "contas-pagar" | "historico" | "relatorio";
 
 type ModuleFormProps = {
   hideFinancials?: boolean;
@@ -79,6 +81,7 @@ const SECTION_CFG: Record<SectionKey, SectionCfg> = {
   operacao:      { label: "Operação",   description: "Registrar fechamento",    icon: ClipboardList, accent: "#d1a04f", accentBg: "bg-[#d1a04f]/15", accentText: "text-[#f3dfae]" },
   visita:        { label: "Visita",     description: "Fechar ponto e registrar visita", icon: MapPin, accent: "#a78bfa", accentBg: "bg-[#a78bfa]/15", accentText: "text-[#c4b5fd]" },
   rotas:         { label: "Rotas",      description: "Pontos agrupados por rota", icon: Route,  accent: "#a78bfa", accentBg: "bg-[#a78bfa]/15", accentText: "text-[#c4b5fd]" },
+  calendario:    { label: "Calendário", description: "Conteúdos e reuniões do mês", icon: CalendarDays, accent: "#60a5fa", accentBg: "bg-[#60a5fa]/15", accentText: "text-[#93c5fd]" },
   clientes:      { label: "Clientes",   description: "Pontos cadastrados",      icon: UserPlus,      accent: "#60a5fa", accentBg: "bg-[#60a5fa]/15", accentText: "text-[#93c5fd]" },
   financeiro:    { label: "Financeiro", description: "Entradas e saídas",       icon: WalletCards,   accent: "#4ade80", accentBg: "bg-[#4ade80]/15", accentText: "text-[#86efac]" },
   "contas-pagar":{ label: "Contas",     description: "A pagar e receber",       icon: Receipt,       accent: "#fb923c", accentBg: "bg-[#fb923c]/15", accentText: "text-[#fdba74]" },
@@ -86,11 +89,13 @@ const SECTION_CFG: Record<SectionKey, SectionCfg> = {
   relatorio:     { label: "Relatório",  description: "Resumo financeiro",       icon: BarChart2,     accent: "#2dd4bf", accentBg: "bg-[#2dd4bf]/15", accentText: "text-[#5eead4]" },
 };
 
-const ALL_SECTIONS: SectionKey[] = ["operacao", "visita", "rotas", "clientes", "financeiro", "contas-pagar", "historico", "relatorio"];
+const ALL_SECTIONS: SectionKey[] = ["operacao", "visita", "rotas", "calendario", "clientes", "financeiro", "contas-pagar", "historico", "relatorio"];
 
 const slugsWithoutClientConcept = new Set(["mercado-autonomo", "plataforma-online", "financas-pessoais"]);
 // Rotas de campo hoje so existem no Bilhar (RoutePlan/BilliardPoint).
 const slugsWithRoutes = new Set(["bilhar-pebolim"]);
+// Agenda de conteudo/reuniao hoje so existe no Marketing (MarketingContent).
+const slugsWithCalendar = new Set(["marketing"]);
 const slugsWithVisitTracking = new Set([
   "bilhar-pebolim", "maquinas-de-pelucia", "bx", "h-caca-niquel", "carreta-kids", "locacao",
 ]);
@@ -119,6 +124,7 @@ export function ModuleWorkspace({
   const hasClientConcept = !slugsWithoutClientConcept.has(slug);
   const hasVisitTracking = slugsWithVisitTracking.has(slug);
   const hasRoutes = slugsWithRoutes.has(slug);
+  const hasCalendar = slugsWithCalendar.has(slug);
   const needsClientPreselect = hasVisitTracking;
   const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
   const [showRegisterForm, setShowRegisterForm] = useState(false);
@@ -132,6 +138,7 @@ export function ModuleWorkspace({
     if (k === "operacao"      && hasVisitTracking)    return false; // Visita absorve o fechamento
     if (k === "visita"        && !hasVisitTracking)   return false;
     if (k === "rotas"         && !hasRoutes)          return false;
+    if (k === "calendario"    && !hasCalendar)        return false;
     if (k === "clientes"      && !hasClientConcept)   return false;
     if (k === "financeiro"    && hideFinancials)       return false;
     if (k === "contas-pagar"  && hideFinancials)       return false;
@@ -175,6 +182,8 @@ export function ModuleWorkspace({
             )}
           </div>
         ) : null}
+
+        {activeSection === "calendario" ? <MarketingCalendar /> : null}
 
         {activeSection === "rotas" ? (
           <RoutesSection
