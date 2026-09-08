@@ -191,9 +191,9 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
       {/* Saúde da agência — some para funcionário, que não vê valores */}
       {!hideFinancials && clientes.length > 0 && (
         <div className="grid grid-cols-3 gap-2 md:gap-3">
-          <MiniCartao rotulo="Clientes ativos" valor={String(agencia.ativos)} cor="text-[#4ade80]" />
-          <MiniCartao rotulo="Receita mensal" valor={formatCurrency(agencia.receita)} cor="text-[#f3dfae]" />
-          <MiniCartao rotulo="Em prospecção" valor={String(agencia.prospeccao)} cor="text-[#93c5fd]" />
+          <MiniCartao rotulo="Ativos" rotuloLargo="Clientes ativos" valor={String(agencia.ativos)} cor="text-[#4ade80]" />
+          <MiniCartao rotulo="Receita" rotuloLargo="Receita mensal" valor={formatCurrency(agencia.receita)} cor="text-[#f3dfae]" />
+          <MiniCartao rotulo="Prospecção" rotuloLargo="Em prospecção" valor={String(agencia.prospeccao)} cor="text-[#93c5fd]" />
         </div>
       )}
 
@@ -396,10 +396,13 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
   );
 }
 
-function MiniCartao({ rotulo, valor, cor }: { rotulo: string; valor: string; cor: string }) {
+function MiniCartao({ rotulo, rotuloLargo, valor, cor }: { rotulo: string; rotuloLargo: string; valor: string; cor: string }) {
   return (
     <div className="rounded-xl border border-[rgba(245,241,232,0.08)] bg-[#0c100f]/80 px-3 py-2.5 md:px-4 md:py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9a958b]">{rotulo}</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9a958b]">
+        <span className="md:hidden">{rotulo}</span>
+        <span className="hidden md:inline">{rotuloLargo}</span>
+      </p>
       <p className={cn("mt-0.5 text-sm font-bold leading-tight md:text-xl", cor)}>{valor}</p>
     </div>
   );
