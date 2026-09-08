@@ -205,7 +205,7 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     detail: "Telefone, documento, endereço, anexos e timeline completa.",
     group: "transversal",
     stage: "Base pronta",
-    emoji: "🪪",
+    emoji: "📇",
     href: "/clientes",
   },
   {
