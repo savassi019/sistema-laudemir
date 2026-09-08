@@ -155,7 +155,7 @@ export function MarketingCalendar() {
   return (
     <div className="space-y-2.5">
       {/* Mês + navegação */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 md:justify-start">
         <button
           type="button"
           onClick={() => mudarMes(-1)}
@@ -164,7 +164,7 @@ export function MarketingCalendar() {
         >
           <ChevronLeft className="size-4" />
         </button>
-        <p className="flex-1 text-center text-sm font-semibold text-white">
+        <p className="flex-1 text-center text-sm font-semibold text-white md:flex-none md:min-w-[190px] md:text-left md:text-lg">
           {MESES[mes.getMonth()]} {mes.getFullYear()}
         </p>
         <button
