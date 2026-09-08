@@ -127,7 +127,11 @@ export function ModuleWorkspace({
   const hasRoutes = slugsWithRoutes.has(slug);
   const hasCalendar = slugsWithCalendar.has(slug);
   const needsClientPreselect = hasVisitTracking;
-  const [activeSection, setActiveSection] = useState<SectionKey | null>(null);
+  // No Marketing o calendario e a tela principal: o menu de abas na frente
+  // fazia o modulo parecer generico, igual aos de campo.
+  const [activeSection, setActiveSection] = useState<SectionKey | null>(
+    slugsWithCalendar.has(slug) ? "calendario" : null,
+  );
   const [showRegisterForm, setShowRegisterForm] = useState(false);
   const [visitPreset, setVisitPreset] = useState<{ id?: string; name: string; phone: string } | null>(null);
   const [clientSearch, setClientSearch] = useState("");
@@ -159,20 +163,47 @@ export function ModuleWorkspace({
     return (
       <section className="space-y-3">
         {/* Cabeçalho da seção */}
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setActiveSection(null)}
-            /* Voltar e usado o tempo todo no celular; 32px era alvo pequeno demais. */
-            className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.03] text-[#9a958b] transition hover:text-white active:scale-95"
-          >
-            <ArrowLeft className="size-4" />
-          </button>
-          <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-xl", cfg.accentBg)}>
-            <Icon className={cn("size-4", cfg.accentText)} />
+        {hasCalendar ? (
+          /* Marketing: navegacao direta entre as areas, sem passar por um menu */
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+            {visibleSections.map((key) => {
+              const c = rotuloDaSecao(SECTION_CFG[key], key, true);
+              const Ic = c.icon;
+              const ativo = key === activeSection;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setActiveSection(key)}
+                  className={cn(
+                    "flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition",
+                    ativo
+                      ? "border-[#d1a04f]/40 bg-[#d1a04f]/12 text-[#f3dfae]"
+                      : "border-white/10 bg-white/[0.03] text-[#9a958b] active:bg-white/[0.07]",
+                  )}
+                >
+                  <Ic className="size-3.5" />
+                  {c.label}
+                </button>
+              );
+            })}
           </div>
-          <h2 className="text-base font-bold text-white">{cfg.label}</h2>
-        </div>
+        ) : (
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setActiveSection(null)}
+              /* Voltar e usado o tempo todo no celular; 32px era alvo pequeno demais. */
+              className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.03] text-[#9a958b] transition hover:text-white active:scale-95"
+            >
+              <ArrowLeft className="size-4" />
+            </button>
+            <div className={cn("flex size-8 shrink-0 items-center justify-center rounded-xl", cfg.accentBg)}>
+              <Icon className={cn("size-4", cfg.accentText)} />
+            </div>
+            <h2 className="text-base font-bold text-white">{cfg.label}</h2>
+          </div>
+        )}
 
         {/* Conteúdo da seção */}
         {activeSection === "operacao" ? (
@@ -185,7 +216,7 @@ export function ModuleWorkspace({
           </div>
         ) : null}
 
-        {activeSection === "calendario" ? <MarketingCalendar /> : null}
+        {activeSection === "calendario" ? <MarketingCalendar hideFinancials={hideFinancials} /> : null}
 
         {activeSection === "rotas" ? (
           <RoutesSection

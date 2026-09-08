@@ -4,6 +4,7 @@ import { CalendarDays, Check, ChevronLeft, ChevronRight, Loader2, Megaphone, Plu
 import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "@/lib/cn";
+import { formatCurrency } from "@/lib/format";
 import {
   addMarketingContentAction,
   getMarketingClientsAction,
@@ -51,7 +52,7 @@ function chaveDia(d: Date) {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
-export function MarketingCalendar() {
+export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?: boolean } = {}) {
   const [clientes, setClientes] = useState<MarketingClientDetail[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando] = useState<string | null>(null);
@@ -115,6 +116,16 @@ export function MarketingCalendar() {
     return linhas.filter((sem) => sem.some((d) => d.getMonth() === mes.getMonth()));
   }, [mes]);
 
+  // A tela principal precisa mostrar a saude da agencia, nao so a agenda.
+  const agencia = useMemo(() => {
+    const ativos = clientes.filter((c) => c.pipelineStage === "ACTIVE_CLIENT");
+    return {
+      ativos: ativos.length,
+      receita: ativos.reduce((s, c) => s + c.contractValue, 0),
+      prospeccao: clientes.length - ativos.length,
+    };
+  }, [clientes]);
+
   const doMes = useMemo(() => {
     let atrasados = 0, pendentes = 0, total = 0;
     for (const [k, itens] of porDia) {
@@ -176,6 +187,15 @@ export function MarketingCalendar() {
           <ChevronRight className="size-4" />
         </button>
       </div>
+
+      {/* Saúde da agência — some para funcionário, que não vê valores */}
+      {!hideFinancials && clientes.length > 0 && (
+        <div className="grid grid-cols-3 gap-2 md:gap-3">
+          <MiniCartao rotulo="Clientes ativos" valor={String(agencia.ativos)} cor="text-[#4ade80]" />
+          <MiniCartao rotulo="Receita mensal" valor={formatCurrency(agencia.receita)} cor="text-[#f3dfae]" />
+          <MiniCartao rotulo="Em prospecção" valor={String(agencia.prospeccao)} cor="text-[#93c5fd]" />
+        </div>
+      )}
 
       {/* Resumo do mês */}
       <div className="flex flex-wrap items-center gap-2 rounded-xl bg-white/[0.03] px-3 py-2 text-xs text-[#9a958b]">
@@ -372,6 +392,15 @@ export function MarketingCalendar() {
         )}
       </div>
       </div>
+    </div>
+  );
+}
+
+function MiniCartao({ rotulo, valor, cor }: { rotulo: string; valor: string; cor: string }) {
+  return (
+    <div className="rounded-xl border border-[rgba(245,241,232,0.08)] bg-[#0c100f]/80 px-3 py-2.5 md:px-4 md:py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#9a958b]">{rotulo}</p>
+      <p className={cn("mt-0.5 text-sm font-bold leading-tight md:text-xl", cor)}>{valor}</p>
     </div>
   );
 }
