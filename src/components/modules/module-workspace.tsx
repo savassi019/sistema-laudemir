@@ -163,7 +163,8 @@ export function ModuleWorkspace({
           <button
             type="button"
             onClick={() => setActiveSection(null)}
-            className="flex size-8 shrink-0 items-center justify-center rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.03] text-[#9a958b] transition hover:text-white active:scale-95"
+            /* Voltar e usado o tempo todo no celular; 32px era alvo pequeno demais. */
+            className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.03] text-[#9a958b] transition hover:text-white active:scale-95"
           >
             <ArrowLeft className="size-4" />
           </button>
