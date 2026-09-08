@@ -7,23 +7,7 @@ export type ModuleGroupKey =
   | "business"
   | "transversal";
 
-export type ModuleAccent = "slate" | "emerald" | "amber" | "violet" | "blue";
 export type ModuleStage = "Base pronta" | "Fase 2" | "Fase 3" | "Fase 4";
-export type ModuleIconKey =
-  | "shield"
-  | "ticket"
-  | "calendar"
-  | "table"
-  | "gift"
-  | "wallet"
-  | "coins"
-  | "badge"
-  | "store"
-  | "megaphone"
-  | "globe"
-  | "users"
-  | "notebook"
-  | "receipt";
 
 export type ModuleCatalogItem = {
   module: ModuleName;
@@ -32,9 +16,9 @@ export type ModuleCatalogItem = {
   summary: string;
   detail: string;
   group: ModuleGroupKey;
-  accent: ModuleAccent;
   stage: ModuleStage;
-  icon: ModuleIconKey;
+  /** Identifica o modulo de relance; substituiu o esquema de cores por card. */
+  emoji: string;
   href?: string;
 };
 
@@ -77,9 +61,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Acesso, permissões e motor central",
     detail: "Login seguro, controle por módulo, financeiro global e agenda.",
     group: "core",
-    accent: "slate",
     stage: "Base pronta",
-    icon: "shield",
+    emoji: "🛡️",
     href: "/dashboard",
   },
   {
@@ -89,9 +72,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Controle por tempo e ficha",
     detail: "Tempo, local, entrada, saída, tabela de preço e despesas.",
     group: "field",
-    accent: "emerald",
     stage: "Fase 2",
-    icon: "ticket",
+    emoji: "🎠",
     href: "/modulos/carreta-kids",
   },
   {
@@ -101,9 +83,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Reservas, sinal e contrato",
     detail: "Nome, telefone, local, documento, data, sinal opcional e pendências.",
     group: "field",
-    accent: "emerald",
     stage: "Fase 2",
-    icon: "calendar",
+    emoji: "🎪",
     href: "/modulos/locacao",
   },
   {
@@ -113,9 +94,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Rotas, fichas e telhado",
     detail: "Rotas, fichas, quinzena, telhado, contrato, manutenção e alerta de pano.",
     group: "field",
-    accent: "emerald",
     stage: "Fase 2",
-    icon: "table",
+    emoji: "🎱",
     href: "/modulos/bilhar-pebolim",
   },
   {
@@ -125,9 +105,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Gruas e comissão",
     detail: "Máquinas, pontos, duas fotos, pelúcias, noteiro, desconto e viabilidade.",
     group: "field",
-    accent: "emerald",
     stage: "Fase 2",
-    icon: "gift",
+    emoji: "🧸",
     href: "/modulos/maquinas-de-pelucia",
   },
   {
@@ -137,9 +116,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Entradas e saídas com comprovante",
     detail: "Duas fotos, cliente exceção, recolhe, negativo, desconto e status recebido.",
     group: "special",
-    accent: "amber",
     stage: "Fase 3",
-    icon: "wallet",
+    emoji: "📦",
     href: "/modulos/bx",
   },
   {
@@ -149,9 +127,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Divisão e negativo",
     detail: "Entrada/saída atual e anterior, percentual, negativo, dívida e conferências.",
     group: "special",
-    accent: "amber",
     stage: "Fase 3",
-    icon: "coins",
+    emoji: "🎰",
     href: "/modulos/h-caca-niquel",
   },
   {
@@ -161,9 +138,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Empréstimos e garantias",
     detail: "Contratos, garantias, percentual, juros, parcela fixa e pendências.",
     group: "special",
-    accent: "amber",
     stage: "Fase 3",
-    icon: "badge",
+    emoji: "🏦",
     href: "/modulos/credito-financeiro",
   },
   {
@@ -173,9 +149,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Financeiro manual",
     detail: "Entrada, saída, despesa, lucro bruto e lucro líquido.",
     group: "business",
-    accent: "violet",
     stage: "Fase 3",
-    icon: "store",
+    emoji: "🏪",
     href: "/modulos/mercado-autonomo",
   },
   {
@@ -185,9 +160,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Contrato e assinatura",
     detail: "Serviço, valor, GOV, cliente, endereço e arquivo final.",
     group: "business",
-    accent: "violet",
     stage: "Fase 3",
-    icon: "megaphone",
+    emoji: "📣",
     href: "/modulos/marketing",
   },
   {
@@ -197,9 +171,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Financeiro do brinde",
     detail: "Entradas, saídas, despesas e relatórios enxutos.",
     group: "business",
-    accent: "violet",
     stage: "Fase 3",
-    icon: "globe",
+    emoji: "🌐",
     href: "/modulos/plataforma-online",
   },
   {
@@ -209,9 +182,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Receitas, despesas e agenda",
     detail: "Receitas, despesas, contas a pagar, notas, agenda e totais por período.",
     group: "business",
-    accent: "violet",
     stage: "Fase 3",
-    icon: "notebook",
+    emoji: "📓",
     href: "/modulos/financas-pessoais",
   },
   {
@@ -221,9 +193,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Pagamento, parcial e saldo",
     detail: "Consolidado por período com entradas, saídas, despesas e comprovantes.",
     group: "transversal",
-    accent: "blue",
     stage: "Base pronta",
-    icon: "wallet",
+    emoji: "💰",
     href: "/financeiro",
   },
   {
@@ -233,9 +204,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Dívida, parcial e histórico",
     detail: "Telefone, documento, endereço, anexos e timeline completa.",
     group: "transversal",
-    accent: "blue",
     stage: "Base pronta",
-    icon: "users",
+    emoji: "👥",
     href: "/clientes",
   },
   {
@@ -245,9 +215,8 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     summary: "Envio automático entre módulos",
     detail: "Comprovantes, notificações e disparos por etapa operacional.",
     group: "transversal",
-    accent: "blue",
     stage: "Fase 4",
-    icon: "receipt",
+    emoji: "💬",
   },
 ];
 

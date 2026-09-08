@@ -1,73 +1,30 @@
-import type { ComponentType } from "react";
-
 import Link from "next/link";
-import {
-  ArrowRight,
-  BadgeDollarSign,
-  CalendarDays,
-  ChevronRight,
-  Coins,
-  Gift,
-  Globe,
-  Megaphone,
-  NotebookTabs,
-  Receipt,
-  ShieldCheck,
-  Store,
-  Table2,
-  Ticket,
-  Users,
-  WalletCards,
-} from "lucide-react";
+import { ArrowRight, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/cn";
-import type { ModuleCatalogItem, ModuleIconKey } from "@/lib/module-catalog";
+import type { ModuleCatalogItem } from "@/lib/module-catalog";
 
-const accentStyles = {
-  slate:
-    "border-[rgba(245,241,232,0.1)] bg-[linear-gradient(180deg,rgba(42,46,41,0.88),rgba(16,21,18,0.94))] text-white",
-  emerald:
-    "border-[#8aa17c]/22 bg-[linear-gradient(180deg,rgba(48,71,55,0.86),rgba(17,25,20,0.94))] text-white",
-  amber:
-    "border-[#d1a04f]/24 bg-[linear-gradient(180deg,rgba(73,51,27,0.86),rgba(24,18,12,0.94))] text-white",
-  violet:
-    "border-[#9b7b70]/22 bg-[linear-gradient(180deg,rgba(55,43,40,0.88),rgba(22,18,17,0.94))] text-white",
-  blue: "border-[#6f8790]/22 bg-[linear-gradient(180deg,rgba(35,52,54,0.88),rgba(15,22,21,0.94))] text-white",
-} as const;
-
-const iconMap: Record<ModuleIconKey, ComponentType<{ className?: string }>> = {
-  shield: ShieldCheck,
-  ticket: Ticket,
-  calendar: CalendarDays,
-  table: Table2,
-  gift: Gift,
-  wallet: WalletCards,
-  coins: Coins,
-  badge: BadgeDollarSign,
-  store: Store,
-  megaphone: Megaphone,
-  globe: Globe,
-  users: Users,
-  notebook: NotebookTabs,
-  receipt: Receipt,
-};
+// Um unico estilo para todos os cards: o emoji e que identifica o modulo.
+// Antes cada grupo tinha uma cor de fundo, o que deixava a tela poluida sem
+// ajudar a achar o modulo mais rapido.
+const cardBase =
+  "border-[rgba(245,241,232,0.1)] bg-[linear-gradient(180deg,rgba(32,36,33,0.88),rgba(16,21,18,0.94))] text-white";
 
 export function ModuleTile({ item }: { item: ModuleCatalogItem }) {
-  const Icon = iconMap[item.icon];
   const disabled = !item.href;
 
   const content = (
     <div id={item.slug}>
-      {/* Mobile: compact tappable row */}
+      {/* Celular: linha compacta */}
       <article
         className={cn(
           "flex items-center gap-3 rounded-2xl border p-2.5 shadow-[0_12px_30px_rgba(0,0,0,0.18)] md:hidden",
-          accentStyles[item.accent],
+          cardBase,
           disabled ? "opacity-70" : "",
         )}
       >
-        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/15 bg-black/15 text-white/90">
-          <Icon className="size-4" />
+        <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/20 text-lg leading-none">
+          <span aria-hidden>{item.emoji}</span>
         </div>
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-semibold tracking-tight">{item.title}</p>
@@ -82,17 +39,17 @@ export function ModuleTile({ item }: { item: ModuleCatalogItem }) {
         )}
       </article>
 
-      {/* Tablet/desktop: full card */}
+      {/* Tablet/desktop: card completo */}
       <article
         className={cn(
           "hidden min-h-[208px] flex-col rounded-2xl border p-5 shadow-[0_24px_60px_rgba(0,0,0,0.2)] md:flex",
-          accentStyles[item.accent],
+          cardBase,
           disabled ? "opacity-75" : "",
         )}
       >
         <div className="mb-4 flex items-start justify-between gap-2">
-          <div className="rounded-xl border border-white/15 bg-black/15 p-3 text-white/90">
-            <Icon className="size-5" />
+          <div className="flex size-12 items-center justify-center rounded-xl border border-white/10 bg-black/20 text-2xl leading-none">
+            <span aria-hidden>{item.emoji}</span>
           </div>
           <span className="rounded-full border border-white/12 bg-black/20 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-white/65">
             {item.stage}
