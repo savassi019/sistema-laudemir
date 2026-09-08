@@ -26,6 +26,7 @@ import { CarretaKidsForm } from "@/components/modules/carreta-kids-form";
 import { MachineContractForm } from "@/components/modules/machine-contract-form";
 import { MarketEntryForm } from "@/components/modules/market-entry-form";
 import { MarketingCalendar } from "@/components/modules/marketing-calendar";
+import { MarketingHome } from "@/components/modules/marketing-home";
 import { MarketingCrmView } from "@/components/modules/marketing-crm-view";
 import { ModuleAccountsPayable } from "@/components/modules/module-accounts-payable";
 import { ModuleFinanceSection } from "@/components/modules/module-finance-section";
@@ -391,8 +392,18 @@ export function ModuleWorkspace({
   return (
     <section className="space-y-3">
 
+      {/* Marketing tem painel proprio: funil, atrasados e semana valem mais
+          que Entradas/Despesas/Resultado, que aqui vivem zerados. */}
+      {hasCalendar ? (
+        <MarketingHome
+          hideFinancials={hideFinancials}
+          onAbrirCalendario={() => setActiveSection("calendario")}
+          onAbrirClientes={() => setActiveSection("operacao")}
+        />
+      ) : null}
+
       {/* Stats compactos */}
-      {!hideFinancials ? (
+      {!hasCalendar && !hideFinancials ? (
         <div className="grid grid-cols-3 gap-2">
           {[
             { label: "Entradas",  value: formatCurrency(Number(summary.incomeAmount)),  accent: "#4ade80", dim: "text-[#86efac]" },
@@ -432,7 +443,7 @@ export function ModuleWorkspace({
       {/* Lista de seções */}
       <div className="overflow-hidden rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35">
         {visibleSections.map((key, idx) => {
-          const cfg = SECTION_CFG[key];
+          const cfg = rotuloDaSecao(SECTION_CFG[key], key, hasCalendar);
           const Icon = cfg.icon;
           const isLast = idx === visibleSections.length - 1;
           const badge =
@@ -578,4 +589,16 @@ function ClientesSection({
       )}
     </div>
   );
+}
+
+/**
+ * O catalogo de secoes fala a lingua da operacao de campo ("fechamento",
+ * "pontos"). No Marketing isso confunde: nao ha ponto nem fechamento.
+ */
+function rotuloDaSecao(cfg: SectionCfg, key: SectionKey, ehMarketing: boolean): SectionCfg {
+  if (!ehMarketing) return cfg;
+  if (key === "operacao") return { ...cfg, label: "Clientes e funil", description: "Contratos, etapas e conteúdos" };
+  if (key === "clientes") return { ...cfg, label: "Contratos", description: "Cadastrados no módulo" };
+  if (key === "historico") return { ...cfg, label: "Histórico", description: "Contratos anteriores" };
+  return cfg;
 }
