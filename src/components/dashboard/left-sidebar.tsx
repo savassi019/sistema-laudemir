@@ -101,10 +101,8 @@ export function LeftSidebar({
       {/* Logo row */}
       <div className="flex h-14 shrink-0 items-center justify-between overflow-hidden border-b border-[rgba(245,241,232,0.07)] px-3">
         <Link href="/" className="flex items-center gap-2.5 min-w-0">
-            <div className="flex size-9 items-center justify-center overflow-hidden rounded-xl border border-[#d1a04f]/25 bg-white">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/infinity-emblema.png" alt="Infinity" className="size-full object-contain p-0.5" />
-            </div>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/infinity-emblema.png" alt="Infinity" className="h-8 w-auto shrink-0 object-contain" />
           {!isCollapsed && (
             <span className="truncate whitespace-nowrap text-sm font-semibold text-white">
               Infinity ERP

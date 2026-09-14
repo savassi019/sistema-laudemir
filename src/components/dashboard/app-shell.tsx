@@ -41,12 +41,8 @@ export function AppShell({
           <div className="flex items-center justify-between gap-3">
             {/* Logo (mobile only — desktop has it in sidebar) + Brand */}
             <Link href="/" className="flex min-w-0 items-center gap-3">
-              {/* Marca do cliente em fundo claro: o azul-marinho da logo
-                  sumiria sobre o fundo escuro do app. */}
-              <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#d1a04f]/25 bg-white lg:hidden">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/infinity-emblema.png" alt="Infinity" className="size-full object-contain p-0.5" />
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/infinity-emblema.png" alt="Infinity" className="h-7 w-auto shrink-0 object-contain lg:hidden" />
               <HeaderBrand />
             </Link>
 
