@@ -1,4 +1,3 @@
-import { ShieldCheck } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { LoginThreeScene } from "@/components/auth/login-three-scene";
@@ -29,8 +28,11 @@ export default async function LoginPage() {
           {/* Header */}
           <div className="login-form-step mb-8 flex items-start justify-between gap-4" style={{ animationDelay: "300ms" }}>
             <div className="flex items-center gap-4">
-              <div className="login-icon-pulse login-icon-scan relative flex size-12 items-center justify-center rounded-2xl border border-[#d1a04f]/25 bg-[#d1a04f]/[0.11] text-[#d1a04f] shadow-[0_0_0_6px_rgba(209,160,79,0.06),0_0_20px_rgba(209,160,79,0.08)]">
-                <ShieldCheck className="size-5" />
+              {/* Marca do cliente. Fundo claro porque o azul-marinho da logo
+                  desapareceria sobre o fundo escuro do painel. */}
+              <div className="login-icon-pulse login-icon-scan relative flex size-12 items-center justify-center overflow-hidden rounded-2xl border border-[#d1a04f]/25 bg-white shadow-[0_0_0_6px_rgba(209,160,79,0.06),0_0_20px_rgba(209,160,79,0.08)]">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/infinity-logo.png" alt="Infinity" className="size-full object-contain p-1" />
               </div>
               <div className="space-y-0.5">
                 <p className="text-[9px] uppercase tracking-[0.36em] text-white/30">

@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 
 import Link from "next/link";
-import { Layers3 } from "lucide-react";
 
 import { primaryNavigation } from "@/lib/navigation";
 import type { SessionData } from "@/types/app";
@@ -42,8 +41,11 @@ export function AppShell({
           <div className="flex items-center justify-between gap-3">
             {/* Logo (mobile only — desktop has it in sidebar) + Brand */}
             <Link href="/" className="flex min-w-0 items-center gap-3">
-              <div className="shrink-0 rounded-xl border border-[#d1a04f]/25 bg-[#d1a04f]/12 p-1.5 text-[#e7c783] lg:hidden">
-                <Layers3 className="size-4" />
+              {/* Marca do cliente em fundo claro: o azul-marinho da logo
+                  sumiria sobre o fundo escuro do app. */}
+              <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#d1a04f]/25 bg-white lg:hidden">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/infinity-logo.png" alt="Infinity" className="size-full object-contain p-0.5" />
               </div>
               <HeaderBrand />
             </Link>
