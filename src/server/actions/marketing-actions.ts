@@ -53,6 +53,7 @@ export type MarketingClientDetail = {
   status: string;
   onboardingChecklist: OnboardingChecklist;
   contents: MarketingContentDetail[];
+  entries: MarketingEntryDetail[];
   contractDate: string;
   createdAt: string;
 };
@@ -65,6 +66,26 @@ export async function getMarketingClientsAction(): Promise<MarketingClientDetail
     include: { contents: { orderBy: { contentDate: "desc" } } },
     orderBy: { createdAt: "desc" },
   });
+
+  // Uma consulta para todos os lancamentos da organizacao e agrupamento em
+  // memoria -- uma consulta por cliente seria N+1 e pesa com a carteira cheia.
+  const lancamentos = await prisma.financialEntry.findMany({
+    where: {
+      organizationId: session.organizationId,
+      module: "MARKETING",
+      sourceEntityType: "MARKETING_CONTRACT",
+      sourceEntityId: { in: contracts.map((c) => c.id) },
+    },
+    orderBy: { issueDate: "desc" },
+  });
+
+  const porContrato = new Map<string, MarketingEntryDetail[]>();
+  for (const e of lancamentos) {
+    if (!e.sourceEntityId) continue;
+    const lista = porContrato.get(e.sourceEntityId) ?? [];
+    lista.push(mapEntry(e));
+    porContrato.set(e.sourceEntityId, lista);
+  }
 
   return contracts.map((c) => ({
     id: c.id,
@@ -87,6 +108,7 @@ export async function getMarketingClientsAction(): Promise<MarketingClientDetail
       notes: cnt.notes,
       fileId: cnt.fileId,
     })),
+    entries: porContrato.get(c.id) ?? [],
     contractDate: c.contractDate.toISOString(),
     createdAt: c.createdAt.toISOString(),
   }));
@@ -212,4 +234,143 @@ export async function updateMarketingClientAction(
       ...(data.expenseAmount !== undefined && { expenseAmount: data.expenseAmount }),
     },
   });
+}
+
+/* ------------------------------------------------------------------ *
+ * Lancamentos reais do cliente (o que entrou e o que saiu de verdade)
+ *
+ * Antes o relatorio mensal repetia o valor do contrato em todos os meses
+ * desde a assinatura. Um cliente que pagou 2 de 7 meses aparecia com os 7
+ * recebidos. Agora cada recebimento e cada custo e um lancamento com data,
+ * e o relatorio soma o que existe -- nao o que deveria existir.
+ *
+ * Reaproveita FinancialEntry (module MARKETING + sourceEntityId = contrato)
+ * em vez de criar tabela nova: o banco de producao nao muda de forma.
+ * ------------------------------------------------------------------ */
+
+export type MarketingEntryDetail = {
+  id: string;
+  description: string;
+  direction: "INCOME" | "EXPENSE";
+  amount: number;
+  /** Mes de competencia do lancamento. */
+  date: string;
+  paid: boolean;
+};
+
+/** Data sem hora vira meio-dia UTC pelo mesmo motivo do calendario. */
+function dataDoLancamento(valor: string): Date {
+  return /^\d{4}-\d{2}-\d{2}$/.test(valor) ? new Date(`${valor}T12:00:00Z`) : new Date(valor);
+}
+
+function mapEntry(e: {
+  id: string;
+  description: string;
+  direction: string;
+  totalAmount: unknown;
+  issueDate: Date;
+  status: string;
+}): MarketingEntryDetail {
+  return {
+    id: e.id,
+    description: e.description,
+    direction: e.direction === "EXPENSE" ? "EXPENSE" : "INCOME",
+    amount: Number(e.totalAmount),
+    date: e.issueDate.toISOString(),
+    paid: e.status === "PAID",
+  };
+}
+
+export async function addMarketingEntryAction(
+  contractId: string,
+  input: {
+    description: string;
+    direction: "INCOME" | "EXPENSE";
+    amount: number;
+    date: string;
+    paid: boolean;
+  },
+): Promise<MarketingEntryDetail> {
+  const session = await requireSession();
+
+  const contract = await prisma.marketingContract.findFirst({
+    where: { id: contractId, organizationId: session.organizationId },
+    select: { id: true },
+  });
+  if (!contract) throw new Error("Cliente não encontrado.");
+
+  const descricao = input.description.trim();
+  if (!descricao) throw new Error("Descreva o lançamento.");
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw new Error("Informe um valor maior que zero.");
+  }
+
+  const quando = dataDoLancamento(input.date);
+  if (Number.isNaN(quando.getTime())) throw new Error("Data inválida.");
+
+  const entry = await prisma.financialEntry.create({
+    data: {
+      organizationId: session.organizationId,
+      module: "MARKETING",
+      kind: input.direction === "EXPENSE" ? "EXPENSE" : "REVENUE",
+      direction: input.direction,
+      status: input.paid ? "PAID" : "PENDING",
+      description: descricao,
+      sourceEntityType: "MARKETING_CONTRACT",
+      sourceEntityId: contractId,
+      issueDate: quando,
+      paidAt: input.paid ? quando : undefined,
+      totalAmount: input.amount,
+      paidAmount: input.paid ? input.amount : 0,
+      remainingAmount: input.paid ? 0 : input.amount,
+      createdById: session.userId,
+    },
+  });
+
+  return mapEntry(entry);
+}
+
+export async function setMarketingEntryPaidAction(
+  entryId: string,
+  paid: boolean,
+): Promise<void> {
+  const session = await requireSession();
+
+  const entry = await prisma.financialEntry.findFirst({
+    where: {
+      id: entryId,
+      organizationId: session.organizationId,
+      module: "MARKETING",
+      sourceEntityType: "MARKETING_CONTRACT",
+    },
+    select: { id: true, totalAmount: true, issueDate: true },
+  });
+  if (!entry) throw new Error("Lançamento não encontrado.");
+
+  await prisma.financialEntry.update({
+    where: { id: entryId },
+    data: {
+      status: paid ? "PAID" : "PENDING",
+      paidAt: paid ? entry.issueDate : null,
+      paidAmount: paid ? entry.totalAmount : 0,
+      remainingAmount: paid ? 0 : entry.totalAmount,
+    },
+  });
+}
+
+export async function deleteMarketingEntryAction(entryId: string): Promise<void> {
+  const session = await requireSession();
+
+  const entry = await prisma.financialEntry.findFirst({
+    where: {
+      id: entryId,
+      organizationId: session.organizationId,
+      module: "MARKETING",
+      sourceEntityType: "MARKETING_CONTRACT",
+    },
+    select: { id: true },
+  });
+  if (!entry) throw new Error("Lançamento não encontrado.");
+
+  await prisma.financialEntry.delete({ where: { id: entryId } });
 }

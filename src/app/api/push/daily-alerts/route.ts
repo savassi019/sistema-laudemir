@@ -22,13 +22,27 @@ export async function POST(req: NextRequest) {
   }
 
   const now = new Date();
+  // O alerta so avisava depois que o prazo passou -- lembrete que chega
+  // atrasado nao e lembrete. Esta janela cobre os proximos 3 dias.
+  const inicioDeHoje = new Date(now);
+  inicioDeHoje.setHours(0, 0, 0, 0);
+  const limiteProximos = new Date(inicioDeHoje);
+  limiteProximos.setDate(limiteProximos.getDate() + 4); // hoje + 3 dias inteiros
+
   const orgs = await prisma.organization.findMany({ select: { id: true } });
   const report: { org: string; sent: number; alerts: number }[] = [];
 
   for (const org of orgs) {
-    const [overdueContent, overdueEntries, delinquents] = await Promise.all([
+    const [overdueContent, upcomingContent, overdueEntries, delinquents] = await Promise.all([
       prisma.marketingContent.count({
-        where: { organizationId: org.id, status: "PENDING", contentDate: { lt: now } },
+        where: { organizationId: org.id, status: "PENDING", contentDate: { lt: inicioDeHoje } },
+      }),
+      prisma.marketingContent.count({
+        where: {
+          organizationId: org.id,
+          status: "PENDING",
+          contentDate: { gte: inicioDeHoje, lt: limiteProximos },
+        },
       }),
       prisma.financialEntry.count({
         where: { organizationId: org.id, status: "OVERDUE" },
@@ -41,12 +55,14 @@ export async function POST(req: NextRequest) {
     const parts: string[] = [];
     if (overdueContent > 0)
       parts.push(`${overdueContent} conteúdo${overdueContent !== 1 ? "s" : ""} atrasado${overdueContent !== 1 ? "s" : ""}`);
+    if (upcomingContent > 0)
+      parts.push(`${upcomingContent} vencendo em 3 dias`);
     if (overdueEntries > 0)
       parts.push(`${overdueEntries} cobrança${overdueEntries !== 1 ? "s" : ""} vencida${overdueEntries !== 1 ? "s" : ""}`);
     if (delinquents > 0)
       parts.push(`${delinquents} cliente${delinquents !== 1 ? "s" : ""} inadimplente${delinquents !== 1 ? "s" : ""}`);
 
-    const totalAlerts = overdueContent + overdueEntries + delinquents;
+    const totalAlerts = overdueContent + upcomingContent + overdueEntries + delinquents;
     if (totalAlerts === 0) {
       report.push({ org: org.id, sent: 0, alerts: 0 });
       continue;

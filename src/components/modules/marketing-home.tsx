@@ -66,8 +66,33 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
     const atrasados: { id: string; titulo: string; cliente: string; kind: MarketingContentKind; dias: number }[] = [];
     const semana: { id: string; titulo: string; cliente: string; kind: MarketingContentKind; data: Date }[] = [];
 
+    // Semana corrente de domingo a sabado, igual a grade do calendario, para
+    // que "produzidos na semana" bata com o que se ve la.
+    const inicioSemana = new Date(hoje);
+    inicioSemana.setDate(hoje.getDate() - hoje.getDay());
+    const fimSemana = new Date(inicioSemana);
+    fimSemana.setDate(inicioSemana.getDate() + 6);
+
+    let pendentes = 0;
+    let aprovados = 0;
+    let produzidosSemana = 0;
+
     for (const c of clientes) {
       for (const item of c.contents) {
+        const dItem = new Date(item.contentDate);
+        if (!Number.isNaN(dItem.getTime())) {
+          const diaItem = new Date(dItem.getFullYear(), dItem.getMonth(), dItem.getDate());
+          if (item.status === "PENDING") pendentes += 1;
+          if (item.status === "APPROVED") aprovados += 1;
+          // Aprovado pressupoe produzido, entao os dois contam aqui.
+          if (
+            (item.status === "PRODUCED" || item.status === "APPROVED") &&
+            diaItem >= inicioSemana &&
+            diaItem <= fimSemana
+          ) {
+            produzidosSemana += 1;
+          }
+        }
         if (item.status === "APPROVED") continue;
         const d = new Date(item.contentDate);
         if (Number.isNaN(d.getTime())) continue;
@@ -85,7 +110,10 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
 
     atrasados.sort((a, b) => b.dias - a.dias);
     semana.sort((a, b) => a.data.getTime() - b.data.getTime());
-    return { ativos: ativos.length, receita, porEstagio, atrasados, semana, hoje };
+    return {
+      ativos: ativos.length, receita, porEstagio, atrasados, semana, hoje,
+      pendentes, aprovados, produzidosSemana,
+    };
   }, [clientes]);
 
   if (carregando) {
@@ -121,6 +149,28 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
         />
         <Cartao rotulo="Na semana" valor={String(dados.semana.length)} cor="text-[#93c5fd]" />
       </div>
+
+      {/* Conteudos por situacao: da para saber quanto falta sem contar na mao. */}
+      <button
+        type="button"
+        onClick={onAbrirCalendario}
+        className="grid w-full grid-cols-3 gap-2 rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 px-3 py-2.5 text-left transition active:bg-white/[0.04] md:gap-4 md:px-4 md:py-3"
+      >
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.1em] text-[#5a544c]">Pendentes</p>
+          <p className={cn("text-lg font-semibold tabular-nums md:text-xl", dados.pendentes ? "text-[#f87171]" : "text-[#86efac]")}>
+            {dados.pendentes}
+          </p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.1em] text-[#5a544c]">Produzidos/sem.</p>
+          <p className="text-lg font-semibold tabular-nums text-[#f3dfae] md:text-xl">{dados.produzidosSemana}</p>
+        </div>
+        <div>
+          <p className="text-[10px] uppercase tracking-[0.1em] text-[#5a544c]">Aprovados</p>
+          <p className="text-lg font-semibold tabular-nums text-[#4ade80] md:text-xl">{dados.aprovados}</p>
+        </div>
+      </button>
 
       {/* Funil */}
       {estagiosComGente.length > 0 && (

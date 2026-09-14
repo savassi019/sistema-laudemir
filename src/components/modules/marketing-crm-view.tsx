@@ -19,7 +19,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import {
   addMarketingContentAction,
+  addMarketingEntryAction,
   deleteMarketingContentAction,
+  deleteMarketingEntryAction,
+  setMarketingEntryPaidAction,
   getMarketingClientsAction,
   updateMarketingChecklistAction,
   updateMarketingClientAction,
@@ -27,6 +30,7 @@ import {
   updateMarketingPipelineAction,
   type MarketingClientDetail,
   type MarketingContentDetail,
+  type MarketingEntryDetail,
   type OnboardingChecklist,
 } from "@/server/actions/marketing-actions";
 import type { MarketingContentStatus, MarketingPipelineStage } from "@prisma/client";
@@ -129,19 +133,69 @@ function fmt(v: number) {
   return v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
 }
 
-function generateMonthlyReport(client: MarketingClientDetail) {
-  const start = new Date(client.contractDate);
-  const now = new Date();
-  const rows: { key: string; label: string; income: number; expense: number; net: number }[] = [];
-  let cur = new Date(start.getFullYear(), start.getMonth(), 1);
-  const endMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+type MonthRow = {
+  key: string;
+  label: string;
+  /** Receita efetivamente recebida no mes. */
+  income: number;
+  /** Receita lancada e ainda nao recebida. */
+  aberto: number;
+  expense: number;
+  net: number;
+};
+
+function chaveMes(d: Date) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/**
+ * Relatorio do que aconteceu, nao do que era para acontecer.
+ *
+ * A versao antiga repetia o valor do contrato em todos os meses desde a
+ * assinatura: um cliente que pagou 2 de 7 meses aparecia com os 7 recebidos.
+ * Agora cada mes soma os lancamentos reais daquele mes; mes sem lancamento
+ * fica zerado, que e a verdade.
+ */
+function generateMonthlyReport(client: MarketingClientDetail): MonthRow[] {
+  const porMes = new Map<string, { income: number; aberto: number; expense: number }>();
+  const acumula = (key: string) => {
+    const atual = porMes.get(key) ?? { income: 0, aberto: 0, expense: 0 };
+    porMes.set(key, atual);
+    return atual;
+  };
+
+  for (const e of client.entries) {
+    const d = new Date(e.date);
+    if (Number.isNaN(d.getTime())) continue;
+    const acc = acumula(chaveMes(d));
+    if (e.direction === "EXPENSE") acc.expense += e.amount;
+    else if (e.paid) acc.income += e.amount;
+    else acc.aberto += e.amount;
+  }
+
+  // A faixa de meses cobre do contrato ate hoje, mas estica para nao esconder
+  // lancamento datado fora dela (custo adiantado, recebimento retroativo).
+  const marcos = [new Date(client.contractDate), new Date()];
+  for (const e of client.entries) {
+    const d = new Date(e.date);
+    if (!Number.isNaN(d.getTime())) marcos.push(d);
+  }
+  const inicio = new Date(Math.min(...marcos.map((d) => d.getTime())));
+  const fim = new Date(Math.max(...marcos.map((d) => d.getTime())));
+
+  const rows: MonthRow[] = [];
+  let cur = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+  const endMonth = new Date(fim.getFullYear(), fim.getMonth(), 1);
   while (cur <= endMonth) {
+    const key = chaveMes(cur);
+    const v = porMes.get(key) ?? { income: 0, aberto: 0, expense: 0 };
     rows.push({
-      key: `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, "0")}`,
+      key,
       label: `${MONTH_LABELS[cur.getMonth()]}/${String(cur.getFullYear()).slice(2)}`,
-      income: client.contractValue,
-      expense: client.expenseAmount,
-      net: client.contractValue - client.expenseAmount,
+      income: v.income,
+      aberto: v.aberto,
+      expense: v.expense,
+      net: v.income - v.expense,
     });
     cur = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
   }
@@ -362,13 +416,21 @@ function AddContentForm({
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
   const [status, setStatus] = useState<MarketingContentStatus>("PENDING");
   const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
 
   async function handleSave() {
     if (!title.trim()) return;
     setSaving(true);
-    const item = await addMarketingContentAction(contractId, title.trim(), date, status);
-    onAdded(item);
-    setSaving(false);
+    setErro(null);
+    try {
+      const item = await addMarketingContentAction(contractId, title.trim(), date, status);
+      onAdded(item);
+    } catch {
+      // Sem isto o botao ficava girando para sempre e o conteudo nunca era salvo.
+      setErro("Não foi possível salvar. Confira a internet e tente de novo.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -397,6 +459,11 @@ function AddContentForm({
           <option value="APPROVED">Aprovado</option>
         </select>
       </div>
+      {erro ? (
+        <p className="rounded-lg border border-[#f87171]/30 bg-[#f87171]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fca5a5]">
+          {erro}
+        </p>
+      ) : null}
       <div className="flex gap-2">
         <button
           type="button"
@@ -410,6 +477,144 @@ function AddContentForm({
           type="button"
           onClick={onCancel}
           className="rounded-xl border border-[rgba(245,241,232,0.1)] px-4 py-2 text-xs text-[#9a958b] transition hover:text-white"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── AddEntryForm ─────────────────────────────────────────────────────────────
+
+function AddEntryForm({
+  contractId,
+  onAdded,
+  onCancel,
+}: {
+  contractId: string;
+  onAdded: (item: MarketingEntryDetail) => void;
+  onCancel: () => void;
+}) {
+  const [description, setDescription] = useState("");
+  const [amount, setAmount] = useState("");
+  const [direction, setDirection] = useState<"INCOME" | "EXPENSE">("INCOME");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [paid, setPaid] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  const valor = Number(amount.replace(",", "."));
+  const podeSalvar = description.trim().length > 0 && Number.isFinite(valor) && valor > 0;
+
+  async function handleSave() {
+    if (!podeSalvar) return;
+    setSaving(true);
+    setErro(null);
+    try {
+      const item = await addMarketingEntryAction(contractId, {
+        description: description.trim(),
+        direction,
+        amount: valor,
+        date,
+        paid,
+      });
+      onAdded(item);
+    } catch {
+      setErro("Não foi possível salvar. Confira a internet e tente de novo.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="mt-2 space-y-2 rounded-xl border border-[#7b6fc0]/20 bg-[#7b6fc0]/5 p-3">
+      {/* Receita ou custo primeiro: muda o sentido de tudo que vem depois. */}
+      <div className="grid grid-cols-2 gap-1.5">
+        {([
+          { key: "INCOME" as const,  label: "Recebimento", cls: "text-[#4ade80] border-[#4ade80]/40 bg-[#4ade80]/10" },
+          { key: "EXPENSE" as const, label: "Custo",       cls: "text-[#f87171] border-[#f87171]/40 bg-[#f87171]/10" },
+        ]).map((op) => (
+          <button
+            key={op.key}
+            type="button"
+            onClick={() => setDirection(op.key)}
+            className={cn(
+              "rounded-xl border py-2.5 text-xs font-semibold transition",
+              direction === op.key
+                ? op.cls
+                : "border-[rgba(245,241,232,0.1)] text-[#9a958b] active:border-[rgba(245,241,232,0.25)]",
+            )}
+          >
+            {op.label}
+          </button>
+        ))}
+      </div>
+
+      <input
+        className={fieldCls}
+        placeholder={direction === "INCOME" ? "Ex.: mensalidade de setembro" : "Ex.: tráfego pago / designer"}
+        value={description}
+        onChange={(e) => setDescription(e.target.value)}
+        autoFocus
+      />
+
+      <div className="flex gap-2">
+        <input
+          type="text"
+          inputMode="decimal"
+          className={cn(fieldCls, "flex-1")}
+          placeholder="R$ 0,00"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+        />
+        <input
+          type="date"
+          className={cn(fieldCls, "flex-1")}
+          value={date}
+          onChange={(e) => setDate(e.target.value)}
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setPaid((x) => !x)}
+        className="flex w-full items-center gap-2.5 rounded-xl px-1 py-2 text-left"
+      >
+        <span
+          className={cn(
+            "flex size-5 shrink-0 items-center justify-center rounded-md border transition",
+            paid
+              ? "border-[#4ade80]/50 bg-[#4ade80]/15 text-[#4ade80]"
+              : "border-[rgba(245,241,232,0.15)] text-transparent",
+          )}
+        >
+          <Check className="size-3.5" />
+        </span>
+        <span className="text-xs text-[#d6d1c7]">
+          {direction === "INCOME" ? "Já recebi este valor" : "Já paguei este custo"}
+        </span>
+      </button>
+
+      {erro ? (
+        <p className="rounded-lg border border-[#f87171]/30 bg-[#f87171]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fca5a5]">
+          {erro}
+        </p>
+      ) : null}
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving || !podeSalvar}
+          className="flex-1 rounded-xl bg-[#7b6fc0] py-2.5 text-xs font-semibold text-white transition active:bg-[#8a7fd4] disabled:opacity-50"
+        >
+          {saving ? <LoaderCircle className="mx-auto size-3.5 animate-spin" /> : "Salvar"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-xl border border-[rgba(245,241,232,0.1)] px-4 py-2.5 text-xs text-[#9a958b] transition active:text-white"
         >
           Cancelar
         </button>
@@ -542,6 +747,9 @@ function ClientDetailPanel({
   const [isEditing, setIsEditing] = useState(false);
   const [addingContent, setAddingContent] = useState(false);
   const [pendingChecklist, setPendingChecklist] = useState<OnboardingChecklist | null>(null);
+  const [erroChecklist, setErroChecklist] = useState<string | null>(null);
+  const [addingEntry, setAddingEntry] = useState(false);
+  const [erroLancamento, setErroLancamento] = useState<string | null>(null);
 
   const checklist = pendingChecklist ?? client.onboardingChecklist;
   const checklistDone = CHECKLIST_ITEMS.filter((i) => checklist[i.key]).length;
@@ -549,6 +757,7 @@ function ClientDetailPanel({
   const totalIncome = monthlyReport.reduce((s, m) => s + m.income, 0);
   const totalExpense = monthlyReport.reduce((s, m) => s + m.expense, 0);
   const totalNet = monthlyReport.reduce((s, m) => s + m.net, 0);
+  const totalAberto = monthlyReport.reduce((s, m) => s + m.aberto, 0);
   const profit = client.contractValue - client.expenseAmount;
 
   async function handleStageChange(newStage: MarketingPipelineStage) {
@@ -557,10 +766,20 @@ function ClientDetailPanel({
   }
 
   async function handleChecklistToggle(key: keyof OnboardingChecklist) {
+    const anterior = checklist;
     const next = { ...checklist, [key]: !checklist[key] };
+    // Marca na hora para o toque responder, mas desmarca de volta se o
+    // servidor recusar. Sem isso o item ficava marcado na tela e nao no
+    // banco -- o pior tipo de erro, o que nao aparece.
     setPendingChecklist(next);
-    await updateMarketingChecklistAction(client.id, next);
-    onUpdate({ id: client.id, onboardingChecklist: next });
+    setErroChecklist(null);
+    try {
+      await updateMarketingChecklistAction(client.id, next);
+      onUpdate({ id: client.id, onboardingChecklist: next });
+    } catch {
+      setPendingChecklist(anterior);
+      setErroChecklist("Nao foi possivel salvar. Confira a internet e toque de novo.");
+    }
   }
 
   async function handleContentStatusChange(contentId: string, status: MarketingContentStatus) {
@@ -579,6 +798,41 @@ function ClientDetailPanel({
   function handleContentAdded(item: MarketingContentDetail) {
     onUpdate({ id: client.id, contents: [item, ...client.contents] });
     setAddingContent(false);
+  }
+
+  function handleEntryAdded(item: MarketingEntryDetail) {
+    const lista = [item, ...client.entries].sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+    onUpdate({ id: client.id, entries: lista });
+    setAddingEntry(false);
+  }
+
+  async function handleEntryDelete(entryId: string) {
+    const anterior = client.entries;
+    onUpdate({ id: client.id, entries: anterior.filter((e) => e.id !== entryId) });
+    try {
+      await deleteMarketingEntryAction(entryId);
+    } catch {
+      onUpdate({ id: client.id, entries: anterior });
+      setErroLancamento("Não foi possível excluir. Tente de novo.");
+    }
+  }
+
+  async function handleEntryTogglePaid(entry: MarketingEntryDetail) {
+    const anterior = client.entries;
+    const paid = !entry.paid;
+    onUpdate({
+      id: client.id,
+      entries: anterior.map((e) => (e.id === entry.id ? { ...e, paid } : e)),
+    });
+    setErroLancamento(null);
+    try {
+      await setMarketingEntryPaidAction(entry.id, paid);
+    } catch {
+      onUpdate({ id: client.id, entries: anterior });
+      setErroLancamento("Não foi possível salvar. Confira a internet e tente de novo.");
+    }
   }
 
   function handleEditSave(updates: Partial<MarketingClientDetail>) {
@@ -673,10 +927,13 @@ function ClientDetailPanel({
                 type="button"
                 onClick={() => handleStageChange(s.key)}
                 className={cn(
-                  "rounded-full border px-2.5 py-1 text-[11px] font-semibold transition",
+                  // Alvo de 44px no celular: sete pilulas minusculas lado a lado
+                  // faziam marcar "Proposta" querendo "Reuniao".
+                  "min-h-11 rounded-full border px-3.5 text-[11px] font-semibold transition",
+                  "md:min-h-0 md:px-2.5 md:py-1",
                   client.pipelineStage === s.key
                     ? cn(s.textCls, s.borderCls, s.bgCls, "ring-1 ring-current/30")
-                    : "border-[rgba(245,241,232,0.1)] text-[#9a958b] hover:border-[rgba(245,241,232,0.2)] hover:text-white",
+                    : "border-[rgba(245,241,232,0.1)] text-[#9a958b] active:border-[rgba(245,241,232,0.25)] md:hover:border-[rgba(245,241,232,0.2)] md:hover:text-white",
                 )}
               >
                 {s.short}
@@ -688,6 +945,11 @@ function ClientDetailPanel({
         {/* Onboarding checklist */}
         <div>
           <p className={sectionTitle}>Onboarding · {checklistDone}/{CHECKLIST_ITEMS.length}</p>
+          {erroChecklist ? (
+            <p className="mb-1.5 rounded-lg border border-[#f87171]/30 bg-[#f87171]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fca5a5]">
+              {erroChecklist}
+            </p>
+          ) : null}
           <div className="space-y-0.5">
             {CHECKLIST_ITEMS.map((item) => (
               <button
@@ -800,15 +1062,106 @@ function ClientDetailPanel({
         </div>
 
         {/* Monthly report */}
+        {/* Lancamentos: e daqui que o relatorio mensal tira os numeros. */}
+        {!hideFinancials && (
+          <div>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className={cn(sectionTitle, "mb-0")}>
+                Lançamentos{client.entries.length > 0 ? ` · ${client.entries.length}` : ""}
+              </p>
+              <button
+                type="button"
+                onClick={() => setAddingEntry((x) => !x)}
+                className="inline-flex items-center gap-1 rounded-lg bg-[#7b6fc0]/15 px-2 py-1 text-[10px] font-semibold text-[#c8bef5] transition active:bg-[#7b6fc0]/25"
+              >
+                <Plus className="size-3" />
+                Novo
+              </button>
+            </div>
+
+            {addingEntry && (
+              <AddEntryForm
+                contractId={client.id}
+                onAdded={handleEntryAdded}
+                onCancel={() => setAddingEntry(false)}
+              />
+            )}
+
+            {erroLancamento ? (
+              <p className="mt-1.5 rounded-lg border border-[#f87171]/30 bg-[#f87171]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fca5a5]">
+                {erroLancamento}
+              </p>
+            ) : null}
+
+            {client.entries.length === 0 && !addingEntry ? (
+              <p className="py-1 text-xs text-[#5a544c]">
+                Nenhum recebimento ou custo lançado. O relatório mensal soma o que for lançado aqui.
+              </p>
+            ) : (
+              <div className="mt-1 space-y-1.5">
+                {client.entries.map((e) => {
+                  const receita = e.direction === "INCOME";
+                  return (
+                    <div
+                      key={e.id}
+                      className="flex items-center gap-2 rounded-xl border border-[rgba(245,241,232,0.06)] bg-white/[0.02] px-2.5 py-2"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleEntryTogglePaid(e)}
+                        title={e.paid ? "Marcar como em aberto" : "Marcar como pago"}
+                        className={cn(
+                          "flex size-6 shrink-0 items-center justify-center rounded-md border transition",
+                          e.paid
+                            ? "border-[#4ade80]/50 bg-[#4ade80]/15 text-[#4ade80]"
+                            : "border-[#f59e0b]/40 bg-[#f59e0b]/10 text-transparent",
+                        )}
+                      >
+                        <Check className="size-3.5" />
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-xs font-medium text-white">{e.description}</p>
+                        <p className="text-[10px] text-[#9a958b]">
+                          {fmtShortDate(e.date)}
+                          {!e.paid && (
+                            <span className="ml-1.5 font-semibold text-[#f59e0b]">em aberto</span>
+                          )}
+                        </p>
+                      </div>
+                      <p
+                        className={cn(
+                          "shrink-0 text-xs font-semibold tabular-nums",
+                          receita ? "text-[#4ade80]" : "text-[#f87171]",
+                        )}
+                      >
+                        {receita ? "+" : "-"}
+                        {fmt(e.amount)}
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleEntryDelete(e.id)}
+                        className="shrink-0 rounded-md p-1 text-[#5a544c] transition active:text-[#f87171]"
+                        title="Excluir lançamento"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
         {!hideFinancials && monthlyReport.length > 0 && (
           <div>
-            <p className={sectionTitle}>Histórico mensal</p>
+            <p className={sectionTitle}>Relatório mensal · o que entrou de verdade</p>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[300px] text-xs">
                 <thead>
                   <tr className="border-b border-[rgba(245,241,232,0.08)]">
                     <th className="pb-2 pr-3 text-left font-medium text-[#9a958b]">Mês</th>
-                    <th className="pb-2 pr-3 text-right font-medium text-[#9a958b]">Entrada</th>
+                    <th className="pb-2 pr-3 text-right font-medium text-[#9a958b]">Recebido</th>
                     <th className="pb-2 pr-3 text-right font-medium text-[#9a958b]">Custo</th>
                     <th className="pb-2 text-right font-medium text-[#9a958b]">Lucro</th>
                   </tr>
@@ -817,7 +1170,16 @@ function ClientDetailPanel({
                   {monthlyReport.map((m) => (
                     <tr key={m.key} className="border-b border-[rgba(245,241,232,0.04)] last:border-b-0">
                       <td className="py-1.5 pr-3 text-white">{m.label}</td>
-                      <td className="py-1.5 pr-3 text-right text-[#4ade80]">{fmt(m.income)}</td>
+                      <td className="py-1.5 pr-3 text-right">
+                        <span className={m.income > 0 ? "text-[#4ade80]" : "text-[#5a544c]"}>
+                          {fmt(m.income)}
+                        </span>
+                        {m.aberto > 0 && (
+                          <span className="block text-[10px] font-medium text-[#f59e0b]">
+                            {fmt(m.aberto)} em aberto
+                          </span>
+                        )}
+                      </td>
                       <td className="py-1.5 pr-3 text-right text-[#f87171]">{fmt(m.expense)}</td>
                       <td className={cn("py-1.5 text-right font-medium", m.net < 0 ? "text-[#f87171]" : "text-[#60a5fa]")}>
                         {fmt(m.net)}
@@ -839,13 +1201,18 @@ function ClientDetailPanel({
                 </tfoot>
               </table>
             </div>
+            {totalAberto > 0 && (
+              <p className="mt-2 rounded-lg border border-[#f59e0b]/25 bg-[#f59e0b]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fcd34d]">
+                {fmt(totalAberto)} lançados e ainda não recebidos deste cliente.
+              </p>
+            )}
           </div>
         )}
 
         {/* Financial summary */}
         {!hideFinancials && (
           <div className="rounded-xl border border-[rgba(245,241,232,0.06)] bg-white/[0.02] p-3">
-            <p className={sectionTitle}>Financeiro mensal</p>
+            <p className={sectionTitle}>Contrato · previsto por mês</p>
             <div className="grid grid-cols-3 gap-2 text-xs">
               <div>
                 <p className="text-[#9a958b]">Entrada</p>
