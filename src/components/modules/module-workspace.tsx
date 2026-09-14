@@ -5,6 +5,7 @@ import type { ComponentType } from "react";
 import {
   ArrowLeft,
   BarChart2,
+  Gauge,
   ChevronRight,
   ClipboardList,
   History,
@@ -155,6 +156,43 @@ export function ModuleWorkspace({
     (e) => e.status === "PENDING" || e.status === "PARTIAL",
   ).length;
 
+  /*
+   * Barra de navegacao do Marketing.
+   *
+   * As abas so chamavam setActiveSection(key), nunca null -- entrando em
+   * qualquer uma delas o painel (funil, atrasados, contadores) ficava
+   * inalcancavel ate recarregar a pagina. O chip "Painel" e o caminho de
+   * volta, e a mesma barra aparece nas duas telas para a navegacao nao
+   * sumir do nada.
+   */
+  const navChips = hasCalendar ? (
+    <div className="flex gap-1.5 overflow-x-auto pb-0.5">
+      {[null, ...visibleSections].map((key) => {
+        const c = key === null
+          ? { label: "Painel", icon: Gauge }
+          : rotuloDaSecao(SECTION_CFG[key], key, true);
+        const Ic = c.icon;
+        const ativo = key === activeSection;
+        return (
+          <button
+            key={key ?? "painel"}
+            type="button"
+            onClick={() => setActiveSection(key)}
+            className={cn(
+              "flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition",
+              ativo
+                ? "border-[#d1a04f]/40 bg-[#d1a04f]/12 text-[#f3dfae]"
+                : "border-white/10 bg-white/[0.03] text-[#9a958b] active:bg-white/[0.07]",
+            )}
+          >
+            <Ic className="size-3.5" />
+            {c.label}
+          </button>
+        );
+      })}
+    </div>
+  ) : null;
+
   // ── SECTION DETAIL VIEW ────────────────────────────────────────────────────
   if (activeSection) {
     const cfg = SECTION_CFG[activeSection];
@@ -164,30 +202,7 @@ export function ModuleWorkspace({
       <section className="space-y-3">
         {/* Cabeçalho da seção */}
         {hasCalendar ? (
-          /* Marketing: navegacao direta entre as areas, sem passar por um menu */
-          <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-            {visibleSections.map((key) => {
-              const c = rotuloDaSecao(SECTION_CFG[key], key, true);
-              const Ic = c.icon;
-              const ativo = key === activeSection;
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setActiveSection(key)}
-                  className={cn(
-                    "flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition",
-                    ativo
-                      ? "border-[#d1a04f]/40 bg-[#d1a04f]/12 text-[#f3dfae]"
-                      : "border-white/10 bg-white/[0.03] text-[#9a958b] active:bg-white/[0.07]",
-                  )}
-                >
-                  <Ic className="size-3.5" />
-                  {c.label}
-                </button>
-              );
-            })}
-          </div>
+          navChips
         ) : (
           <div className="flex items-center gap-3">
             <button
@@ -423,6 +438,7 @@ export function ModuleWorkspace({
   // ── HOME DO MÓDULO ─────────────────────────────────────────────────────────
   return (
     <section className="space-y-3">
+      {navChips}
 
       {/* Marketing tem painel proprio: funil, atrasados e semana valem mais
           que Entradas/Despesas/Resultado, que aqui vivem zerados. */}
