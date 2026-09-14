@@ -311,6 +311,9 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
                 const ehHoje = k === chaveDia(hoje);
                 const selecionado = k === diaSel;
                 const temAtraso = itens.some((i) => i.atrasado);
+                // Dia passado precisa parecer passado: sem isto o usuario marca
+                // compromisso no dia errado achando que e a semana que vem.
+                const jaPassou = dia < hoje;
 
                 return (
                   <button
@@ -321,6 +324,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
                       "flex aspect-square flex-col items-center justify-center gap-0.5 rounded-lg text-xs transition",
                       "md:aspect-auto md:min-h-[92px] md:items-stretch md:justify-start md:p-1.5",
                       foraDoMes ? "text-[#3a352f]" : "text-[#c9c2b4]",
+                      jaPassou && !foraDoMes && !selecionado ? "opacity-45" : "",
                       selecionado ? "bg-[#d1a04f]/20 ring-1 ring-[#d1a04f]/50 text-white" : "active:bg-white/[0.06]",
                       !selecionado && ehHoje ? "ring-1 ring-white/20" : "",
                     )}
@@ -499,6 +503,11 @@ function NovoCompromisso({
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
+  const ehPassado = useMemo(() => {
+    const h = new Date(); h.setHours(0, 0, 0, 0);
+    return data < h;
+  }, [data]);
+
   async function salvar() {
     setErro(null);
     if (!titulo.trim()) return setErro("Descreva o compromisso.");
@@ -521,6 +530,12 @@ function NovoCompromisso({
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#f3dfae]">
         Marcar em {data.getDate()}/{String(data.getMonth() + 1).padStart(2, "0")}
       </p>
+      {/* O visual esmaecido sozinho nao impede marcar no dia errado. */}
+      {ehPassado && (
+        <p className="rounded-lg border border-[#fb923c]/30 bg-[#fb923c]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fdba74]">
+          Atenção: este dia já passou.
+        </p>
+      )}
 
       <div className="grid grid-cols-3 gap-1.5">
         {(Object.keys(TIPOS) as MarketingContentKind[]).map((k) => {
