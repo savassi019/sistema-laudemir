@@ -103,7 +103,7 @@ export function LeftSidebar({
         <Link href="/" className="flex items-center gap-2.5 min-w-0">
             <div className="flex size-9 items-center justify-center overflow-hidden rounded-xl border border-[#d1a04f]/25 bg-white">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/infinity-logo.png" alt="Infinity" className="size-full object-contain p-0.5" />
+              <img src="/infinity-emblema.png" alt="Infinity" className="size-full object-contain p-0.5" />
             </div>
           {!isCollapsed && (
             <span className="truncate whitespace-nowrap text-sm font-semibold text-white">

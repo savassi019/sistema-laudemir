@@ -45,7 +45,7 @@ export function AppShell({
                   sumiria sobre o fundo escuro do app. */}
               <div className="flex size-8 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#d1a04f]/25 bg-white lg:hidden">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/infinity-logo.png" alt="Infinity" className="size-full object-contain p-0.5" />
+                <img src="/infinity-emblema.png" alt="Infinity" className="size-full object-contain p-0.5" />
               </div>
               <HeaderBrand />
             </Link>

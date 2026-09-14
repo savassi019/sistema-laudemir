@@ -32,7 +32,7 @@ export default async function LoginPage() {
                   desapareceria sobre o fundo escuro do painel. */}
               <div className="login-icon-pulse login-icon-scan relative flex size-12 items-center justify-center overflow-hidden rounded-2xl border border-[#d1a04f]/25 bg-white shadow-[0_0_0_6px_rgba(209,160,79,0.06),0_0_20px_rgba(209,160,79,0.08)]">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src="/infinity-logo.png" alt="Infinity" className="size-full object-contain p-1" />
+                <img src="/infinity-emblema.png" alt="Infinity" className="size-full object-contain p-1" />
               </div>
               <div className="space-y-0.5">
                 <p className="text-[9px] uppercase tracking-[0.36em] text-white/30">
