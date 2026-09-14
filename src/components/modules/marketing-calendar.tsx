@@ -450,11 +450,21 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
                 <button
                   type="button"
                   onClick={() => setAmpliado(t)}
-                  className="size-11 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/30"
+                  className="relative size-11 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/30"
                   aria-label={`Ver criativo de ${t.titulo}`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={`/api/files/${t.fileId}`} alt="" className="size-full object-cover" />
+                  {/* O tipo continua legivel: a miniatura sozinha faria reuniao
+                      e conteudo parecerem a mesma coisa. */}
+                  {(() => {
+                    const { Icone, label } = TIPOS[t.kind];
+                    return (
+                      <span className="absolute bottom-0 right-0 flex size-4 items-center justify-center rounded-tl-md bg-black/75">
+                        <Icone className="size-2.5 text-white" aria-label={label} />
+                      </span>
+                    );
+                  })()}
                 </button>
               ) : (
                 <label
