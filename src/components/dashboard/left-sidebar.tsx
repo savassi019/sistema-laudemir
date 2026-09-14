@@ -122,15 +122,19 @@ export function LeftSidebar({
           />
         </button>
       ) : (
-        <div className="flex h-14 shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-[rgba(245,241,232,0.07)] px-3">
-          <Link href="/" className="flex min-w-0 items-center gap-2.5">
+        <div className="flex h-14 shrink-0 items-center justify-between gap-1 overflow-hidden border-b border-[rgba(245,241,232,0.07)] pl-2.5 pr-1.5">
+          {/*
+            Sao 210px: emblema + nome + botao tem de caber sem cortar. Com o
+            emblema em h-8 (76px de largura) o nome virava "Infinity ...".
+          */}
+          <Link href="/" className="flex min-w-0 items-center gap-2">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src="/infinity-emblema.png"
               alt="Infinity"
-              className="h-8 w-auto max-w-none shrink-0 object-contain"
+              className="h-7 w-auto max-w-none shrink-0 object-contain"
             />
-            <span className="truncate whitespace-nowrap text-sm font-semibold text-white">
+            <span className="truncate whitespace-nowrap text-[13px] font-semibold tracking-tight text-white">
               Infinity ERP
             </span>
           </Link>
