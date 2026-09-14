@@ -5,7 +5,6 @@ import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import {
   ChevronLeft,
-  ChevronRight,
   CircleDollarSign,
   ClipboardCheck,
   FileBarChart2,
@@ -98,40 +97,53 @@ export function LeftSidebar({
       style={{ width: isCollapsed ? 60 : 210 }}
       className="fixed left-0 top-0 flex h-screen flex-col z-40 transition-[width] duration-200 ease-in-out border-r border-[rgba(245,241,232,0.07)] bg-[#090c0b]"
     >
-      {/* Logo row */}
-      <div className="flex h-14 shrink-0 items-center justify-between overflow-hidden border-b border-[rgba(245,241,232,0.07)] px-3">
-        <Link href="/" className="flex items-center gap-2.5 min-w-0">
-            {/*
-              A barra recolhida tem 60px e o botao de recolher ocupa 24: sobram
-              ~11px de largura. O emblema e 2,4x mais largo que alto, entao ali
-              ele virava um filete. Recolhida usa a marca quadrada (so o
-              simbolo), expandida usa o emblema com as asas.
-            */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={isCollapsed ? "/infinity-simbolo.png" : "/infinity-emblema.png"}
-              alt="Infinity"
-              className={cn("shrink-0 object-contain", isCollapsed ? "size-7" : "h-8 w-auto")}
-            />
-          {!isCollapsed && (
-            <span className="truncate whitespace-nowrap text-sm font-semibold text-white">
-              Infinity ERP
-            </span>
-          )}
-        </Link>
+      {/*
+        Linha da marca.
+
+        Recolhida a barra tem 60px; com padding sobram 36 e o botao de
+        recolher levava 24. O Tailwind poe max-width:100% em toda imagem,
+        entao a logo era espremida nos ~11px que sobravam do link -- shrink-0
+        nao segura isso, porque o limite vem do max-width, nao do flex.
+        Recolhida, portanto, a propria marca e o botao de expandir: uma coisa
+        so, centralizada, com espaco de verdade.
+      */}
+      {isCollapsed ? (
         <button
           type="button"
           onClick={toggle}
-          className="flex size-6 shrink-0 items-center justify-center rounded-lg text-[#9a958b] transition hover:bg-white/[0.06] hover:text-white"
-          title={isCollapsed ? "Expandir menu" : "Recolher menu"}
+          title="Expandir menu"
+          className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[rgba(245,241,232,0.07)] transition hover:bg-white/[0.04]"
         >
-          {isCollapsed ? (
-            <ChevronRight className="size-3.5" />
-          ) : (
-            <ChevronLeft className="size-3.5" />
-          )}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/infinity-simbolo.png"
+            alt="Infinity — expandir menu"
+            className="size-8 shrink-0 object-contain"
+          />
         </button>
-      </div>
+      ) : (
+        <div className="flex h-14 shrink-0 items-center justify-between gap-2 overflow-hidden border-b border-[rgba(245,241,232,0.07)] px-3">
+          <Link href="/" className="flex min-w-0 items-center gap-2.5">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/infinity-emblema.png"
+              alt="Infinity"
+              className="h-8 w-auto max-w-none shrink-0 object-contain"
+            />
+            <span className="truncate whitespace-nowrap text-sm font-semibold text-white">
+              Infinity ERP
+            </span>
+          </Link>
+          <button
+            type="button"
+            onClick={toggle}
+            className="flex size-6 shrink-0 items-center justify-center rounded-lg text-[#9a958b] transition hover:bg-white/[0.06] hover:text-white"
+            title="Recolher menu"
+          >
+            <ChevronLeft className="size-3.5" />
+          </button>
+        </div>
+      )}
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden py-2">
