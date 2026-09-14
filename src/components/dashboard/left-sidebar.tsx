@@ -101,8 +101,18 @@ export function LeftSidebar({
       {/* Logo row */}
       <div className="flex h-14 shrink-0 items-center justify-between overflow-hidden border-b border-[rgba(245,241,232,0.07)] px-3">
         <Link href="/" className="flex items-center gap-2.5 min-w-0">
+            {/*
+              A barra recolhida tem 60px e o botao de recolher ocupa 24: sobram
+              ~11px de largura. O emblema e 2,4x mais largo que alto, entao ali
+              ele virava um filete. Recolhida usa a marca quadrada (so o
+              simbolo), expandida usa o emblema com as asas.
+            */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/infinity-emblema.png" alt="Infinity" className="h-8 w-auto shrink-0 object-contain" />
+            <img
+              src={isCollapsed ? "/infinity-simbolo.png" : "/infinity-emblema.png"}
+              alt="Infinity"
+              className={cn("shrink-0 object-contain", isCollapsed ? "size-7" : "h-8 w-auto")}
+            />
           {!isCollapsed && (
             <span className="truncate whitespace-nowrap text-sm font-semibold text-white">
               Infinity ERP
