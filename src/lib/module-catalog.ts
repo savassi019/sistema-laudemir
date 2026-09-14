@@ -17,6 +17,9 @@ export type ModuleCatalogItem = {
   detail: string;
   group: ModuleGroupKey;
   stage: ModuleStage;
+  /** Funcionalidade que existe mas nao tem tela propria: diz onde ela esta,
+   *  em vez de o card anunciar "Em implantacao" para algo que ja funciona. */
+  disponivelEm?: string;
   /** Identifica o modulo de relance; substituiu o esquema de cores por card. */
   emoji: string;
   href?: string;
@@ -212,10 +215,11 @@ export const moduleCatalog: ModuleCatalogItem[] = [
     module: "REPORTS",
     slug: "comprovantes-whatsapp",
     title: "Comprovantes / WhatsApp",
-    summary: "Envio automático entre módulos",
-    detail: "Comprovantes, notificações e disparos por etapa operacional.",
+    summary: "Enviado ao fechar cada operação",
+    detail: "Ao salvar um fechamento, o comprovante vira imagem e segue pro WhatsApp do cliente.",
     group: "transversal",
-    stage: "Fase 4",
+    stage: "Base pronta",
+    disponivelEm: "Dentro de cada módulo",
     emoji: "💬",
   },
 ];

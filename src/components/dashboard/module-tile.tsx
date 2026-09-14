@@ -32,7 +32,7 @@ export function ModuleTile({ item }: { item: ModuleCatalogItem }) {
         </div>
         {disabled ? (
           <span className="shrink-0 rounded-full border border-white/12 bg-black/15 px-2 py-0.5 text-[9px] font-medium uppercase tracking-[0.08em] text-white/60">
-            Em breve
+            {item.disponivelEm ? "Em cada módulo" : "Em breve"}
           </span>
         ) : (
           <ChevronRight className="size-4 shrink-0 text-white/45" />
@@ -68,7 +68,7 @@ export function ModuleTile({ item }: { item: ModuleCatalogItem }) {
             </div>
           ) : (
             <div className="inline-flex rounded-full border border-white/12 bg-black/15 px-3 py-1.5 text-xs font-medium text-white/70">
-              Em implantacao
+              {item.disponivelEm ?? "Em implantacao"}
             </div>
           )}
         </div>
