@@ -902,6 +902,9 @@ model MarketingContent {
   title          String
   contentDate    DateTime
   kind           MarketingContentKind   @default(POST)
+  /// Criativo anexado (id de FileAsset). Sem relacao formal porque FileAsset
+  /// e generico e todos os modulos o referenciam por id.
+  fileId         String?
   status         MarketingContentStatus @default(PENDING)
   notes          String?
   createdAt      DateTime               @default(now())

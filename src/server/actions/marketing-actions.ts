@@ -39,6 +39,7 @@ export type MarketingContentDetail = {
   kind: MarketingContentKind;
   status: MarketingContentStatus;
   notes?: string | null;
+  fileId?: string | null;
 };
 
 export type MarketingClientDetail = {
@@ -84,6 +85,7 @@ export async function getMarketingClientsAction(): Promise<MarketingClientDetail
       kind: cnt.kind,
       status: cnt.status,
       notes: cnt.notes,
+      fileId: cnt.fileId,
     })),
     contractDate: c.contractDate.toISOString(),
     createdAt: c.createdAt.toISOString(),
@@ -129,6 +131,7 @@ export async function addMarketingContentAction(
   status: MarketingContentStatus,
   notes?: string,
   kind: MarketingContentKind = "POST",
+  fileId?: string | null,
 ): Promise<MarketingContentDetail> {
   const session = await requireSession();
 
@@ -147,6 +150,7 @@ export async function addMarketingContentAction(
       kind,
       status,
       notes: notes || null,
+      fileId: fileId || null,
     },
   });
 
@@ -157,6 +161,7 @@ export async function addMarketingContentAction(
     kind: content.kind,
     status: content.status,
     notes: content.notes,
+    fileId: content.fileId,
   };
 }
 
@@ -168,6 +173,14 @@ export async function updateMarketingContentStatusAction(
   await prisma.marketingContent.update({
     where: { id: contentId, organizationId: session.organizationId },
     data: { status },
+  });
+}
+
+export async function setMarketingContentFileAction(contentId: string, fileId: string | null) {
+  const session = await requireSession();
+  await prisma.marketingContent.update({
+    where: { id: contentId, organizationId: session.organizationId },
+    data: { fileId },
   });
 }
 

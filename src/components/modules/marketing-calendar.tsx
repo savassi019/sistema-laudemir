@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Check, ChevronLeft, ChevronRight, Loader2, Megaphone, Plus, Users } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, ImagePlus, Loader2, Megaphone, Plus, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "@/lib/cn";
@@ -8,6 +8,7 @@ import { formatCurrency } from "@/lib/format";
 import {
   addMarketingContentAction,
   getMarketingClientsAction,
+  setMarketingContentFileAction,
   updateMarketingContentStatusAction,
   type MarketingClientDetail,
 } from "@/server/actions/marketing-actions";
@@ -45,7 +46,18 @@ type Tarefa = {
   kind: MarketingContentKind;
   status: MarketingContentStatus;
   atrasado: boolean;
+  fileId?: string | null;
 };
+
+async function enviarArquivo(file: File): Promise<string | null> {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("category", "PHOTO");
+  const r = await fetch("/api/upload", { method: "POST", body: fd });
+  if (!r.ok) return null;
+  const { id } = (await r.json()) as { id: string };
+  return id;
+}
 
 /** Chave local AAAA-M-D. Evita UTC, que joga o conteúdo pro dia anterior. */
 function chaveDia(d: Date) {
@@ -61,6 +73,8 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
   const [mes, setMes] = useState(() => new Date(hoje.getFullYear(), hoje.getMonth(), 1));
   const [diaSel, setDiaSel] = useState<string>(() => chaveDia(new Date()));
   const [novoAberto, setNovoAberto] = useState(false);
+  const [anexando, setAnexando] = useState<string | null>(null);
+  const [ampliado, setAmpliado] = useState<Tarefa | null>(null);
   // null = todos os clientes. Com varios clientes o mes vira sopa sem isto.
   const [clienteFiltro, setClienteFiltro] = useState<string | null>(null);
 
@@ -93,6 +107,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
           kind: c.kind,
           status: c.status,
           atrasado: c.status !== "APPROVED" && dLocal < hoje,
+          fileId: c.fileId,
         };
         const atual = mapa.get(k);
         if (atual) atual.push(item);
@@ -145,6 +160,19 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
 
   const selecionado = clienteFiltro ? clientes.find((c) => c.id === clienteFiltro) ?? null : null;
   const tarefasDoDia = porDia.get(diaSel) ?? [];
+
+  async function anexarCriativo(t: Tarefa, file: File) {
+    setAnexando(t.id);
+    try {
+      const id = await enviarArquivo(file);
+      if (id) {
+        await setMarketingContentFileAction(t.id, id);
+        await carregar();
+      }
+    } finally {
+      setAnexando(null);
+    }
+  }
 
   async function avancar(t: Tarefa) {
     setSalvando(t.id);
@@ -380,6 +408,25 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
         </div>
       </div>
 
+      {/* Criativo ampliado: no celular a miniatura e pequena demais pra avaliar */}
+      {ampliado?.fileId && (
+        <button
+          type="button"
+          onClick={() => setAmpliado(null)}
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-black/85 p-4 backdrop-blur-sm"
+          aria-label="Fechar"
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={`/api/files/${ampliado.fileId}`}
+            alt={ampliado.titulo}
+            className="max-h-[75vh] max-w-full rounded-2xl object-contain"
+          />
+          <span className="text-center text-sm text-white">{ampliado.titulo}</span>
+          <span className="text-xs text-[#9a958b]">Toque para fechar</span>
+        </button>
+      )}
+
       {/* Tarefas do dia escolhido */}
       <div className="mt-2.5 space-y-1.5 md:mt-0 md:sticky md:top-4">
         <p className="px-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#9a958b]">
@@ -398,10 +445,39 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
               key={t.id}
               className="flex items-center gap-2.5 rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 px-3 py-2.5"
             >
-              {(() => {
-                const { Icone, cor, label } = TIPOS[t.kind];
-                return <Icone className={cn("size-4 shrink-0", cor)} aria-label={label} />;
-              })()}
+              {t.fileId ? (
+                /* Ver o criativo e o ponto: sem isso e so uma lista de tarefas */
+                <button
+                  type="button"
+                  onClick={() => setAmpliado(t)}
+                  className="size-11 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-black/30"
+                  aria-label={`Ver criativo de ${t.titulo}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={`/api/files/${t.fileId}`} alt="" className="size-full object-cover" />
+                </button>
+              ) : (
+                <label
+                  className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-dashed border-white/12 text-[#5a544c] transition active:border-[#d1a04f]/40 active:text-[#f3dfae]"
+                  aria-label={`Anexar criativo em ${t.titulo}`}
+                >
+                  {anexando === t.id ? (
+                    <Loader2 className="size-4 animate-spin" />
+                  ) : (
+                    <ImagePlus className="size-4" />
+                  )}
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="sr-only"
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) anexarCriativo(t, f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+              )}
               <div className="min-w-0 flex-1">
                 <p className="truncate text-[13px] text-white">{t.titulo}</p>
                 <p className="truncate text-[11px] text-[#9a958b]">
@@ -502,6 +578,7 @@ function NovoCompromisso({
   const [clienteId, setClienteId] = useState(clientePadrao ?? clientes[0]?.id ?? "");
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const [arquivo, setArquivo] = useState<File | null>(null);
 
   const ehPassado = useMemo(() => {
     const h = new Date(); h.setHours(0, 0, 0, 0);
@@ -517,7 +594,8 @@ function NovoCompromisso({
     try {
       // Data local para o compromisso cair no dia escolhido, e nao no anterior.
       const iso = `${data.getFullYear()}-${String(data.getMonth() + 1).padStart(2, "0")}-${String(data.getDate()).padStart(2, "0")}`;
-      await addMarketingContentAction(clienteId, titulo.trim(), iso, "PENDING", undefined, tipo);
+      const fileId = arquivo ? await enviarArquivo(arquivo) : null;
+      await addMarketingContentAction(clienteId, titulo.trim(), iso, "PENDING", undefined, tipo, fileId);
       onCriado();
     } catch {
       setErro("Não foi possível salvar. Tente de novo.");
@@ -566,6 +644,19 @@ function NovoCompromisso({
         value={titulo}
         onChange={(e) => setTitulo(e.target.value)}
       />
+
+      {tipo === "POST" && (
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-white/12 px-3 text-xs text-[#9a958b] transition active:border-[#d1a04f]/40 active:text-[#f3dfae]">
+          <ImagePlus className="size-4 shrink-0" />
+          <span className="truncate">{arquivo ? arquivo.name : "Anexar criativo (opcional)"}</span>
+          <input
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onChange={(e) => setArquivo(e.target.files?.[0] ?? null)}
+          />
+        </label>
+      )}
 
       <select className={campoCls} value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
         {clientes.map((c) => (
