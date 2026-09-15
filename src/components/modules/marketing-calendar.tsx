@@ -134,16 +134,6 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
     return linhas.filter((sem) => sem.some((d) => d.getMonth() === mes.getMonth()));
   }, [mes]);
 
-  // A tela principal precisa mostrar a saude da agencia, nao so a agenda.
-  const agencia = useMemo(() => {
-    const ativos = clientes.filter((c) => c.pipelineStage === "ACTIVE_CLIENT");
-    return {
-      ativos: ativos.length,
-      receita: ativos.reduce((s, c) => s + c.contractValue, 0),
-      prospeccao: clientes.length - ativos.length,
-    };
-  }, [clientes]);
-
   const doMes = useMemo(() => {
     let atrasados = 0, pendentes = 0, total = 0;
     for (const [k, itens] of porDia) {
@@ -220,28 +210,21 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
         </button>
       </div>
 
-      {/* Filtrando um cliente, os cartoes falam dele; sem filtro, da agencia.
-          Some para funcionário, que não vê valores. */}
-      {!hideFinancials && clientes.length > 0 && (
+      {/* So aparece com um cliente filtrado: sem filtro isto repetia Clientes
+          ativos/Receita mensal do Painel, e ainda por cima sem relacao com o
+          mes que esta sendo visto no calendario -- o resumo do mes, mais
+          abaixo, ja cobre isso. Some tambem para funcionario, que nao ve
+          valores. */}
+      {!hideFinancials && selecionado && (
         <div className="grid grid-cols-3 gap-2 md:gap-3">
-          {selecionado ? (
-            <>
-              <MiniCartao rotulo="Serviço" rotuloLargo="Serviço" valor={selecionado.serviceType || "—"} cor="text-[#c9c2b4]" />
-              <MiniCartao rotulo="Contrato" rotuloLargo="Valor do contrato" valor={formatCurrency(selecionado.contractValue)} cor="text-[#f3dfae]" />
-              <MiniCartao
-                rotulo="A fazer"
-                rotuloLargo="Pendentes"
-                valor={String(selecionado.contents.filter((i) => i.status !== "APPROVED").length)}
-                cor="text-[#93c5fd]"
-              />
-            </>
-          ) : (
-            <>
-              <MiniCartao rotulo="Ativos" rotuloLargo="Clientes ativos" valor={String(agencia.ativos)} cor="text-[#4ade80]" />
-              <MiniCartao rotulo="Receita" rotuloLargo="Receita mensal" valor={formatCurrency(agencia.receita)} cor="text-[#f3dfae]" />
-              <MiniCartao rotulo="Prospecção" rotuloLargo="Em prospecção" valor={String(agencia.prospeccao)} cor="text-[#93c5fd]" />
-            </>
-          )}
+          <MiniCartao rotulo="Serviço" rotuloLargo="Serviço" valor={selecionado.serviceType || "—"} cor="text-[#c9c2b4]" />
+          <MiniCartao rotulo="Contrato" rotuloLargo="Valor do contrato" valor={formatCurrency(selecionado.contractValue)} cor="text-[#f3dfae]" />
+          <MiniCartao
+            rotulo="A fazer"
+            rotuloLargo="Pendentes"
+            valor={String(selecionado.contents.filter((i) => i.status !== "APPROVED").length)}
+            cor="text-[#93c5fd]"
+          />
         </div>
       )}
 
