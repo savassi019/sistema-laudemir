@@ -194,7 +194,10 @@ export function ModuleWorkspace({
             className={cn(
               "flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition",
               ativo
-                ? "border-[#d1a04f]/40 bg-[#d1a04f]/12 text-[#f3dfae]"
+                // Marketing usa roxo (a identidade que ja existia em Clientes
+                // e funil), nao o dourado dos modulos de campo -- pedido do
+                // usuario: "nao tem nada a ver com os outros modulos".
+                ? "border-[#7b6fc0]/40 bg-[#7b6fc0]/12 text-[#c8bef5]"
                 : "border-white/10 bg-white/[0.03] text-[#9a958b] active:bg-white/[0.07]",
             )}
           >

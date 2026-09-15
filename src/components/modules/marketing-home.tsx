@@ -278,7 +278,7 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
                   <span
                     className={cn(
                       "shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-semibold",
-                      ehHoje ? "bg-[#d1a04f]/15 text-[#f3dfae]" : "bg-white/[0.05] text-[#9a958b]",
+                      ehHoje ? "bg-[#7b6fc0]/15 text-[#c8bef5]" : "bg-white/[0.05] text-[#9a958b]",
                     )}
                   >
                     {ehHoje ? "hoje" : `${s.data.getDate()}/${String(s.data.getMonth() + 1).padStart(2, "0")}`}

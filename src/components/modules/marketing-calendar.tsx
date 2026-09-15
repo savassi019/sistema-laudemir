@@ -227,7 +227,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
       {!hideFinancials && selecionado && (
         <div className="grid grid-cols-3 gap-2 md:gap-3">
           <MiniCartao rotulo="Serviço" rotuloLargo="Serviço" valor={selecionado.serviceType || "—"} cor="text-[#c9c2b4]" />
-          <MiniCartao rotulo="Contrato" rotuloLargo="Valor do contrato" valor={formatCurrency(selecionado.contractValue)} cor="text-[#f3dfae]" />
+          <MiniCartao rotulo="Contrato" rotuloLargo="Valor do contrato" valor={formatCurrency(selecionado.contractValue)} cor="text-[#c8bef5]" />
           <MiniCartao
             rotulo="A fazer"
             rotuloLargo="Pendentes"
@@ -246,7 +246,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
             className={cn(
               "flex min-h-11 shrink-0 items-center rounded-xl border px-3 text-xs font-medium transition",
               clienteFiltro === null
-                ? "border-[#d1a04f]/40 bg-[#d1a04f]/12 text-[#f3dfae]"
+                ? "border-[#7b6fc0]/40 bg-[#7b6fc0]/12 text-[#c8bef5]"
                 : "border-white/10 bg-white/[0.03] text-[#9a958b] active:bg-white/[0.07]",
             )}
           >
@@ -263,7 +263,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
                 className={cn(
                   "flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl border px-3 text-xs font-medium transition",
                   ativo
-                    ? "border-[#d1a04f]/40 bg-[#d1a04f]/12 text-[#f3dfae]"
+                    ? "border-[#7b6fc0]/40 bg-[#7b6fc0]/12 text-[#c8bef5]"
                     : "border-white/10 bg-white/[0.03] text-[#9a958b] active:bg-white/[0.07]",
                 )}
               >
@@ -345,7 +345,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
                       "md:aspect-auto md:min-h-[92px] md:items-stretch md:justify-start md:p-1.5",
                       foraDoMes ? "text-[#3a352f]" : "text-[#c9c2b4]",
                       jaPassou && !foraDoMes && !selecionado ? "opacity-45" : "",
-                      selecionado ? "bg-[#d1a04f]/20 ring-1 ring-[#d1a04f]/50 text-white" : "active:bg-white/[0.06]",
+                      selecionado ? "bg-[#7b6fc0]/20 ring-1 ring-[#7b6fc0]/50 text-white" : "active:bg-white/[0.06]",
                       !selecionado && ehHoje ? "ring-1 ring-white/20" : "",
                     )}
                   >
@@ -468,7 +468,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
                 </button>
               ) : (
                 <label
-                  className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-dashed border-white/12 text-[#5a544c] transition active:border-[#d1a04f]/40 active:text-[#f3dfae]"
+                  className="flex size-11 shrink-0 cursor-pointer items-center justify-center rounded-xl border border-dashed border-white/12 text-[#5a544c] transition active:border-[#7b6fc0]/40 active:text-[#c8bef5]"
                   aria-label={`Anexar criativo em ${t.titulo}`}
                 >
                   {anexando === t.id ? (
@@ -500,7 +500,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
                 type="button"
                 onClick={() => setEditando(t.id)}
                 aria-label={`Editar ${t.titulo}`}
-                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[#5a544c] transition active:bg-white/[0.06] active:text-[#f3dfae]"
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[#5a544c] transition active:bg-white/[0.06] active:text-[#c8bef5]"
               >
                 <Pencil className="size-3.5" />
               </button>
@@ -547,7 +547,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
           <button
             type="button"
             onClick={() => setNovoAberto(true)}
-            className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/12 bg-white/[0.02] px-4 text-xs font-medium text-[#9a958b] transition active:border-[#d1a04f]/30 active:text-[#f3dfae]"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-white/12 bg-white/[0.02] px-4 text-xs font-medium text-[#9a958b] transition active:border-[#7b6fc0]/30 active:text-[#c8bef5]"
           >
             <Plus className="size-3.5" />
             Marcar neste dia
@@ -572,7 +572,7 @@ function MiniCartao({ rotulo, rotuloLargo, valor, cor }: { rotulo: string; rotul
 }
 
 const campoCls =
-  "w-full rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.04] px-3 py-3 text-base text-white placeholder:text-[#5a544c] focus:border-[#d1a04f]/40 focus:outline-none md:text-sm";
+  "w-full rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.04] px-3 py-3 text-base text-white placeholder:text-[#5a544c] focus:border-[#7b6fc0]/40 focus:outline-none md:text-sm";
 
 /**
  * Sem <form> aqui: esta secao pode acabar dentro de outro formulario, e form
@@ -752,8 +752,8 @@ function NovoCompromisso({
   }
 
   return (
-    <div className="space-y-2 rounded-2xl border border-[#d1a04f]/20 bg-[#d1a04f]/[0.04] p-3">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#f3dfae]">
+    <div className="space-y-2 rounded-2xl border border-[#7b6fc0]/20 bg-[#7b6fc0]/[0.04] p-3">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#c8bef5]">
         Marcar em {data.getDate()}/{String(data.getMonth() + 1).padStart(2, "0")}
       </p>
       {/* O visual esmaecido sozinho nao impede marcar no dia errado. */}
@@ -775,7 +775,7 @@ function NovoCompromisso({
               className={cn(
                 "flex min-h-11 items-center justify-center gap-1 rounded-xl border px-2 text-[11px] font-medium transition",
                 ativo
-                  ? "border-[#d1a04f]/45 bg-[#d1a04f]/15 text-[#f3dfae]"
+                  ? "border-[#7b6fc0]/45 bg-[#7b6fc0]/15 text-[#c8bef5]"
                   : "border-white/10 bg-white/[0.03] text-[#9a958b]",
               )}
             >
@@ -794,7 +794,7 @@ function NovoCompromisso({
       />
 
       {tipo === "POST" && (
-        <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-white/12 px-3 text-xs text-[#9a958b] transition active:border-[#d1a04f]/40 active:text-[#f3dfae]">
+        <label className="flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border border-dashed border-white/12 px-3 text-xs text-[#9a958b] transition active:border-[#7b6fc0]/40 active:text-[#c8bef5]">
           <ImagePlus className="size-4 shrink-0" />
           <span className="truncate">{arquivo ? arquivo.name : "Anexar criativo (opcional)"}</span>
           <input
@@ -826,7 +826,7 @@ function NovoCompromisso({
           type="button"
           onClick={salvar}
           disabled={salvando}
-          className="rounded-xl bg-[#d1a04f] px-4 py-3 text-xs font-semibold text-[#0d0a05] transition active:scale-[0.98] disabled:opacity-60"
+          className="rounded-xl bg-[#7b6fc0] px-4 py-3 text-xs font-semibold text-white transition active:scale-[0.98] disabled:opacity-60"
         >
           {salvando ? "Salvando..." : "Marcar"}
         </button>
