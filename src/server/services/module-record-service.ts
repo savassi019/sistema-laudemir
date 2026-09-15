@@ -310,6 +310,7 @@ const createPlatformSchema = z.object({
   direction: z.string(),
   status: z.string(),
   amount: z.number(),
+  expenseAmount: z.number().optional(),
   paymentMethod: z.string().optional(),
   notes: z.string().optional(),
 });
@@ -1140,12 +1141,15 @@ async function saveWithPrisma(
           direction: mapDirection(data.direction),
           status: mapFinancialStatus(data.status),
           amount: data.amount,
+          expenseAmount: data.expenseAmount ?? 0,
           paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
           notes: data.notes,
         },
       });
 
-      const netAmount = data.direction === "SAIDA" ? -data.amount : data.amount;
+      const expenseAmount = Number(record.expenseAmount ?? 0);
+      const netAmount =
+        data.direction === "SAIDA" ? -(data.amount + expenseAmount) : data.amount - expenseAmount;
 
       return {
         record: {
@@ -1155,6 +1159,7 @@ async function saveWithPrisma(
           details: [
             `Data: ${formatShortDate(record.movementDate)}`,
             `Status: ${rotuloDeStatus(record.status, FINANCIAL_STATUS_LABEL)}`,
+            `Despesa: ${formatCurrency(expenseAmount)}`,
             `Liquido: ${formatCurrency(netAmount)}`,
           ],
           amount: formatCurrency(netAmount),
@@ -1267,13 +1272,13 @@ export async function saveModuleRecord(
   return saveWithPrisma(session, slug, payload);
 }
 
-function buildDateWhere(range?: DateRange) {
+function buildDateWhere(range?: DateRange, campo: string = "createdAt") {
   if (!range || (!range.from && !range.to)) {
     return {};
   }
 
   return {
-    createdAt: {
+    [campo]: {
       ...(range.from ? { gte: range.from } : {}),
       ...(range.to ? { lte: range.to } : {}),
     },
@@ -1519,17 +1524,48 @@ export async function listModuleRecords(
         });
       }
       case "marketing": {
-        const records = await prisma.marketingContract.findMany({
-          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
-          orderBy: { createdAt: "desc" },
-          take,
-        });
+        // O relatorio geral (resumo por modulo / semanal) somava o valor do
+        // CONTRATO como se fosse dinheiro que entrou -- o mesmo defeito ja
+        // corrigido no relatorio de cada cliente (ver marketing-crm-view),
+        // so que nunca chegou ate aqui. Contrato assinado nao e um evento de
+        // caixa; os Lancamentos (FinancialEntry) sao. Alem disso, despesas
+        // da agencia (sem cliente vinculado, criadas em Contas) nao tinham
+        // NENHUMA linha aqui -- ficavam invisiveis em qualquer relatorio.
+        //
+        // Agora cada contrato entra so como evento de cadastro (0 no
+        // financeiro) e cada Lancamento real entra como sua propria linha,
+        // filtrada pela data em que o dinheiro de fato se moveu (issueDate),
+        // nao pela data de assinatura do contrato.
+        const [contracts, entries] = await Promise.all([
+          prisma.marketingContract.findMany({
+            where: { organizationId: session.organizationId, ...buildDateWhere(range) },
+            orderBy: { createdAt: "desc" },
+            take,
+          }),
+          prisma.financialEntry.findMany({
+            where: {
+              organizationId: session.organizationId,
+              module: "MARKETING",
+              ...buildDateWhere(range, "issueDate"),
+            },
+            orderBy: { issueDate: "desc" },
+            take,
+          }),
+        ]);
 
-        return records.map((record) => {
+        const idsReferenciados = [
+          ...new Set(entries.map((e) => e.sourceEntityId).filter((id): id is string => Boolean(id))),
+        ];
+        const contratosReferenciados = idsReferenciados.length
+          ? await prisma.marketingContract.findMany({
+              where: { id: { in: idsReferenciados } },
+              select: { id: true, name: true },
+            })
+          : [];
+        const nomePorId = new Map(contratosReferenciados.map((c) => [c.id, c.name]));
+
+        const linhasContrato: ModuleRecordItem[] = contracts.map((record) => {
           const signed = Boolean(record.signatureLink || record.signatureFileId);
-          const grossAmount = Number(record.contractValue);
-          const netAmount = grossAmount - Number(record.expenseAmount ?? 0);
-
           return {
             id: record.id,
             title: record.name,
@@ -1539,17 +1575,49 @@ export async function listModuleRecords(
               `Data: ${formatShortDate(record.contractDate)}`,
               `Assinatura: ${signed ? "Sim" : "Pendente"}`,
               `Status: ${rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL)}`,
-              `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
+              `Valor do contrato: ${formatCurrency(Number(record.contractValue))}`,
+              `Despesa do contrato: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
               `Pagamento: ${record.paymentMethod ? rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL) : "Não informado"}`,
             ],
-            amount: formatCurrency(netAmount),
-            amountValue: netAmount,
-            incomeValue: grossAmount,
-            expenseValue: Number(record.expenseAmount ?? 0),
+            // Cadastro, nao movimento de dinheiro -- quem soma o financeiro
+            // sao os Lancamentos, abaixo.
+            amountValue: 0,
+            incomeValue: 0,
+            expenseValue: 0,
             badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
             createdAt: record.createdAt.toISOString(),
           };
         });
+
+        const linhasLancamento: ModuleRecordItem[] = entries.map((e) => {
+          const valor = Number(e.totalAmount);
+          const receita = e.direction !== "EXPENSE";
+          const pago = e.status === "PAID";
+          // Mesma regra conservadora do relatorio por cliente: receita so
+          // conta quando recebida; custo conta assim que lancado.
+          const contaNoFinanceiro = receita ? pago : true;
+          const cliente = e.sourceEntityId ? (nomePorId.get(e.sourceEntityId) ?? "Cliente removido") : "Despesa da agência";
+
+          return {
+            id: e.id,
+            title: e.description,
+            summary: cliente,
+            details: [
+              `Data: ${formatShortDate(e.issueDate)}`,
+              `Status: ${pago ? "Pago" : "Em aberto"}`,
+            ],
+            amount: formatCurrency(receita ? valor : -valor),
+            amountValue: contaNoFinanceiro ? (receita ? valor : -valor) : 0,
+            incomeValue: receita && contaNoFinanceiro ? valor : 0,
+            expenseValue: !receita ? valor : 0,
+            badge: pago ? "Pago" : "Em aberto",
+            createdAt: e.issueDate.toISOString(),
+          };
+        });
+
+        return [...linhasLancamento, ...linhasContrato].sort(
+          (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        );
       }
       case "plataforma-online": {
         const records = await prisma.brazilBetsEntry.findMany({
@@ -1559,7 +1627,11 @@ export async function listModuleRecords(
         });
 
         return records.map((record) => {
-          const netAmount = record.direction === "EXPENSE" ? -Number(record.amount) : Number(record.amount);
+          const expenseAmount = Number(record.expenseAmount ?? 0);
+          const netAmount =
+            record.direction === "EXPENSE"
+              ? -(Number(record.amount) + expenseAmount)
+              : Number(record.amount) - expenseAmount;
 
           return {
             id: record.id,
@@ -1568,13 +1640,14 @@ export async function listModuleRecords(
             details: [
               `Data: ${formatShortDate(record.movementDate)}`,
               `Status: ${rotuloDeStatus(record.status, FINANCIAL_STATUS_LABEL)}`,
+              `Despesa: ${formatCurrency(expenseAmount)}`,
               `Liquido: ${formatCurrency(netAmount)}`,
               `Pagamento: ${record.paymentMethod ? rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL) : "Não informado"}`,
             ],
             amount: formatCurrency(netAmount),
             amountValue: netAmount,
             incomeValue: record.direction === "EXPENSE" ? 0 : Number(record.amount),
-            expenseValue: record.direction === "EXPENSE" ? Number(record.amount) : 0,
+            expenseValue: (record.direction === "EXPENSE" ? Number(record.amount) : 0) + expenseAmount,
             badge: rotuloDeStatus(record.status, FINANCIAL_STATUS_LABEL),
             createdAt: record.createdAt.toISOString(),
           };

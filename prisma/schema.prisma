@@ -794,6 +794,7 @@ model BrazilBetsEntry {
   direction      FinancialDirection
   status         FinancialStatus    @default(PENDING)
   amount         Decimal            @db.Decimal(14, 2)
+  expenseAmount  Decimal?           @db.Decimal(14, 2)
   paymentMethod  PaymentMethod?
   notes          String?
   createdById    String?

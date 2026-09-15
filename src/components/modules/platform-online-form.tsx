@@ -17,6 +17,7 @@ const schema = z.object({
   direction: z.enum(["ENTRADA", "SAIDA"]),
   status: z.enum(["PENDING", "PAID", "POSTED"]),
   amount: z.coerce.number().min(0),
+  expenseAmount: z.coerce.number().min(0),
   paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
   notes: z.string().optional(),
 });
@@ -30,6 +31,7 @@ type ReceiptState = {
   direction: string;
   status: string;
   amount: number;
+  expenseAmount: number;
   netAmount: number;
   paymentMethod: string;
   notes?: string;
@@ -49,18 +51,25 @@ export function PlatformOnlineForm({
       direction: "ENTRADA",
       status: "PENDING",
       amount: 0,
+      expenseAmount: 0,
       paymentMethod: "PIX",
     },
   });
 
   const amount = Number(useWatch({ control: form.control, name: "amount" }) ?? 0);
+  const expenseAmount = Number(
+    useWatch({ control: form.control, name: "expenseAmount" }) ?? 0,
+  );
   const direction = String(
     useWatch({ control: form.control, name: "direction" }) ?? "ENTRADA",
   ) as "ENTRADA" | "SAIDA";
   const status = String(
     useWatch({ control: form.control, name: "status" }) ?? "PENDING",
   ) as "PENDING" | "PAID" | "POSTED";
-  const netAmount = useMemo(() => (direction === "ENTRADA" ? amount : -amount), [amount, direction]);
+  const netAmount = useMemo(() => {
+    if (direction === "SAIDA") return -(amount + expenseAmount);
+    return amount - expenseAmount;
+  }, [amount, expenseAmount, direction]);
 
   const onSubmit = form.handleSubmit(async (values) => {
     if (submittingRef.current) return;
@@ -78,6 +87,7 @@ export function PlatformOnlineForm({
           direction: values.direction,
           status: values.status,
           amount: Number(values.amount),
+          expenseAmount: Number(values.expenseAmount),
           paymentMethod: values.paymentMethod,
           notes: values.notes,
         }),
@@ -96,6 +106,7 @@ export function PlatformOnlineForm({
       direction: values.direction,
       status: values.status,
       amount,
+      expenseAmount,
       netAmount,
       paymentMethod: values.paymentMethod,
       notes: values.notes,
@@ -113,12 +124,16 @@ export function PlatformOnlineForm({
         <p>Movimentação enxuta para entrada, saída, status e fechamento do dia.</p>
       </div>
 
-      <div className={`grid gap-3 ${hideFinancials ? "sm:grid-cols-1" : "sm:grid-cols-3"}`}>
+      <div className={`grid gap-3 ${hideFinancials ? "sm:grid-cols-1" : "sm:grid-cols-4"}`}>
         {hideFinancials ? null : (
           <>
             <article className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
               <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Valor</p>
               <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(amount)}</p>
+            </article>
+            <article className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
+              <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Despesa</p>
+              <p className="mt-2 text-xl font-semibold text-white">{formatCurrency(expenseAmount)}</p>
             </article>
             <article className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
               <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Líquido</p>
@@ -190,6 +205,20 @@ export function PlatformOnlineForm({
             />
           </div>
           <div className="space-y-2">
+            <label className={labelClass} htmlFor="expenseAmount">
+              Despesa
+            </label>
+            <input
+              id="expenseAmount"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              className={fieldClass}
+              {...form.register("expenseAmount")}
+            />
+          </div>
+          <div className="space-y-2">
             <label className={labelClass} htmlFor="paymentMethod">
               Forma de pagamento
             </label>
@@ -248,6 +277,7 @@ export function PlatformOnlineForm({
             <p>Descrição: {receipt.description}</p>
             <p>Data: {formatShortDate(receipt.movementDate)}</p>
             <p>Status: {rotuloDeStatus(receipt.status, PLATFORM_STATUS_LABEL)}</p>
+            {hideFinancials ? null : <p>Despesa: {formatCurrency(receipt.expenseAmount)}</p>}
             {hideFinancials ? null : <p>Líquido: {formatCurrency(receipt.netAmount)}</p>}
             <p>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</p>
           </div>
@@ -260,6 +290,7 @@ export function PlatformOnlineForm({
               `Direção: ${receipt.direction === "ENTRADA" ? "Entrada" : "Saída"}`,
               `Status: ${rotuloDeStatus(receipt.status, PLATFORM_STATUS_LABEL)}`,
               `*Valor: ${formatCurrency(receipt.amount)}*`,
+              `Despesa: ${formatCurrency(receipt.expenseAmount)}`,
               `*Líquido: ${formatCurrency(receipt.netAmount)}*`,
               `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
             ].join("\n")}

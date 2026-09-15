@@ -309,10 +309,12 @@ function ContentAlerts({ clients }: { clients: MarketingClientDetail[] }) {
 function PostItCard({
   client,
   selected,
+  hideFinancials,
   onClick,
 }: {
   client: MarketingClientDetail;
   selected: boolean;
+  hideFinancials: boolean;
   onClick: () => void;
 }) {
   const color = POSTIT_COLORS[clientColorIdx(client.id)];
@@ -321,6 +323,12 @@ function PostItCard({
   const checklistDone = CHECKLIST_ITEMS.filter((i) => checklist[i.key]).length;
   const hasOverdue = client.contents.some((c) => c.status === "PENDING" && isOverdue(c.contentDate));
   const hasDueSoon = client.contents.some((c) => c.status === "PENDING" && isDueSoon(c.contentDate));
+  // "Cliente que nao pagou / acumulo de dividas": soma o que o cliente deve
+  // (recebimentos lancados e ainda nao pagos). So conta INCOME -- despesa em
+  // aberto e a agencia devendo, nao o cliente.
+  const emAberto = client.entries
+    .filter((e) => e.direction === "INCOME" && !e.paid)
+    .reduce((s, e) => s + e.amount, 0);
 
   return (
     <button
@@ -369,6 +377,15 @@ function PostItCard({
       >
         {client.serviceType}
       </p>
+
+      {/* Cliente nao pagou / acumulo de dividas -- mesmo alerta que a tela
+          generica de Clientes ja tem para os outros modulos, aqui adaptado
+          aos Lancamentos do proprio cliente. */}
+      {!hideFinancials && emAberto > 0 && (
+        <p className="mt-1 truncate rounded-md bg-[#f87171]/15 px-1.5 py-0.5 text-[9px] font-bold text-[#fca5a5]">
+          {fmt(emAberto)} em aberto
+        </p>
+      )}
 
       {/* Stage pill */}
       <div className="mt-2 flex items-center justify-between gap-1">
@@ -1477,6 +1494,7 @@ export function MarketingCrmView({
               key={client.id}
               client={client}
               selected={selectedId === client.id}
+              hideFinancials={hideFinancials}
               onClick={() => handleCardClick(client.id)}
             />
           ))}
