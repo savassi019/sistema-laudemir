@@ -494,7 +494,12 @@ export function ModuleWorkspace({
         </button>
       ) : null}
 
-      {/* Lista de seções */}
+      {/* Lista de secoes: menu vertical usado pelos modulos de campo, que nao
+          tem barra de chips no topo. No Marketing os chips (navChips, logo
+          acima) ja sao a navegacao -- esta lista repetia exatamente as
+          mesmas 5 opcoes de novo, so em formato diferente. Reportado pelo
+          usuario com print (duas navegacoes iguais na mesma tela). */}
+      {!hasCalendar && (
       <div className="overflow-hidden rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35">
         {visibleSections.map((key, idx) => {
           const cfg = rotuloDaSecao(SECTION_CFG[key], key, hasCalendar);
@@ -546,6 +551,7 @@ export function ModuleWorkspace({
           );
         })}
       </div>
+      )}
     </section>
   );
 }
