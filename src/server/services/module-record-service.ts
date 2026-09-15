@@ -10,6 +10,13 @@ import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import {
+  CONTRACT_STATUS_LABEL,
+  DIRECTION_LABEL,
+  FINANCIAL_STATUS_LABEL,
+  PERSONAL_ENTRY_TYPE_LABEL,
+  rotuloDeStatus,
+} from "@/lib/status-labels";
 import type { ClientListItem, SessionData } from "@/types/app";
 
 export type ModuleSlug =
@@ -1022,7 +1029,7 @@ async function saveWithPrisma(
             `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
           ],
           amount: formatCurrency(netAmount),
-          badge: record.status,
+          badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
           createdAt: record.createdAt.toISOString(),
         },
         source: "database",
@@ -1056,7 +1063,7 @@ async function saveWithPrisma(
             `Saldo: ${formatCurrency(netAmount)}`,
           ],
           amount: formatCurrency(netAmount),
-          badge: data.direction,
+          badge: rotuloDeStatus(data.direction, DIRECTION_LABEL),
           createdAt: record.createdAt.toISOString(),
         },
         source: "database",
@@ -1114,7 +1121,7 @@ async function saveWithPrisma(
             `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
           ],
           amount: formatCurrency(netAmount),
-          badge: record.status,
+          badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
           createdAt: record.createdAt.toISOString(),
         },
         source: "database",
@@ -1148,7 +1155,7 @@ async function saveWithPrisma(
             `Liquido: ${formatCurrency(netAmount)}`,
           ],
           amount: formatCurrency(netAmount),
-          badge: record.status,
+          badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
           createdAt: record.createdAt.toISOString(),
         },
         source: "database",
@@ -1204,7 +1211,7 @@ async function saveWithPrisma(
             `Saldo: ${formatCurrency(Number(record.balanceAmount ?? 0))}`,
           ],
           amount: formatCurrency(Number(record.balanceAmount ?? record.totalAmount)),
-          badge: record.paymentStatus,
+          badge: rotuloDeStatus(record.paymentStatus, FINANCIAL_STATUS_LABEL),
           createdAt: record.createdAt.toISOString(),
         },
         source: "database",
@@ -1238,7 +1245,7 @@ async function saveWithPrisma(
             `Data: ${formatShortDate(record.dueDate ?? record.createdAt)}`,
           ],
           amount: formatCurrency(signedAmount),
-          badge: record.type,
+          badge: rotuloDeStatus(record.type, PERSONAL_ENTRY_TYPE_LABEL),
           createdAt: record.createdAt.toISOString(),
         },
         source: "database",
@@ -1468,7 +1475,7 @@ export async function listModuleRecords(
             amountValue: netAmount,
             incomeValue: Number(record.amount),
             expenseValue: Number(record.expenseAmount ?? 0),
-            badge: record.status,
+            badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
             createdAt: record.createdAt.toISOString(),
           };
         });
@@ -1503,7 +1510,7 @@ export async function listModuleRecords(
               record.direction === "EXPENSE"
                 ? Number(record.amount) + Number(record.expenseAmount ?? 0)
                 : Number(record.expenseAmount ?? 0),
-            badge: record.direction,
+            badge: rotuloDeStatus(record.direction, DIRECTION_LABEL),
             createdAt: record.createdAt.toISOString(),
           };
         });
@@ -1536,7 +1543,7 @@ export async function listModuleRecords(
             amountValue: netAmount,
             incomeValue: grossAmount,
             expenseValue: Number(record.expenseAmount ?? 0),
-            badge: record.status,
+            badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
             createdAt: record.createdAt.toISOString(),
           };
         });
@@ -1565,7 +1572,7 @@ export async function listModuleRecords(
             amountValue: netAmount,
             incomeValue: record.direction === "EXPENSE" ? 0 : Number(record.amount),
             expenseValue: record.direction === "EXPENSE" ? Number(record.amount) : 0,
-            badge: record.status,
+            badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
             createdAt: record.createdAt.toISOString(),
           };
         });
@@ -1592,7 +1599,7 @@ export async function listModuleRecords(
           amountValue: Number(record.balanceAmount ?? record.totalAmount),
           incomeValue: Number(record.totalAmount),
           expenseValue: Number(record.expenseAmount ?? 0),
-          badge: record.paymentStatus,
+          badge: rotuloDeStatus(record.paymentStatus, FINANCIAL_STATUS_LABEL),
           createdAt: record.createdAt.toISOString(),
         }));
       }
@@ -1619,7 +1626,7 @@ export async function listModuleRecords(
             amountValue: signedAmount,
             incomeValue: record.type === "INCOME" ? Number(record.amount) : 0,
             expenseValue: record.type === "INCOME" ? 0 : Number(record.amount),
-            badge: record.type,
+            badge: rotuloDeStatus(record.type, PERSONAL_ENTRY_TYPE_LABEL),
             createdAt: record.createdAt.toISOString(),
           };
         });
@@ -1781,7 +1788,7 @@ export async function listModuleClients(
             name: record.name,
             subtitle: record.serviceType,
             tags: [record.cpf, record.cnpj, record.phone].filter(Boolean) as string[],
-            badge: record.status,
+            badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
           }));
       }
       case "locacao": {
@@ -1798,7 +1805,7 @@ export async function listModuleClients(
             name: record.clientName ?? record.localName,
             subtitle: record.localName,
             tags: [record.phone, record.document].filter(Boolean) as string[],
-            badge: record.paymentStatus,
+            badge: rotuloDeStatus(record.paymentStatus, FINANCIAL_STATUS_LABEL),
             phone: record.phone ?? undefined,
           }));
       }
@@ -1961,7 +1968,7 @@ export async function listModuleClientRecords(
         amountValue: Number(record.balanceAmount ?? record.totalAmount),
         incomeValue: Number(record.totalAmount),
         expenseValue: Number(record.expenseAmount ?? 0),
-        badge: record.paymentStatus,
+        badge: rotuloDeStatus(record.paymentStatus, FINANCIAL_STATUS_LABEL),
         createdAt: record.createdAt.toISOString(),
       }));
     }
@@ -1992,7 +1999,7 @@ export async function listModuleClientRecords(
           amountValue: netAmount,
           incomeValue: grossAmount,
           expenseValue: Number(record.expenseAmount ?? 0),
-          badge: record.status,
+          badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
           createdAt: record.createdAt.toISOString(),
         };
       });
@@ -2023,7 +2030,7 @@ export async function listModuleClientRecords(
           amountValue: netAmount,
           incomeValue: Number(record.amount),
           expenseValue: Number(record.expenseAmount ?? 0),
-          badge: record.status,
+          badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
           createdAt: record.createdAt.toISOString(),
         };
       });
