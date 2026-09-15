@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -461,7 +462,7 @@ export function MachineContractForm({ hideFinancials = false }: { hideFinancials
             )}
             <p>Data: {formatShortDate(receipt.contractDate)}</p>
             {hideFinancials ? null : <p>Despesa: {formatCurrency(receipt.expenseAmount)}</p>}
-            <p>Pagamento: {receipt.paymentMethod}</p>
+            <p>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</p>
             {receipt.signatureLink ? <p>Assinatura: {receipt.signatureLink}</p> : null}
             {receipt.signatureFileName ? <p>PDF assinado: {receipt.signatureFileName}</p> : null}
           </div>
@@ -476,7 +477,7 @@ export function MachineContractForm({ hideFinancials = false }: { hideFinancials
               `Juros mensal: ${formatCurrency(receipt.monthlyCharge)}`,
               `Total projetado: ${formatCurrency(receipt.totalCharge)}`,
               `Despesa: ${formatCurrency(receipt.expenseAmount)}`,
-              `Pagamento: ${receipt.paymentMethod}`,
+              `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
               ...(receipt.signatureLink ? [`Assinatura: ${receipt.signatureLink}`] : []),
             ].join("\n")}
           />

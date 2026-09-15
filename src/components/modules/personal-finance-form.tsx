@@ -12,6 +12,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -262,7 +263,7 @@ export function PersonalFinanceForm({
             <p>Tipo: {typeLabel[receipt.type as FormValues["type"]]}</p>
             <p>Data: {formatShortDate(receipt.dueDate)}</p>
             {hideFinancials ? null : <p>Valor: {formatCurrency(receipt.amount)}</p>}
-            <p>Pagamento: {receipt.paymentMethod}</p>
+            <p>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</p>
           </div>
           {receipt.notes ? (
             <p className="mt-3 text-sm text-[#dbe6d4]/75">{receipt.notes}</p>
@@ -275,7 +276,7 @@ export function PersonalFinanceForm({
               `Tipo: ${typeLabel[receipt.type as FormValues["type"]]}`,
               `*Valor: ${formatCurrency(receipt.amount)}*`,
               `Data: ${formatShortDate(receipt.dueDate)}`,
-              `Pagamento: ${receipt.paymentMethod}`,
+              `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
             ].join("\n")}
           />
         </article>

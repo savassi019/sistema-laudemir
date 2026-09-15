@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { fetchAddressByCep } from "@/lib/cep";
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
@@ -854,7 +855,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
                 <p>Casa: {formatCurrency(receipt.houseAmount)}</p>
               </>
             )}
-            <p>Pagamento: {receipt.paymentMethod}</p>
+            <p>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</p>
           </div>
           {receipt.notes ? <p className="mt-3 text-sm text-[#dbe6d4]/75">{receipt.notes}</p> : null}
           <WhatsAppReceiptButton
@@ -869,7 +870,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
               `Saída: ${formatCurrency(receipt.currentExpense)}`,
               `*Cliente: ${formatCurrency(receipt.clientShareFinal)}*`,
               `Casa: ${formatCurrency(receipt.houseAmount)}`,
-              `Pagamento: ${receipt.paymentMethod}`,
+              `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
             ].join("\n")}
           />
         </article>

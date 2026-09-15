@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { FINANCIAL_STATUS_LABEL, PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
@@ -292,8 +293,8 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
                 <span>Saldo: {formatCurrency(receipt.balanceAmount)}</span>
               </>
             )}
-            <span>Pagamento: {receipt.paymentMethod}</span>
-            <span>Status: {receipt.paymentStatus}</span>
+            <span>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</span>
+            <span>Status: {rotuloDeStatus(receipt.paymentStatus, FINANCIAL_STATUS_LABEL)}</span>
           </div>
           <WhatsAppReceiptButton
             autoOpen
@@ -307,8 +308,8 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
               `Sinal: ${formatCurrency(receipt.signalAmount)}`,
               `Despesa: ${formatCurrency(receipt.expenseAmount)}`,
               `Saldo: ${formatCurrency(receipt.balanceAmount)}`,
-              `Pagamento: ${receipt.paymentMethod}`,
-              `Status: ${receipt.paymentStatus}`,
+              `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
+              `Status: ${rotuloDeStatus(receipt.paymentStatus, FINANCIAL_STATUS_LABEL)}`,
             ].join("\n")}
           />
         </article>

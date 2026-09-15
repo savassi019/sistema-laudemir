@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
 import { maskCpf, maskPhone, withMask } from "@/lib/masks";
 import { isValidCpf } from "@/lib/validators";
@@ -641,7 +642,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#dbe6d4]/75">
             <span>Pelucias: {receipt.plushCountOut}</span>
-            <span>Pagamento: {receipt.paymentMethod}</span>
+            <span>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</span>
             <span>{receipt.compensationStatus === "WORTH_IT" ? "Compensa" : "Não compensa"}</span>
             {receipt.coinPhotoName ? <span>Foto moedas: {receipt.coinPhotoName}</span> : null}
             {receipt.giftPhotoName ? <span>Foto brindes: {receipt.giftPhotoName}</span> : null}
@@ -658,7 +659,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
               `Pelúcias: ${receipt.plushCountOut}`,
               `Bruto: ${formatCurrency(receipt.grossAmount)}`,
               `*Líquido: ${formatCurrency(receipt.netAmount)}*`,
-              `Pagamento: ${receipt.paymentMethod}`,
+              `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
             ].join("\n");
 
             return (

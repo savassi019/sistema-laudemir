@@ -9,7 +9,7 @@ import { z } from "zod";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
-import { PLATFORM_STATUS_LABEL, rotuloDeStatus } from "@/lib/status-labels";
+import { PAYMENT_METHOD_LABEL, PLATFORM_STATUS_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 
 const schema = z.object({
   movementDate: z.string().min(1, "Informe a data."),
@@ -249,7 +249,7 @@ export function PlatformOnlineForm({
             <p>Data: {formatShortDate(receipt.movementDate)}</p>
             <p>Status: {rotuloDeStatus(receipt.status, PLATFORM_STATUS_LABEL)}</p>
             {hideFinancials ? null : <p>Líquido: {formatCurrency(receipt.netAmount)}</p>}
-            <p>Pagamento: {receipt.paymentMethod}</p>
+            <p>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</p>
           </div>
           {receipt.notes ? <p className="mt-3 text-sm text-[#dbe6d4]/75">{receipt.notes}</p> : null}
           <WhatsAppReceiptButton
@@ -261,7 +261,7 @@ export function PlatformOnlineForm({
               `Status: ${rotuloDeStatus(receipt.status, PLATFORM_STATUS_LABEL)}`,
               `*Valor: ${formatCurrency(receipt.amount)}*`,
               `*Líquido: ${formatCurrency(receipt.netAmount)}*`,
-              `Pagamento: ${receipt.paymentMethod}`,
+              `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
             ].join("\n")}
           />
         </article>

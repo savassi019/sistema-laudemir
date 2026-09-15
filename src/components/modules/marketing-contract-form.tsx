@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { maskCnpj, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import { isValidCnpj, isValidCpf } from "@/lib/validators";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
@@ -464,7 +465,7 @@ export function MarketingContractForm({
                 <p>Despesa: {formatCurrency(receipt.expenseAmount)}</p>
               </>
             ) : null}
-            <p>Pagamento: {receipt.paymentMethod}</p>
+            <p>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</p>
             {receipt.contractFileName ? <p>Contrato: {receipt.contractFileName}</p> : null}
             {receipt.signatureLink ? (
               <p className="sm:col-span-2">
@@ -495,7 +496,7 @@ export function MarketingContractForm({
               `Data: ${formatShortDate(receipt.contractDate)}`,
               `Status: ${STATUS_LABEL[receipt.status] ?? receipt.status}`,
               `Despesa: ${formatCurrency(receipt.expenseAmount)}`,
-              `Pagamento: ${receipt.paymentMethod}`,
+              `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
               ...(receipt.signatureLink ? [`Assinatura: ${receipt.signatureLink}`] : []),
             ].join("\n")}
           />

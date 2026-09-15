@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { fetchAddressByCep } from "@/lib/cep";
 import { formatCurrency } from "@/lib/format";
+import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
@@ -661,7 +662,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#dbe6d4]/75">
             {receipt.exceptionClient ? <span>Cliente exceção</span> : <span>Fluxo padrão</span>}
-            <span>Pagamento: {receipt.paymentMethod}</span>
+            <span>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</span>
             {receipt.screenPhotoName ? <span>Foto tela: {receipt.screenPhotoName}</span> : null}
             {receipt.paperPhotoName ? <span>Foto papel: {receipt.paperPhotoName}</span> : null}
           </div>
@@ -678,7 +679,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
               `Saídas: ${formatCurrency(receipt.expenseAmount)}`,
               `Desconto: ${formatCurrency(receipt.discountAmount)}`,
               `*Líquido: ${formatCurrency(receipt.netAmount)}*`,
-              `Pagamento: ${receipt.paymentMethod}`,
+              `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
               `Status: ${receipt.receiptStatus === "RECEIVED" ? "Recebido" : "Não recebido"}`,
             ].join("\n")}
           />

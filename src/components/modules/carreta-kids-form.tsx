@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
@@ -384,7 +385,7 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
             <p>Local: {receipt.localName}</p>
             <p>Ficha: {receipt.sheetName}</p>
             <p>Data: {formatShortDate(receipt.serviceDate)}</p>
-            <p>Pagamento: {receipt.paymentMethod}</p>
+            <p>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</p>
             {receipt.entryTime ? <p>Entrada: {receipt.entryTime}</p> : null}
             {receipt.exitTime ? <p>Saída: {receipt.exitTime}</p> : null}
             {hideFinancials ? null : (
@@ -408,7 +409,7 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
               `Tempo: ${receipt.minutesCharged} min`,
               ...(receipt.entryTime ? [`Entrada: ${receipt.entryTime}`] : []),
               ...(receipt.exitTime ? [`Saída: ${receipt.exitTime}`] : []),
-              `Pagamento: ${receipt.paymentMethod}`,
+              `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
               `Despesa: ${formatCurrency(receipt.expenseAmount)}`,
               `*Total: ${formatCurrency(receipt.totalValue)}*`,
             ].join("\n")}

@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { DIRECTION_LABEL, PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -250,9 +251,9 @@ export function MarketEntryForm({ hideFinancials = false }: { hideFinancials?: b
           <div className="mt-4 grid gap-3 text-sm text-[#dbe6d4]/85 md:grid-cols-2">
             <p>Descrição: {receipt.description}</p>
             <p>Data: {formatShortDate(receipt.movementDate)}</p>
-            <p>Direção: {receipt.direction}</p>
+            <p>Direção: {rotuloDeStatus(receipt.direction, DIRECTION_LABEL)}</p>
             {hideFinancials ? null : <p>Líquido: {formatCurrency(receipt.netAmount)}</p>}
-            <p>Pagamento: {receipt.paymentMethod}</p>
+            <p>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</p>
           </div>
           {receipt.notes ? <p className="mt-3 text-sm text-[#dbe6d4]/75">{receipt.notes}</p> : null}
           <WhatsAppReceiptButton
@@ -260,11 +261,11 @@ export function MarketEntryForm({ hideFinancials = false }: { hideFinancials?: b
               "*Comprovante Mercado Autônomo*",
               `Descrição: ${receipt.description}`,
               `Data: ${formatShortDate(receipt.movementDate)}`,
-              `Direção: ${receipt.direction === "ENTRADA" ? "Entrada" : "Saída"}`,
+              `Direção: ${rotuloDeStatus(receipt.direction, DIRECTION_LABEL)}`,
               `Movimento: ${formatCurrency(receipt.amount)}`,
               `Despesa: ${formatCurrency(receipt.expenseAmount)}`,
               `*Líquido: ${formatCurrency(receipt.netAmount)}*`,
-              `Pagamento: ${receipt.paymentMethod}`,
+              `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
             ].join("\n")}
           />
         </article>

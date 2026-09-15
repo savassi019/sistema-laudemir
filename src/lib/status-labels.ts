@@ -7,6 +7,44 @@
  * toda vez que o problema reaparece.
  */
 
+/**
+ * PersonType: o formulario do Marketing usa PF/PJ; ao salvar isso vira
+ * INDIVIDUAL/COMPANY (vocabulario do Client generico) e e isso que volta
+ * do banco nas telas de historico/relatorio. Cobre os dois lados para
+ * funcionar em qualquer um dos dois pontos de leitura.
+ */
+export const PERSON_TYPE_LABEL: Record<string, string> = {
+  PF: "Pessoa física",
+  PJ: "Pessoa jurídica",
+  INDIVIDUAL: "Pessoa física",
+  COMPANY: "Pessoa jurídica",
+};
+
+/**
+ * PaymentMethod: cobre o vocabulario dos formularios (PIX/DINHEIRO/
+ * CARTAO/ABERTO) e o do enum do Prisma (armazenado apos o mapeamento),
+ * porque o texto do comprovante usa ora um lado ora o outro.
+ */
+export const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  PIX: "PIX",
+  DINHEIRO: "Dinheiro",
+  CARTAO: "Cartão",
+  ABERTO: "Em aberto",
+  CASH: "Dinheiro",
+  CREDIT_CARD: "Cartão de crédito",
+  DEBIT_CARD: "Cartão de débito",
+  BANK_TRANSFER: "Transferência",
+  BOLETO: "Boleto",
+  CHECK: "Cheque",
+  OTHER: "Outro",
+};
+
+/** BxReceiptStatus */
+export const RECEIPT_STATUS_LABEL: Record<string, string> = {
+  RECEIVED: "Recebido",
+  NOT_RECEIVED: "Não recebido",
+};
+
 /** ContractStatus */
 export const CONTRACT_STATUS_LABEL: Record<string, string> = {
   DRAFT: "Rascunho",
@@ -30,7 +68,11 @@ export const FINANCIAL_STATUS_LABEL: Record<string, string> = {
 /** FinancialDirection */
 export const DIRECTION_LABEL: Record<string, string> = {
   INCOME: "Entrada",
-  EXPENSE: "Saida",
+  EXPENSE: "Saída",
+  // Alguns formularios (Mercado autonomo) usam esse vocabulario direto,
+  // sem passar pelo enum do Prisma.
+  ENTRADA: "Entrada",
+  SAIDA: "Saída",
 };
 
 /** Status proprios da Plataforma Online (nao e um enum do Prisma). */
