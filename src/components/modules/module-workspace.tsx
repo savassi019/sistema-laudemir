@@ -145,7 +145,14 @@ export function ModuleWorkspace({
     if (k === "visita"        && !hasVisitTracking)   return false;
     if (k === "rotas"         && !hasRoutes)          return false;
     if (k === "calendario"    && !hasCalendar)        return false;
-    if (k === "clientes"      && !hasClientConcept)   return false;
+    // "Contratos" e uma lista generica compartilhada com os outros modulos:
+    // cards sem clique, e o botao "Novo" nem abre um cadastro de verdade --
+    // embute a tela inteira de Clientes e funil (formMap.marketing e o
+    // MarketingCrmView completo, que nao aceita startAtRegistration).
+    // Reportado pelo usuario: "nao tem como fazer nada nem visualizar os
+    // contratos, apenas criar um novo". Tudo que ela deveria fazer ja existe,
+    // completo (buscar, ver, editar, excluir), em Clientes e funil.
+    if (k === "clientes"      && (!hasClientConcept || hasCalendar)) return false;
     // No Marketing o dinheiro mora nos Lancamentos de cada cliente (dentro
     // de Clientes e funil), nao nesta lista solta. As duas telas usam a
     // MESMA tabela sem se falar: um lancamento feito aqui nao aparecia no
