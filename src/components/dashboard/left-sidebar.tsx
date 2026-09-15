@@ -20,7 +20,14 @@ import type { SessionData } from "@/types/app";
 
 type NavItem = { href: string; label: string };
 
-const STORAGE_KEY = "lm-sidebar-collapsed";
+/**
+ * Chave compartilhada com o AppShell: o estado (recolhida/expandida) mora
+ * la agora, porque o conteudo precisa saber o mesmo valor para reservar o
+ * espaco certo (60px recolhida, 210px expandida). Antes o conteudo sempre
+ * reservava 60px, entao com a barra expandida 150px de tela ficavam
+ * escondidos embaixo dela.
+ */
+export const SIDEBAR_STORAGE_KEY = "lm-sidebar-collapsed";
 const HIDDEN_ON_MODULE = new Set(["/clientes", "/financeiro", "/relatorio"]);
 
 const ICON_MAP: Record<string, React.ElementType> = {
@@ -34,34 +41,24 @@ const ICON_MAP: Record<string, React.ElementType> = {
 export function LeftSidebar({
   session,
   navigation,
+  collapsed,
+  onToggle,
 }: {
   session: SessionData;
   navigation: NavItem[];
+  /** Ja vem com o gate de "ainda nao montou" aplicado pelo AppShell. */
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   const pathname = usePathname();
-  const [collapsed, setCollapsed] = useState(true);
-  const [mounted, setMounted] = useState(false);
   const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {
-    setMounted(true);
     const check = () => setIsDesktop(window.innerWidth >= 1024);
     check();
     window.addEventListener("resize", check);
-    try {
-      const v = localStorage.getItem(STORAGE_KEY);
-      if (v !== null) setCollapsed(v === "true");
-    } catch {}
     return () => window.removeEventListener("resize", check);
   }, []);
-
-  function toggle() {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try { localStorage.setItem(STORAGE_KEY, String(next)); } catch {}
-      return next;
-    });
-  }
 
   const isModuleDetail = /^\/modulos\/.+/.test(pathname);
   const filteredNav = isModuleDetail
@@ -87,7 +84,7 @@ export function LeftSidebar({
     items.push({ href: item.href, label: item.label, Icon });
   }
 
-  const isCollapsed = !mounted || collapsed;
+  const isCollapsed = collapsed;
 
   // Never render on mobile — JS guarentees this regardless of CSS
   if (!isDesktop) return null;
@@ -110,7 +107,7 @@ export function LeftSidebar({
       {isCollapsed ? (
         <button
           type="button"
-          onClick={toggle}
+          onClick={onToggle}
           title="Expandir menu"
           className="flex h-14 w-full shrink-0 items-center justify-center border-b border-[rgba(245,241,232,0.07)] transition hover:bg-white/[0.04]"
         >
@@ -140,7 +137,7 @@ export function LeftSidebar({
           </Link>
           <button
             type="button"
-            onClick={toggle}
+            onClick={onToggle}
             className="flex size-6 shrink-0 items-center justify-center rounded-lg text-[#9a958b] transition hover:bg-white/[0.06] hover:text-white"
             title="Recolher menu"
           >
