@@ -136,39 +136,46 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
 
   return (
     <div className="space-y-2.5 md:space-y-4">
-      {/* Números da agência — nao do caixa */}
-      <div className={cn("grid gap-2 md:gap-4", hideFinancials ? "grid-cols-3" : "grid-cols-2 md:grid-cols-4")}>
+      {/*
+        Numeros da agencia. "Atrasados" e "Na semana" saíram daqui: eram os
+        mesmos numeros da faixa vermelha e da lista "Proximos 7 dias" logo
+        abaixo, so que sem o detalhe -- contando a mesma coisa duas vezes e
+        competindo com Clientes ativos/Receita mensal por atencao.
+      */}
+      <div className={cn("grid gap-2 md:gap-4", hideFinancials ? "grid-cols-1" : "grid-cols-2")}>
         <Cartao rotulo="Clientes ativos" valor={String(dados.ativos)} cor="text-[#4ade80]" />
         {!hideFinancials && (
           <Cartao rotulo="Receita mensal" valor={formatCurrency(dados.receita)} cor="text-[#f3dfae]" />
         )}
-        <Cartao
-          rotulo="Atrasados"
-          valor={String(dados.atrasados.length)}
-          cor={dados.atrasados.length ? "text-[#f87171]" : "text-[#86efac]"}
-        />
-        <Cartao rotulo="Na semana" valor={String(dados.semana.length)} cor="text-[#93c5fd]" />
       </div>
 
-      {/* Conteudos por situacao: da para saber quanto falta sem contar na mao. */}
+      {/* Conteudo: rotulado como o Funil abaixo, para nao parecer uma fileira
+          de numeros soltos. Pendentes/Aprovados/Produzidos nao repetem nada
+          da tela -- sao a unica contagem desses tres. */}
       <button
         type="button"
         onClick={onAbrirCalendario}
-        className="grid w-full grid-cols-3 gap-2 rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 px-3 py-2.5 text-left transition active:bg-white/[0.04] md:gap-4 md:px-4 md:py-3"
+        className="w-full rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 px-3 py-2.5 text-left transition active:bg-white/[0.04] md:px-4 md:py-3"
       >
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.1em] text-[#5a544c]">Pendentes</p>
-          <p className={cn("text-lg font-semibold tabular-nums md:text-xl", dados.pendentes ? "text-[#f87171]" : "text-[#86efac]")}>
-            {dados.pendentes}
-          </p>
+        <div className="mb-1.5 flex items-center gap-2">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">Conteúdo</p>
+          <ChevronRight className="ml-auto size-3.5 text-[#5a544c]" />
         </div>
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.1em] text-[#5a544c]">Produzidos/sem.</p>
-          <p className="text-lg font-semibold tabular-nums text-[#f3dfae] md:text-xl">{dados.produzidosSemana}</p>
-        </div>
-        <div>
-          <p className="text-[10px] uppercase tracking-[0.1em] text-[#5a544c]">Aprovados</p>
-          <p className="text-lg font-semibold tabular-nums text-[#4ade80] md:text-xl">{dados.aprovados}</p>
+        <div className="grid grid-cols-3 gap-2 md:gap-4">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.1em] text-[#5a544c]">Pendentes</p>
+            <p className={cn("text-lg font-semibold tabular-nums md:text-xl", dados.pendentes ? "text-[#f87171]" : "text-[#86efac]")}>
+              {dados.pendentes}
+            </p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.1em] text-[#5a544c]">Produzidos/sem.</p>
+            <p className="text-lg font-semibold tabular-nums text-[#f3dfae] md:text-xl">{dados.produzidosSemana}</p>
+          </div>
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.1em] text-[#5a544c]">Aprovados</p>
+            <p className="text-lg font-semibold tabular-nums text-[#4ade80] md:text-xl">{dados.aprovados}</p>
+          </div>
         </div>
       </button>
 
