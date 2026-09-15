@@ -30,6 +30,7 @@ import { MarketingCalendar } from "@/components/modules/marketing-calendar";
 import { MarketingHome } from "@/components/modules/marketing-home";
 import { MarketingCrmView } from "@/components/modules/marketing-crm-view";
 import { ModuleAccountsPayable } from "@/components/modules/module-accounts-payable";
+import { MarketingAccounts } from "@/components/modules/marketing-accounts";
 import { ModuleFinanceSection } from "@/components/modules/module-finance-section";
 import { ModuleHistoryOverview } from "@/components/modules/module-history-overview";
 import { ModuleReportTab } from "@/components/modules/module-report-tab";
@@ -153,14 +154,14 @@ export function ModuleWorkspace({
     // contratos, apenas criar um novo". Tudo que ela deveria fazer ja existe,
     // completo (buscar, ver, editar, excluir), em Clientes e funil.
     if (k === "clientes"      && (!hasClientConcept || hasCalendar)) return false;
-    // No Marketing o dinheiro mora nos Lancamentos de cada cliente (dentro
-    // de Clientes e funil), nao nesta lista solta. As duas telas usam a
-    // MESMA tabela sem se falar: um lancamento feito aqui nao aparecia no
-    // relatorio de nenhum cliente, e um lancamento feito no cliente vazava
-    // pra ca sem dizer de quem era. Confirmado no banco: zero uso real
-    // desta tela no Marketing, entao esconder nao perde nada.
+    // "Financeiro" generico ficou escondido no Marketing: usa a MESMA
+    // tabela dos Lancamentos por cliente sem se falar com eles (um
+    // lancamento feito ali nao aparecia no relatorio de nenhum cliente).
+    // "Contas" o usuario pediu de volta -- agora renderiza MarketingAccounts
+    // (abaixo), uma tela dedicada que le a mesma tabela dos Lancamentos
+    // (cliente + despesas da agencia juntos), entao nao reabre o problema.
     if (k === "financeiro"    && (hideFinancials || hasCalendar)) return false;
-    if (k === "contas-pagar"  && (hideFinancials || hasCalendar)) return false;
+    if (k === "contas-pagar"  && hideFinancials)                  return false;
     if (k === "relatorio"     && hideFinancials)       return false;
     return true;
   });
@@ -431,7 +432,11 @@ export function ModuleWorkspace({
         ) : null}
 
         {activeSection === "contas-pagar" ? (
-          <ModuleAccountsPayable slug={slug} initialEntries={financialEntries} />
+          hasCalendar ? (
+            <MarketingAccounts hideFinancials={hideFinancials} />
+          ) : (
+            <ModuleAccountsPayable slug={slug} initialEntries={financialEntries} />
+          )
         ) : null}
 
         {activeSection === "historico" ? (

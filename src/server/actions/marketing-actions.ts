@@ -410,12 +410,14 @@ export async function setMarketingEntryPaidAction(
 ): Promise<void> {
   const session = await requireSession();
 
+  // Vale tanto para lancamento de cliente (sourceEntityType MARKETING_CONTRACT)
+  // quanto para despesa da agencia (sourceEntityType nulo) -- e a mesma
+  // tabela, o id ja escopa para a linha certa dentro da organizacao.
   const entry = await prisma.financialEntry.findFirst({
     where: {
       id: entryId,
       organizationId: session.organizationId,
       module: "MARKETING",
-      sourceEntityType: "MARKETING_CONTRACT",
     },
     select: { id: true, totalAmount: true, issueDate: true },
   });
@@ -440,11 +442,117 @@ export async function deleteMarketingEntryAction(entryId: string): Promise<void>
       id: entryId,
       organizationId: session.organizationId,
       module: "MARKETING",
-      sourceEntityType: "MARKETING_CONTRACT",
     },
     select: { id: true },
   });
   if (!entry) throw new Error("Lançamento não encontrado.");
 
   await prisma.financialEntry.delete({ where: { id: entryId } });
+}
+
+/* ------------------------------------------------------------------ *
+ * Contas da agencia: despesas que nao sao de um cliente especifico
+ * (ferramenta, assinatura, aluguel, salario) + visao consolidada de
+ * tudo que a agencia deve/tem a receber, juntando essas despesas com os
+ * Lancamentos que ja existem dentro de cada cliente.
+ *
+ * Mesma tabela (FinancialEntry, module MARKETING) dos Lancamentos por
+ * cliente -- despesa de agencia e so uma linha sem sourceEntityId. Um
+ * cadastro paralelo para "despesa geral" reabriria o mesmo problema que
+ * ja foi corrigido aqui: dinheiro em dois lugares que nao se falam.
+ * ------------------------------------------------------------------ */
+
+export type MarketingFinanceEntry = {
+  id: string;
+  description: string;
+  direction: "INCOME" | "EXPENSE";
+  amount: number;
+  date: string;
+  paid: boolean;
+  /** null = despesa da agencia, sem cliente vinculado. */
+  clientId: string | null;
+  clientName: string | null;
+};
+
+function mapFinanceEntry(
+  e: {
+    id: string;
+    description: string;
+    direction: string;
+    totalAmount: unknown;
+    issueDate: Date;
+    status: string;
+    sourceEntityId: string | null;
+  },
+  nomePorId: Map<string, string>,
+): MarketingFinanceEntry {
+  return {
+    id: e.id,
+    description: e.description,
+    direction: e.direction === "EXPENSE" ? "EXPENSE" : "INCOME",
+    amount: Number(e.totalAmount),
+    date: e.issueDate.toISOString(),
+    paid: e.status === "PAID",
+    clientId: e.sourceEntityId,
+    clientName: e.sourceEntityId ? (nomePorId.get(e.sourceEntityId) ?? "Cliente removido") : null,
+  };
+}
+
+/** Todas as contas do Marketing: despesas da agencia + de cada cliente, numa lista so. */
+export async function getMarketingFinanceOverviewAction(): Promise<MarketingFinanceEntry[]> {
+  const session = await requireSession();
+
+  const entries = await prisma.financialEntry.findMany({
+    where: { organizationId: session.organizationId, module: "MARKETING" },
+    orderBy: { issueDate: "desc" },
+  });
+
+  const idsDeContrato = [...new Set(entries.map((e) => e.sourceEntityId).filter((id): id is string => Boolean(id)))];
+  const contratos = idsDeContrato.length
+    ? await prisma.marketingContract.findMany({
+        where: { id: { in: idsDeContrato } },
+        select: { id: true, name: true },
+      })
+    : [];
+  const nomePorId = new Map(contratos.map((c) => [c.id, c.name]));
+
+  return entries.map((e) => mapFinanceEntry(e, nomePorId));
+}
+
+export async function addAgencyFinanceEntryAction(input: {
+  description: string;
+  direction: "INCOME" | "EXPENSE";
+  amount: number;
+  date: string;
+  paid: boolean;
+}): Promise<MarketingFinanceEntry> {
+  const session = await requireSession();
+
+  const descricao = input.description.trim();
+  if (!descricao) throw new Error("Descreva a conta.");
+  if (!Number.isFinite(input.amount) || input.amount <= 0) {
+    throw new Error("Informe um valor maior que zero.");
+  }
+
+  const quando = dataDoCompromisso(input.date);
+  if (Number.isNaN(quando.getTime())) throw new Error("Data inválida.");
+
+  const entry = await prisma.financialEntry.create({
+    data: {
+      organizationId: session.organizationId,
+      module: "MARKETING",
+      kind: input.direction === "EXPENSE" ? "EXPENSE" : "REVENUE",
+      direction: input.direction,
+      status: input.paid ? "PAID" : "PENDING",
+      description: descricao,
+      issueDate: quando,
+      paidAt: input.paid ? quando : undefined,
+      totalAmount: input.amount,
+      paidAmount: input.paid ? input.amount : 0,
+      remainingAmount: input.paid ? 0 : input.amount,
+      createdById: session.userId,
+    },
+  });
+
+  return mapFinanceEntry(entry, new Map());
 }
