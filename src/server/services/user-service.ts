@@ -39,6 +39,7 @@ export async function listStaff(session: SessionData): Promise<StaffMember[]> {
         role: { in: ["STAFF", "ADMIN"] },
       },
       orderBy: { createdAt: "desc" },
+      include: { modulePermissions: { select: { module: true } } },
     });
 
     return users.map((u) => ({
@@ -49,6 +50,9 @@ export async function listStaff(session: SessionData): Promise<StaffMember[]> {
       status: u.status === "ACTIVE" ? "ativo" : "inativo",
       role: u.role as "STAFF" | "ADMIN",
       createdAt: u.createdAt.toISOString(),
+      modules: u.modulePermissions
+        .map((p) => p.module as ModuleName)
+        .filter((m) => m !== "DASHBOARD"),
     }));
   } catch (error) {
     console.error("[user-service] listStaff falhou, retornando dados locais:", error);
@@ -132,4 +136,137 @@ export async function createStaff(
     console.error("[user-service] createStaff falhou ao gravar no banco:", error);
     throw new Error("Falha ao salvar o funcionario no banco. Tente novamente.");
   }
+}
+
+/**
+ * Cartao do funcionario ate hoje so criava -- nada de editar, redefinir
+ * senha ou desativar. "Excluir" de verdade nao existe de proposito: o
+ * usuario pode ter criado registros (visitas, comprovantes) que ficariam
+ * orfaos. Desativar bloqueia o login (authenticateUser ja rejeita
+ * status != ACTIVE, ver src/lib/auth.ts) sem apagar nada.
+ */
+export async function updateStaff(
+  session: SessionData,
+  userId: string,
+  data: {
+    name?: string;
+    phone?: string | null;
+    role?: "STAFF" | "ADMIN";
+    modules?: ModuleName[];
+  },
+): Promise<StaffMember> {
+  if (process.env.DEMO_MODE !== "false") {
+    const list = getLocalStaff(session);
+    const idx = list.findIndex((m) => m.id === userId);
+    if (idx === -1) throw new Error("Funcionário não encontrado.");
+    const atual = list[idx];
+    const atualizado: StaffMember = {
+      ...atual,
+      ...(data.name !== undefined && { name: data.name }),
+      ...(data.phone !== undefined && { phone: data.phone ?? undefined }),
+      ...(data.role !== undefined && { role: data.role }),
+      ...(data.modules !== undefined && { modules: data.modules }),
+    };
+    const novaLista = [...list];
+    novaLista[idx] = atualizado;
+    localStaffStore.set(session.organizationId, novaLista);
+    return atualizado;
+  }
+
+  const alvo = await prisma.user.findFirst({
+    where: { id: userId, organizationId: session.organizationId },
+  });
+  if (!alvo) throw new Error("Funcionário não encontrado.");
+  if (alvo.role === "OWNER") throw new Error("Não é possível editar o Dono por aqui.");
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      ...(data.name !== undefined && { name: data.name }),
+      ...(data.phone !== undefined && { phone: data.phone || null }),
+      ...(data.role !== undefined && { role: data.role }),
+    },
+  });
+
+  let modulos = data.modules;
+  if (data.modules) {
+    const concedidos = Array.from(new Set<ModuleName>(["DASHBOARD", ...data.modules]));
+    await prisma.$transaction([
+      prisma.modulePermission.deleteMany({
+        where: { userId, organizationId: session.organizationId, module: { notIn: concedidos } },
+      }),
+      ...concedidos.map((module) =>
+        prisma.modulePermission.upsert({
+          where: { userId_module: { userId, module } },
+          create: { organizationId: session.organizationId, userId, module, canView: true, canCreate: true },
+          update: {},
+        }),
+      ),
+    ]);
+  } else {
+    const permissoes = await prisma.modulePermission.findMany({
+      where: { userId, organizationId: session.organizationId },
+      select: { module: true },
+    });
+    modulos = permissoes.map((p) => p.module as ModuleName).filter((m) => m !== "DASHBOARD");
+  }
+
+  return {
+    id: updated.id,
+    name: updated.name,
+    email: updated.email,
+    phone: updated.phone ?? undefined,
+    status: updated.status === "ACTIVE" ? "ativo" : "inativo",
+    role: updated.role as "STAFF" | "ADMIN",
+    createdAt: updated.createdAt.toISOString(),
+    modules: modulos,
+  };
+}
+
+export async function resetStaffPassword(
+  session: SessionData,
+  userId: string,
+  newPassword: string,
+): Promise<void> {
+  if (process.env.DEMO_MODE !== "false") return;
+
+  const alvo = await prisma.user.findFirst({
+    where: { id: userId, organizationId: session.organizationId },
+  });
+  if (!alvo) throw new Error("Funcionário não encontrado.");
+  if (alvo.role === "OWNER") throw new Error("Não é possível redefinir a senha do Dono por aqui.");
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+}
+
+export async function setStaffStatus(
+  session: SessionData,
+  userId: string,
+  status: "ativo" | "inativo",
+): Promise<void> {
+  if (process.env.DEMO_MODE !== "false") {
+    const list = getLocalStaff(session);
+    const idx = list.findIndex((m) => m.id === userId);
+    if (idx === -1) throw new Error("Funcionário não encontrado.");
+    const novaLista = [...list];
+    novaLista[idx] = { ...novaLista[idx], status };
+    localStaffStore.set(session.organizationId, novaLista);
+    return;
+  }
+
+  if (userId === session.userId) {
+    throw new Error("Não é possível desativar seu próprio usuário.");
+  }
+
+  const alvo = await prisma.user.findFirst({
+    where: { id: userId, organizationId: session.organizationId },
+  });
+  if (!alvo) throw new Error("Funcionário não encontrado.");
+  if (alvo.role === "OWNER") throw new Error("Não é possível desativar o Dono.");
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: { status: status === "ativo" ? "ACTIVE" : "INACTIVE" },
+  });
 }

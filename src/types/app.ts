@@ -147,4 +147,6 @@ export type StaffMember = {
   status: "ativo" | "inativo";
   role: "STAFF" | "ADMIN";
   createdAt: string;
+  /** Módulos liberados (fora o DASHBOARD, sempre concedido). Ausente = não carregado. */
+  modules?: ModuleName[];
 };

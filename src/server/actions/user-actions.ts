@@ -7,7 +7,12 @@ import {
   validarNome,
   validarSenha,
 } from "@/lib/user-validation";
-import { createStaff } from "@/server/services/user-service";
+import {
+  createStaff,
+  resetStaffPassword,
+  setStaffStatus,
+  updateStaff,
+} from "@/server/services/user-service";
 import type { ModuleName, StaffMember } from "@/types/app";
 
 export async function createStaffAction(data: {
@@ -39,4 +44,56 @@ export async function createStaffAction(data: {
     name: data.name.trim(),
     email: normalizarEmail(data.email),
   });
+}
+
+export async function updateStaffAction(
+  userId: string,
+  data: {
+    name?: string;
+    phone?: string | null;
+    role?: "STAFF" | "ADMIN";
+    modules?: ModuleName[];
+  },
+): Promise<StaffMember> {
+  const session = await requireSession();
+  if (session.role !== "OWNER" && session.role !== "ADMIN") {
+    throw new Error("Sem permissão.");
+  }
+
+  if (data.name !== undefined) {
+    const erroNome = validarNome(data.name);
+    if (erroNome) throw new Error(erroNome);
+  }
+  if (data.modules && data.modules.length === 0) {
+    throw new Error("Selecione ao menos um módulo para este funcionário.");
+  }
+
+  return updateStaff(session, userId, data);
+}
+
+export async function resetStaffPasswordAction(
+  userId: string,
+  newPassword: string,
+): Promise<void> {
+  const session = await requireSession();
+  if (session.role !== "OWNER" && session.role !== "ADMIN") {
+    throw new Error("Sem permissão.");
+  }
+
+  const erro = validarSenha(newPassword);
+  if (erro) throw new Error(`Senha: ${erro}`);
+
+  await resetStaffPassword(session, userId, newPassword);
+}
+
+export async function setStaffStatusAction(
+  userId: string,
+  status: "ativo" | "inativo",
+): Promise<void> {
+  const session = await requireSession();
+  if (session.role !== "OWNER" && session.role !== "ADMIN") {
+    throw new Error("Sem permissão.");
+  }
+
+  await setStaffStatus(session, userId, status);
 }

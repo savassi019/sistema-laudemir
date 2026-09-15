@@ -1,8 +1,9 @@
 "use client";
 
-import { Activity, Check, Plus, Shield, User, X } from "lucide-react";
+import { Activity, Check, KeyRound, LoaderCircle, Pencil, Plus, Power, Shield, User, X } from "lucide-react";
 import { useRef, useState, useTransition } from "react";
 
+import { cn } from "@/lib/cn";
 import { fieldClass, labelClass, selectClass } from "@/components/modules/styles";
 import { moduleCatalog } from "@/lib/module-catalog";
 import {
@@ -13,7 +14,12 @@ import {
   validarNome,
   validarSenha,
 } from "@/lib/user-validation";
-import { createStaffAction } from "@/server/actions/user-actions";
+import {
+  createStaffAction,
+  resetStaffPasswordAction,
+  setStaffStatusAction,
+  updateStaffAction,
+} from "@/server/actions/user-actions";
 import type { ModuleName, StaffMember } from "@/types/app";
 
 const assignableModules = moduleCatalog.filter((item) => item.group !== "core");
@@ -295,68 +301,16 @@ export function StaffManagement({
       ) : null}
 
       <div className={`grid gap-3 sm:grid-cols-2 xl:grid-cols-3 ${formOpen ? "hidden" : ""}`}>
-        {staff.map((member) => {
-          const stats = visitStats[member.name];
-          const days = daysSince(stats?.lastVisitAt);
-          return (
-            <article
-              key={member.id}
-              className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f0e]/55"
-            >
-              <div className="h-[3px] w-full bg-[#d1a04f]/40" />
-              <div className="p-4">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.04] text-[#9a958b]">
-                      {member.role === "ADMIN" ? (
-                        <Shield className="size-4" />
-                      ) : (
-                        <User className="size-4" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-semibold text-white">{member.name}</p>
-                      <p className="text-xs text-[#9a958b]">
-                        {member.role === "ADMIN" ? "Administrador" : "Funcionário"}
-                      </p>
-                    </div>
-                  </div>
-                  <span
-                    className={`shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-medium ${
-                      member.status === "ativo"
-                        ? "bg-[#8aa17c]/12 text-[#8aa17c]"
-                        : "bg-white/[0.05] text-[#5a544c]"
-                    }`}
-                  >
-                    {member.status}
-                  </span>
-                </div>
-                <div className="mt-3 space-y-1 text-xs text-[#9a958b]">
-                  <p>{member.email}</p>
-                  {member.phone ? <p>{member.phone}</p> : null}
-                </div>
-                <div className="mt-3 flex items-center gap-2 rounded-xl border border-white/8 bg-white/[0.025] px-3 py-2">
-                  <Activity className="size-3.5 shrink-0 text-[#9a958b]" />
-                  {stats ? (
-                    <p className="text-xs text-[#c9c2b4]">
-                      <span className="font-semibold text-white">{stats.count}</span>{" "}
-                      {stats.count === 1 ? "visita" : "visitas"} ·{" "}
-                      {days === null
-                        ? "—"
-                        : days === 0
-                          ? "última hoje"
-                          : days === 1
-                            ? "última ontem"
-                            : `última há ${days}d`}
-                    </p>
-                  ) : (
-                    <p className="text-xs text-[#5a544c]">Sem visitas registradas</p>
-                  )}
-                </div>
-              </div>
-            </article>
-          );
-        })}
+        {staff.map((member) => (
+          <StaffCard
+            key={member.id}
+            member={member}
+            stats={visitStats[member.name]}
+            onUpdate={(patch) =>
+              setStaff((prev) => prev.map((m) => (m.id === member.id ? { ...m, ...patch } : m)))
+            }
+          />
+        ))}
       </div>
 
       {staff.length === 0 && !formOpen ? (
@@ -365,5 +319,461 @@ export function StaffManagement({
         </div>
       ) : null}
     </div>
+  );
+}
+
+// ─── StaffCard: ver, editar, redefinir senha, ativar/desativar ────────────────
+
+function StaffCard({
+  member,
+  stats,
+  onUpdate,
+}: {
+  member: StaffMember;
+  stats?: { count: number; lastVisitAt?: string };
+  onUpdate: (patch: Partial<StaffMember>) => void;
+}) {
+  const [modo, setModo] = useState<"ver" | "editar" | "senha" | "status">("ver");
+  const days = daysSince(stats?.lastVisitAt);
+
+  if (modo === "editar") {
+    return (
+      <EditStaffForm
+        member={member}
+        onSaved={(patch) => { onUpdate(patch); setModo("ver"); }}
+        onCancel={() => setModo("ver")}
+      />
+    );
+  }
+
+  if (modo === "senha") {
+    return (
+      <ResetPasswordForm
+        member={member}
+        onDone={() => setModo("ver")}
+        onCancel={() => setModo("ver")}
+      />
+    );
+  }
+
+  if (modo === "status") {
+    return (
+      <ConfirmStatusChange
+        member={member}
+        onDone={(patch) => { onUpdate(patch); setModo("ver"); }}
+        onCancel={() => setModo("ver")}
+      />
+    );
+  }
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f0e]/55">
+      <div className={cn("h-[3px] w-full", member.status === "ativo" ? "bg-[#d1a04f]/40" : "bg-white/10")} />
+      <div className="p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.04] text-[#9a958b]">
+              {member.role === "ADMIN" ? (
+                <Shield className="size-4" />
+              ) : (
+                <User className="size-4" />
+              )}
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold text-white">{member.name}</p>
+              <p className="text-xs text-[#9a958b]">
+                {member.role === "ADMIN" ? "Administrador" : "Funcionário"}
+              </p>
+            </div>
+          </div>
+          <span
+            className={cn(
+              "shrink-0 rounded-lg px-2 py-0.5 text-[11px] font-medium",
+              member.status === "ativo" ? "bg-[#8aa17c]/12 text-[#8aa17c]" : "bg-white/[0.05] text-[#5a544c]",
+            )}
+          >
+            {member.status === "ativo" ? "Ativo" : "Inativo"}
+          </span>
+        </div>
+        <div className="mt-3 space-y-1 text-xs text-[#9a958b]">
+          <p>{member.email}</p>
+          {member.phone ? <p>{member.phone}</p> : null}
+        </div>
+        <div className="mt-3 flex items-center gap-2 rounded-xl border border-white/8 bg-white/[0.025] px-3 py-2">
+          <Activity className="size-3.5 shrink-0 text-[#9a958b]" />
+          {stats ? (
+            <p className="text-xs text-[#c9c2b4]">
+              <span className="font-semibold text-white">{stats.count}</span>{" "}
+              {stats.count === 1 ? "visita" : "visitas"} ·{" "}
+              {days === null
+                ? "—"
+                : days === 0
+                  ? "última hoje"
+                  : days === 1
+                    ? "última ontem"
+                    : `última há ${days}d`}
+            </p>
+          ) : (
+            <p className="text-xs text-[#5a544c]">Sem visitas registradas</p>
+          )}
+        </div>
+
+        {/* Antes o card so mostrava dado -- nao dava pra corrigir nome,
+            telefone e modulos, redefinir senha nem tirar o acesso de quem
+            saiu, sem mexer direto no banco. */}
+        <div className="mt-3 grid grid-cols-3 gap-1.5">
+          <button
+            type="button"
+            onClick={() => setModo("editar")}
+            className="flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] text-[11px] font-medium text-[#c9c2b4] transition active:bg-white/[0.07]"
+          >
+            <Pencil className="size-3" />
+            Editar
+          </button>
+          <button
+            type="button"
+            onClick={() => setModo("senha")}
+            className="flex min-h-9 items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.03] text-[11px] font-medium text-[#c9c2b4] transition active:bg-white/[0.07]"
+          >
+            <KeyRound className="size-3" />
+            Senha
+          </button>
+          <button
+            type="button"
+            onClick={() => setModo("status")}
+            className={cn(
+              "flex min-h-9 items-center justify-center gap-1.5 rounded-lg border text-[11px] font-medium transition active:scale-[0.98]",
+              member.status === "ativo"
+                ? "border-[#f87171]/25 bg-[#f87171]/10 text-[#fca5a5]"
+                : "border-[#8aa17c]/25 bg-[#8aa17c]/10 text-[#8aa17c]",
+            )}
+          >
+            <Power className="size-3" />
+            {member.status === "ativo" ? "Desativar" : "Ativar"}
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function EditStaffForm({
+  member,
+  onSaved,
+  onCancel,
+}: {
+  member: StaffMember;
+  onSaved: (patch: Partial<StaffMember>) => void;
+  onCancel: () => void;
+}) {
+  const [name, setName] = useState(member.name);
+  const [phone, setPhone] = useState(member.phone ?? "");
+  const [role, setRole] = useState<"STAFF" | "ADMIN">(member.role);
+  const [modules, setModules] = useState<Set<ModuleName>>(new Set(member.modules ?? []));
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  function toggleModule(m: ModuleName) {
+    setModules((prev) => {
+      const next = new Set(prev);
+      if (next.has(m)) next.delete(m);
+      else next.add(m);
+      return next;
+    });
+  }
+
+  async function salvar() {
+    const problema = validarNome(name);
+    if (problema) return setErro(problema);
+    if (modules.size === 0) return setErro("Selecione ao menos um módulo para este funcionário.");
+
+    setSaving(true);
+    setErro(null);
+    try {
+      const atualizado = await updateStaffAction(member.id, {
+        name: name.trim(),
+        phone: phone.trim() || null,
+        role,
+        modules: Array.from(modules),
+      });
+      onSaved(atualizado);
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao salvar.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-[#d1a04f]/25 bg-[#0b0f0e]/70 p-4">
+      <p className="mb-3 text-sm font-semibold text-white">Editar {member.name}</p>
+
+      <div className="space-y-3">
+        <label className="block space-y-1.5">
+          <span className={labelClass}>Nome</span>
+          <input value={name} onChange={(e) => setName(e.target.value)} className={fieldClass} />
+        </label>
+        <label className="block space-y-1.5">
+          <span className={labelClass}>Telefone</span>
+          <input value={phone} onChange={(e) => setPhone(e.target.value)} className={fieldClass} placeholder="(11) 99999-9999" />
+        </label>
+        <label className="block space-y-1.5">
+          <span className={labelClass}>Perfil</span>
+          <select value={role} onChange={(e) => setRole(e.target.value as "STAFF" | "ADMIN")} className={selectClass}>
+            <option value="STAFF">Funcionário</option>
+            <option value="ADMIN">Administrador</option>
+          </select>
+        </label>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <span className={labelClass}>Módulos liberados</span>
+            <div className="flex gap-3 text-xs font-medium text-[#d1a04f]">
+              <button type="button" onClick={() => setModules(new Set(assignableModules.map((m) => m.module)))} className="hover:underline">
+                Todos
+              </button>
+              <button type="button" onClick={() => setModules(new Set())} className="hover:underline">
+                Limpar
+              </button>
+            </div>
+          </div>
+          <div className="max-h-56 space-y-0.5 overflow-y-auto rounded-2xl border border-white/10 bg-[#0b0f0e]/45 p-1.5">
+            {assignableModules.map((item) => (
+              <label
+                key={item.module}
+                className="flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm text-slate-200 active:bg-white/[0.05]"
+              >
+                <input
+                  type="checkbox"
+                  checked={modules.has(item.module)}
+                  onChange={() => toggleModule(item.module)}
+                  className="size-4 shrink-0 accent-[#d1a04f]"
+                />
+                <span className="truncate">{item.title}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {erro ? (
+          <p className="rounded-lg border border-[#f87171]/30 bg-[#f87171]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fca5a5]">
+            {erro}
+          </p>
+        ) : null}
+
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={salvar}
+            disabled={saving}
+            className="flex-1 rounded-xl bg-[#d1a04f] py-2.5 text-xs font-semibold text-[#0d0a05] transition active:scale-[0.98] disabled:opacity-60"
+          >
+            {saving ? <LoaderCircle className="mx-auto size-3.5 animate-spin" /> : "Salvar"}
+          </button>
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="rounded-xl border border-white/10 px-4 py-2.5 text-xs text-[#9a958b] transition active:text-white"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
+
+function ResetPasswordForm({
+  member,
+  onDone,
+  onCancel,
+}: {
+  member: StaffMember;
+  onDone: () => void;
+  onCancel: () => void;
+}) {
+  const [senha, setSenha] = useState("");
+  const [mostrar, setMostrar] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
+
+  async function confirmar() {
+    const problema = validarSenha(senha);
+    if (problema) return setErro(`Senha: ${problema}`);
+
+    setSaving(true);
+    setErro(null);
+    try {
+      await resetStaffPasswordAction(member.id, senha);
+      setOk(true);
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao redefinir a senha.");
+      setSaving(false);
+    }
+  }
+
+  if (ok) {
+    return (
+      <article className="overflow-hidden rounded-2xl border border-[#8aa17c]/25 bg-[#0b0f0e]/70 p-4">
+        <p className="text-sm font-semibold text-white">Senha de {member.name} redefinida</p>
+        <p className="mt-1 text-xs text-[#9a958b]">Anote e passe esta senha para a pessoa — ela não aparece depois.</p>
+        <p className="mt-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2.5 font-mono text-sm text-[#f3dfae]">
+          {senha}
+        </p>
+        <button
+          type="button"
+          onClick={onDone}
+          className="mt-3 w-full rounded-xl bg-[#d1a04f] py-2.5 text-xs font-semibold text-[#0d0a05] transition active:scale-[0.98]"
+        >
+          Concluído
+        </button>
+      </article>
+    );
+  }
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-[#d1a04f]/25 bg-[#0b0f0e]/70 p-4">
+      <p className="mb-3 text-sm font-semibold text-white">Redefinir senha de {member.name}</p>
+
+      <label className="block space-y-1.5">
+        <span className={labelClass}>Nova senha</span>
+        <input
+          type={mostrar ? "text" : "password"}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
+          minLength={PASSWORD_MIN}
+          value={senha}
+          onChange={(e) => setSenha(e.target.value)}
+          className={fieldClass}
+          placeholder="Crie uma senha"
+        />
+      </label>
+
+      <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+        {REQUISITOS_SENHA.map((r) => {
+          const okReq = r.ok(senha);
+          return (
+            <li
+              key={r.id}
+              className={cn(
+                "flex items-center gap-1.5 text-[11px]",
+                senha.length === 0 ? "text-[#5a544c]" : okReq ? "text-[#86efac]" : "text-[#f0c9ad]",
+              )}
+            >
+              {senha.length > 0 && okReq ? <Check className="size-3 shrink-0" /> : <span className="size-1 shrink-0 rounded-full bg-current" />}
+              {r.label}
+            </li>
+          );
+        })}
+      </ul>
+
+      <div className="mt-2 flex items-center justify-between gap-2">
+        <button type="button" onClick={() => setMostrar((v) => !v)} className="text-[11px] font-medium text-[#d1a04f] hover:underline">
+          {mostrar ? "Ocultar senha" : "Mostrar senha"}
+        </button>
+        <button
+          type="button"
+          onClick={() => { setSenha(gerarSenha()); setMostrar(true); }}
+          className="text-[11px] font-medium text-[#d1a04f] hover:underline"
+        >
+          Gerar senha
+        </button>
+      </div>
+
+      {erro ? (
+        <p className="mt-2 rounded-lg border border-[#f87171]/30 bg-[#f87171]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fca5a5]">
+          {erro}
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={confirmar}
+          disabled={saving}
+          className="flex-1 rounded-xl bg-[#d1a04f] py-2.5 text-xs font-semibold text-[#0d0a05] transition active:scale-[0.98] disabled:opacity-60"
+        >
+          {saving ? <LoaderCircle className="mx-auto size-3.5 animate-spin" /> : "Redefinir"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="rounded-xl border border-white/10 px-4 py-2.5 text-xs text-[#9a958b] transition active:text-white"
+        >
+          Cancelar
+        </button>
+      </div>
+    </article>
+  );
+}
+
+function ConfirmStatusChange({
+  member,
+  onDone,
+  onCancel,
+}: {
+  member: StaffMember;
+  onDone: (patch: Partial<StaffMember>) => void;
+  onCancel: () => void;
+}) {
+  const [saving, setSaving] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+  const vaiDesativar = member.status === "ativo";
+
+  async function confirmar() {
+    setSaving(true);
+    setErro(null);
+    try {
+      const novoStatus = vaiDesativar ? "inativo" : "ativo";
+      await setStaffStatusAction(member.id, novoStatus);
+      onDone({ status: novoStatus });
+    } catch (err) {
+      setErro(err instanceof Error ? err.message : "Falha ao atualizar.");
+      setSaving(false);
+    }
+  }
+
+  return (
+    <article className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f0e]/70 p-4">
+      <p className="text-sm font-semibold text-white">
+        {vaiDesativar ? `Desativar ${member.name}?` : `Reativar ${member.name}?`}
+      </p>
+      <p className="mt-1 text-xs text-[#9a958b]">
+        {vaiDesativar
+          ? "A pessoa não consegue mais entrar no sistema. Nada do que ela já registrou é apagado."
+          : "A pessoa volta a conseguir entrar no sistema com a mesma senha de antes."}
+      </p>
+
+      {erro ? (
+        <p className="mt-2 rounded-lg border border-[#f87171]/30 bg-[#f87171]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fca5a5]">
+          {erro}
+        </p>
+      ) : null}
+
+      <div className="mt-3 flex gap-2">
+        <button
+          type="button"
+          onClick={confirmar}
+          disabled={saving}
+          className={cn(
+            "flex-1 rounded-xl py-2.5 text-xs font-semibold transition active:scale-[0.98] disabled:opacity-60",
+            vaiDesativar ? "bg-[#f87171] text-[#1a0a0a]" : "bg-[#8aa17c] text-[#0d160f]",
+          )}
+        >
+          {saving ? <LoaderCircle className="mx-auto size-3.5 animate-spin" /> : vaiDesativar ? "Desativar" : "Ativar"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancel}
+          disabled={saving}
+          className="rounded-xl border border-white/10 px-4 py-2.5 text-xs text-[#9a958b] transition active:text-white"
+        >
+          Cancelar
+        </button>
+      </div>
+    </article>
   );
 }
