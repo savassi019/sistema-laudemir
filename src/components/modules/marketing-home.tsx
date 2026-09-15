@@ -58,7 +58,19 @@ export function MarketingHome({ hideFinancials = false, onAbrirCalendario, onAbr
     limite.setDate(hoje.getDate() + 7);
 
     const ativos = clientes.filter((c) => c.pipelineStage === "ACTIVE_CLIENT");
-    const receita = ativos.reduce((s, c) => s + c.contractValue, 0);
+    // "Receita mensal" somava o valor do contrato de quem esta com o rotulo
+    // Ativo -- o mesmo defeito do relatorio por cliente (projetava em vez de
+    // mostrar o que entrou). Agora soma os Lancamentos de entrada JA
+    // recebidos neste mes, de qualquer cliente, ativo ou nao.
+    const receita = clientes.reduce((soma, c) => {
+      const doMes = c.entries.reduce((s, e) => {
+        if (e.direction !== "INCOME" || !e.paid) return s;
+        const d = new Date(e.date);
+        if (d.getFullYear() !== hoje.getFullYear() || d.getMonth() !== hoje.getMonth()) return s;
+        return s + e.amount;
+      }, 0);
+      return soma + doMes;
+    }, 0);
 
     const porEstagio = new Map<MarketingPipelineStage, number>();
     for (const c of clientes) porEstagio.set(c.pipelineStage, (porEstagio.get(c.pipelineStage) ?? 0) + 1);

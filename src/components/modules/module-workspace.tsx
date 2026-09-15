@@ -146,8 +146,14 @@ export function ModuleWorkspace({
     if (k === "rotas"         && !hasRoutes)          return false;
     if (k === "calendario"    && !hasCalendar)        return false;
     if (k === "clientes"      && !hasClientConcept)   return false;
-    if (k === "financeiro"    && hideFinancials)       return false;
-    if (k === "contas-pagar"  && hideFinancials)       return false;
+    // No Marketing o dinheiro mora nos Lancamentos de cada cliente (dentro
+    // de Clientes e funil), nao nesta lista solta. As duas telas usam a
+    // MESMA tabela sem se falar: um lancamento feito aqui nao aparecia no
+    // relatorio de nenhum cliente, e um lancamento feito no cliente vazava
+    // pra ca sem dizer de quem era. Confirmado no banco: zero uso real
+    // desta tela no Marketing, entao esconder nao perde nada.
+    if (k === "financeiro"    && (hideFinancials || hasCalendar)) return false;
+    if (k === "contas-pagar"  && (hideFinancials || hasCalendar)) return false;
     if (k === "relatorio"     && hideFinancials)       return false;
     return true;
   });

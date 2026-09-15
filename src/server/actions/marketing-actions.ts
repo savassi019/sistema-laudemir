@@ -198,6 +198,47 @@ export async function updateMarketingContentStatusAction(
   });
 }
 
+/**
+ * Corrigir titulo/data/tipo/observacao de um compromisso ja criado. Antes so
+ * dava para apagar e recriar -- se alguem errasse a data (o mesmo erro de
+ * fuso que ja confundiu o usuario uma vez, ver dataDoCompromisso acima),
+ * tinha que reconstruir o compromisso do zero perdendo o criativo anexado.
+ */
+export async function updateMarketingContentAction(
+  contentId: string,
+  data: {
+    title: string;
+    contentDate: string;
+    kind: MarketingContentKind;
+    notes?: string | null;
+  },
+): Promise<MarketingContentDetail> {
+  const session = await requireSession();
+
+  const titulo = data.title.trim();
+  if (!titulo) throw new Error("Descreva o compromisso.");
+
+  const content = await prisma.marketingContent.update({
+    where: { id: contentId, organizationId: session.organizationId },
+    data: {
+      title: titulo,
+      contentDate: dataDoCompromisso(data.contentDate),
+      kind: data.kind,
+      notes: data.notes || null,
+    },
+  });
+
+  return {
+    id: content.id,
+    title: content.title,
+    contentDate: content.contentDate.toISOString(),
+    kind: content.kind,
+    status: content.status,
+    notes: content.notes,
+    fileId: content.fileId,
+  };
+}
+
 export async function setMarketingContentFileAction(contentId: string, fileId: string | null) {
   const session = await requireSession();
   await prisma.marketingContent.update({
@@ -234,6 +275,39 @@ export async function updateMarketingClientAction(
       ...(data.expenseAmount !== undefined && { expenseAmount: data.expenseAmount }),
     },
   });
+}
+
+/**
+ * Antes um cliente cadastrado errado ou de teste ficava preso para sempre --
+ * so dava para apagar conteudo e lancamento, um a um, nunca o cadastro.
+ *
+ * Os conteudos (MarketingContent) tem onDelete: Cascade no schema e somem
+ * sozinhos. Os Lancamentos (FinancialEntry) NAO tem relacao formal --
+ * apagados aqui explicitamente, ou ficariam orfaos: invisiveis em qualquer
+ * tela (a consulta de lancamentos so busca pelos contratos que existem) mas
+ * ainda somando nos totais gerais da organizacao. As duas exclusoes na
+ * mesma transacao: ou as duas acontecem, ou nenhuma.
+ */
+export async function deleteMarketingClientAction(contractId: string): Promise<void> {
+  const session = await requireSession();
+
+  const contract = await prisma.marketingContract.findFirst({
+    where: { id: contractId, organizationId: session.organizationId },
+    select: { id: true },
+  });
+  if (!contract) throw new Error("Cliente não encontrado.");
+
+  await prisma.$transaction([
+    prisma.financialEntry.deleteMany({
+      where: {
+        organizationId: session.organizationId,
+        module: "MARKETING",
+        sourceEntityType: "MARKETING_CONTRACT",
+        sourceEntityId: contractId,
+      },
+    }),
+    prisma.marketingContract.delete({ where: { id: contractId } }),
+  ]);
 }
 
 /* ------------------------------------------------------------------ *

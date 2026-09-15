@@ -10,6 +10,7 @@ import {
   Megaphone,
   Pencil,
   Plus,
+  Search,
   Trash2,
   Users,
   X,
@@ -20,6 +21,7 @@ import { cn } from "@/lib/cn";
 import {
   addMarketingContentAction,
   addMarketingEntryAction,
+  deleteMarketingClientAction,
   deleteMarketingContentAction,
   deleteMarketingEntryAction,
   setMarketingEntryPaidAction,
@@ -736,15 +738,32 @@ function ClientDetailPanel({
   client,
   hideFinancials,
   onUpdate,
+  onDeleted,
   onClose,
 }: {
   client: MarketingClientDetail;
   hideFinancials: boolean;
   onUpdate: (patch: Partial<MarketingClientDetail> & { id: string }) => void;
+  onDeleted: (id: string) => void;
   onClose: () => void;
 }) {
   const color = POSTIT_COLORS[clientColorIdx(client.id)];
   const [isEditing, setIsEditing] = useState(false);
+  const [confirmandoExclusao, setConfirmandoExclusao] = useState(false);
+  const [excluindo, setExcluindo] = useState(false);
+  const [erroExclusao, setErroExclusao] = useState<string | null>(null);
+
+  async function excluirCliente() {
+    setExcluindo(true);
+    setErroExclusao(null);
+    try {
+      await deleteMarketingClientAction(client.id);
+      onDeleted(client.id);
+    } catch {
+      setErroExclusao("Não foi possível excluir. Tente de novo.");
+      setExcluindo(false);
+    }
+  }
   const [addingContent, setAddingContent] = useState(false);
   const [pendingChecklist, setPendingChecklist] = useState<OnboardingChecklist | null>(null);
   const [erroChecklist, setErroChecklist] = useState<string | null>(null);
@@ -896,17 +915,58 @@ function ClientDetailPanel({
 
       {/* Dark body */}
       <div className="space-y-4 bg-[#0b0f0e]/80 px-4 pb-4 pt-4">
-        {/* Edit toggle */}
-        <div className="flex justify-end">
-          <button
-            type="button"
-            onClick={() => setIsEditing((x) => !x)}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-medium text-[#9a958b] transition hover:border-[rgba(245,241,232,0.2)] hover:text-white"
-          >
-            <Pencil className="size-3" />
-            {isEditing ? "Cancelar" : "Editar cliente"}
-          </button>
+        {/* Edit toggle + excluir. Antes so dava para apagar conteudo e
+            lancamento, um a um -- o cadastro do cliente ficava preso para
+            sempre, mesmo criado errado ou em teste. */}
+        <div className="flex items-center justify-end gap-2">
+          {confirmandoExclusao ? (
+            <div className="flex flex-1 items-center gap-1.5 rounded-xl border border-[#f87171]/30 bg-[#f87171]/10 px-2.5 py-1.5">
+              <p className="flex-1 text-[11px] font-medium text-[#fca5a5]">
+                Excluir {client.name}? Some o cadastro, conteúdos e lançamentos.
+              </p>
+              <button
+                type="button"
+                onClick={excluirCliente}
+                disabled={excluindo}
+                className="shrink-0 rounded-lg bg-[#f87171] px-2.5 py-1.5 text-[11px] font-semibold text-[#1a0a0a] transition active:scale-95 disabled:opacity-60"
+              >
+                {excluindo ? <LoaderCircle className="size-3 animate-spin" /> : "Excluir"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setConfirmandoExclusao(false)}
+                disabled={excluindo}
+                className="shrink-0 rounded-lg border border-white/10 px-2.5 py-1.5 text-[11px] text-[#9a958b] transition active:bg-white/[0.06]"
+              >
+                Cancelar
+              </button>
+            </div>
+          ) : (
+            <>
+              <button
+                type="button"
+                onClick={() => setConfirmandoExclusao(true)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-medium text-[#9a958b] transition hover:border-[#f87171]/30 hover:text-[#fca5a5]"
+              >
+                <Trash2 className="size-3" />
+                Excluir
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsEditing((x) => !x)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.03] px-2.5 py-1.5 text-[11px] font-medium text-[#9a958b] transition hover:border-[rgba(245,241,232,0.2)] hover:text-white"
+              >
+                <Pencil className="size-3" />
+                {isEditing ? "Cancelar" : "Editar cliente"}
+              </button>
+            </>
+          )}
         </div>
+        {erroExclusao && (
+          <p className="rounded-lg border border-[#f87171]/30 bg-[#f87171]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fca5a5]">
+            {erroExclusao}
+          </p>
+        )}
 
         {isEditing && (
           <EditClientForm
@@ -1244,6 +1304,7 @@ export function MarketingCrmView({
   const [clients, setClients] = useState<MarketingClientDetail[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeStage, setActiveStage] = useState<MarketingPipelineStage | null>(null);
+  const [busca, setBusca] = useState("");
   const [showAddClient, setShowAddClient] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const detailRef = useRef<HTMLDivElement>(null);
@@ -1273,9 +1334,20 @@ export function MarketingCrmView({
     setClients((prev) => prev.map((c) => (c.id === patch.id ? { ...c, ...patch } : c)));
   }
 
-  const filtered = activeStage
-    ? clients.filter((c) => c.pipelineStage === activeStage)
-    : clients;
+  function handleClientDeleted(id: string) {
+    setClients((prev) => prev.filter((c) => c.id !== id));
+    setSelectedId((prev) => (prev === id ? null : prev));
+  }
+
+  const buscaNormalizada = busca.trim().toLowerCase();
+  const filtered = clients
+    .filter((c) => !activeStage || c.pipelineStage === activeStage)
+    .filter((c) =>
+      !buscaNormalizada ||
+      c.name.toLowerCase().includes(buscaNormalizada) ||
+      (c.phone ?? "").toLowerCase().includes(buscaNormalizada) ||
+      c.serviceType.toLowerCase().includes(buscaNormalizada),
+    );
 
   const selectedClient = clients.find((c) => c.id === selectedId) ?? null;
   const countByStage = (key: MarketingPipelineStage) =>
@@ -1319,6 +1391,33 @@ export function MarketingCrmView({
 
       {/* Content alerts */}
       {!loading && <ContentAlerts clients={clients} />}
+
+      {/* Busca por nome/telefone/servico: com 5 clientes de teste nao faz
+          falta, mas rolar a lista procurando nome dói rapido com a carteira
+          cheia. */}
+      {clients.length > 0 && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-[#5a544c]" />
+          <input
+            type="text"
+            inputMode="search"
+            value={busca}
+            onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar cliente por nome, telefone ou serviço…"
+            className="w-full rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.03] py-2.5 pl-9 pr-9 text-sm text-white placeholder:text-[#5a544c] focus:border-[#7b6fc0]/40 focus:outline-none"
+          />
+          {busca && (
+            <button
+              type="button"
+              onClick={() => setBusca("")}
+              aria-label="Limpar busca"
+              className="absolute right-2 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-lg text-[#5a544c] transition active:bg-white/[0.06] active:text-white"
+            >
+              <X className="size-3.5" />
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Pipeline stage filter */}
       <div className="flex gap-2 overflow-x-auto pb-1">
@@ -1364,9 +1463,11 @@ export function MarketingCrmView({
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[rgba(245,241,232,0.12)] bg-white/[0.02] px-4 py-10 text-center">
           <Megaphone className="mb-3 size-7 text-[#5a544c]" />
           <p className="text-sm text-[#9a958b]">
-            {activeStage
-              ? `Nenhum cliente em "${stageInfo(activeStage).label}".`
-              : "Nenhum cliente cadastrado ainda."}
+            {buscaNormalizada
+              ? `Nenhum cliente encontrado para "${busca.trim()}".`
+              : activeStage
+                ? `Nenhum cliente em "${stageInfo(activeStage).label}".`
+                : "Nenhum cliente cadastrado ainda."}
           </p>
         </div>
       ) : (
@@ -1389,6 +1490,7 @@ export function MarketingCrmView({
             client={selectedClient}
             hideFinancials={hideFinancials}
             onUpdate={handleClientUpdate}
+            onDeleted={handleClientDeleted}
             onClose={() => setSelectedId(null)}
           />
         </div>

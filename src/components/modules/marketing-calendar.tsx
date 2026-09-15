@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Check, ChevronLeft, ChevronRight, ImagePlus, Loader2, Megaphone, Plus, Users } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, ImagePlus, Loader2, Megaphone, Pencil, Plus, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { cn } from "@/lib/cn";
@@ -9,6 +9,7 @@ import {
   addMarketingContentAction,
   getMarketingClientsAction,
   setMarketingContentFileAction,
+  updateMarketingContentAction,
   updateMarketingContentStatusAction,
   type MarketingClientDetail,
 } from "@/server/actions/marketing-actions";
@@ -41,12 +42,16 @@ const TIPOS: Record<MarketingContentKind, { label: string; Icone: typeof Users; 
 
 type Tarefa = {
   id: string;
+  contractId: string;
   titulo: string;
   cliente: string;
   kind: MarketingContentKind;
   status: MarketingContentStatus;
   atrasado: boolean;
   fileId?: string | null;
+  /** Data crua (ISO) e observacao: so para alimentar o formulario de edicao. */
+  contentDate: string;
+  notes?: string | null;
 };
 
 async function enviarArquivo(file: File): Promise<string | null> {
@@ -75,6 +80,7 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
   const [novoAberto, setNovoAberto] = useState(false);
   const [anexando, setAnexando] = useState<string | null>(null);
   const [ampliado, setAmpliado] = useState<Tarefa | null>(null);
+  const [editando, setEditando] = useState<string | null>(null);
   // null = todos os clientes. Com varios clientes o mes vira sopa sem isto.
   const [clienteFiltro, setClienteFiltro] = useState<string | null>(null);
 
@@ -102,12 +108,15 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
         const k = chaveDia(dLocal);
         const item: Tarefa = {
           id: c.id,
+          contractId: cliente.id,
           titulo: c.title,
           cliente: cliente.name,
           kind: c.kind,
           status: c.status,
           atrasado: c.status !== "APPROVED" && dLocal < hoje,
           fileId: c.fileId,
+          contentDate: c.contentDate,
+          notes: c.notes,
         };
         const atual = mapa.get(k);
         if (atual) atual.push(item);
@@ -423,7 +432,15 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
             <p className="text-xs text-[#5a544c]">Nada marcado para este dia.</p>
           </div>
         ) : (
-          tarefasDoDia.map((t) => (
+          tarefasDoDia.map((t) =>
+            editando === t.id ? (
+              <EditarCompromisso
+                key={t.id}
+                tarefa={t}
+                onSalvo={() => { setEditando(null); carregar(); }}
+                onCancelar={() => setEditando(null)}
+              />
+            ) : (
             <div
               key={t.id}
               className="flex items-center gap-2.5 rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 px-3 py-2.5"
@@ -481,6 +498,14 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
               </div>
               <button
                 type="button"
+                onClick={() => setEditando(t.id)}
+                aria-label={`Editar ${t.titulo}`}
+                className="flex size-8 shrink-0 items-center justify-center rounded-lg text-[#5a544c] transition active:bg-white/[0.06] active:text-[#f3dfae]"
+              >
+                <Pencil className="size-3.5" />
+              </button>
+              <button
+                type="button"
                 onClick={() => avancar(t)}
                 disabled={salvando === t.id}
                 className={cn(
@@ -496,7 +521,8 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
                 {STATUS[t.status].label}
               </button>
             </div>
-          ))
+            ),
+          )
         )}
         {tarefasDoDia.length > 0 && (
           <p className="px-1 pt-0.5 text-[10px] text-[#5a544c]">
@@ -552,6 +578,135 @@ const campoCls =
  * Sem <form> aqui: esta secao pode acabar dentro de outro formulario, e form
  * aninhado corrompe a submissao (o navegador dispara navegacao nativa).
  */
+/**
+ * Editar um compromisso ja existente: titulo, data, tipo e observacao. Antes
+ * so dava para apagar e recriar -- perdendo o criativo anexado, que este
+ * formulario nao mexe (fica intacto ao lado do texto).
+ */
+function EditarCompromisso({
+  tarefa,
+  onSalvo,
+  onCancelar,
+}: {
+  tarefa: Tarefa;
+  onSalvo: () => void;
+  onCancelar: () => void;
+}) {
+  const [tipo, setTipo] = useState<MarketingContentKind>(tarefa.kind);
+  const [titulo, setTitulo] = useState(tarefa.titulo);
+  const [data, setData] = useState(() => tarefa.contentDate.slice(0, 10));
+  const [notas, setNotas] = useState(tarefa.notes ?? "");
+  const [salvando, setSalvando] = useState(false);
+  const [erro, setErro] = useState<string | null>(null);
+
+  async function salvar() {
+    setErro(null);
+    if (!titulo.trim()) return setErro("Descreva o compromisso.");
+    if (!data) return setErro("Escolha a data.");
+
+    setSalvando(true);
+    try {
+      await updateMarketingContentAction(tarefa.id, {
+        title: titulo.trim(),
+        contentDate: data,
+        kind: tipo,
+        notes: notas.trim() || null,
+      });
+      onSalvo();
+    } catch {
+      setErro("Não foi possível salvar. Tente de novo.");
+      setSalvando(false);
+    }
+  }
+
+  return (
+    <div className="space-y-2 rounded-2xl border border-[#7b9fc9]/25 bg-[#7b9fc9]/[0.05] p-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#b8d4f5]">
+          Editar · {tarefa.cliente}
+        </p>
+        <button
+          type="button"
+          onClick={onCancelar}
+          aria-label="Cancelar edição"
+          className="flex size-7 shrink-0 items-center justify-center rounded-lg text-[#5a544c] transition active:bg-white/[0.06] active:text-white"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
+
+      <div className="grid grid-cols-3 gap-1.5">
+        {(Object.keys(TIPOS) as MarketingContentKind[]).map((k) => {
+          const { label, Icone } = TIPOS[k];
+          const ativo = tipo === k;
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setTipo(k)}
+              className={cn(
+                "flex min-h-11 items-center justify-center gap-1 rounded-xl border px-2 text-[11px] font-medium transition",
+                ativo
+                  ? "border-[#7b9fc9]/45 bg-[#7b9fc9]/15 text-[#b8d4f5]"
+                  : "border-white/10 bg-white/[0.03] text-[#9a958b]",
+              )}
+            >
+              <Icone className="size-3.5" />
+              {label}
+            </button>
+          );
+        })}
+      </div>
+
+      <input
+        className={campoCls}
+        placeholder={tipo === "MEETING" ? "Ex: Reunião de alinhamento" : "Descreva o que fazer"}
+        value={titulo}
+        onChange={(e) => setTitulo(e.target.value)}
+      />
+
+      <input
+        type="date"
+        className={campoCls}
+        value={data}
+        onChange={(e) => setData(e.target.value)}
+      />
+
+      <input
+        className={campoCls}
+        placeholder="Observação (opcional)"
+        value={notas}
+        onChange={(e) => setNotas(e.target.value)}
+      />
+
+      {erro && (
+        <p className="rounded-lg border border-[#f87171]/30 bg-[#f87171]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fca5a5]">
+          {erro}
+        </p>
+      )}
+
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={salvar}
+          disabled={salvando}
+          className="flex min-h-11 flex-1 items-center justify-center gap-1.5 rounded-xl bg-[#7b9fc9] text-sm font-semibold text-[#0d1420] transition active:scale-[0.98] disabled:opacity-60"
+        >
+          {salvando ? <Loader2 className="size-4 animate-spin" /> : "Salvar"}
+        </button>
+        <button
+          type="button"
+          onClick={onCancelar}
+          disabled={salvando}
+          className="flex min-h-11 items-center justify-center rounded-xl border border-white/10 px-4 text-sm text-[#9a958b] transition active:bg-white/[0.04]"
+        >
+          Cancelar
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function NovoCompromisso({
   clientes,
   clientePadrao,
