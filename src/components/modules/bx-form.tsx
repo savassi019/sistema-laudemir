@@ -14,6 +14,7 @@ import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import { isValidCpf } from "@/lib/validators";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
+import { getCurrentUserNameAction } from "@/server/actions/user-actions";
 import { PhotoCaptureInput } from "./photo-capture-input";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
@@ -28,7 +29,6 @@ const schema = z
     neighborhood: z.string().optional(),
     city: z.string().optional(),
     state: z.string().optional(),
-    collectNumber: z.string().min(1, "Informe o recolhe."),
     agentName: z.string().min(2, "Informe o agente."),
     receiverName: z.string().min(2, "Informe quem recebeu."),
     occurredAt: z.string().min(1, "Informe a data e hora."),
@@ -83,7 +83,7 @@ type FormValues = z.output<typeof schema>;
 type ReceiptState = {
   clientName: string;
   phone?: string;
-  collectNumber: string;
+  operatorName: string;
   agentName: string;
   receiverName: string;
   occurredAt: string;
@@ -132,6 +132,15 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
   const [cepError, setCepError] = useState<string | null>(null);
   const [loadedClient, setLoadedClient] = useState<LoadedBxClient | null>(null);
   const [clientLoading, setClientLoading] = useState(Boolean(initialClientId));
+  // Quem esta fazendo a operacao vem do login, nao de um numero digitado
+  // (era pra isso que "Recolhe" servia antes).
+  const [operatorName, setOperatorName] = useState("");
+
+  useEffect(() => {
+    getCurrentUserNameAction()
+      .then(setOperatorName)
+      .catch(() => setOperatorName(""));
+  }, []);
 
   const form = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
@@ -239,7 +248,6 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           neighborhood: values.neighborhood,
           city: values.city,
           state: values.state,
-          collectNumber: values.collectNumber,
           agentName: values.agentName,
           receiverName: values.receiverName,
           occurredAt: values.occurredAt,
@@ -268,7 +276,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
     setReceipt({
       clientName: values.clientName,
       phone: values.phone,
-      collectNumber: values.collectNumber,
+      operatorName,
       agentName: values.agentName,
       receiverName: values.receiverName,
       occurredAt: values.occurredAt,
@@ -430,15 +438,11 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
 
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <label className={labelClass} htmlFor="collectNumber">
-              Recolhe 1
-            </label>
-            <input
-              id="collectNumber"
-              className={fieldClass}
-              {...form.register("collectNumber")}
-            />
-            <p className={hintClass}>Número do recolhe para controle da operação.</p>
+            <p className={labelClass}>Funcionário</p>
+            <div className={`${fieldClass} flex items-center text-slate-300`}>
+              {operatorName || "Carregando..."}
+            </div>
+            <p className={hintClass}>Quem está fazendo o fechamento, direto do login.</p>
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="agentName">
@@ -620,7 +624,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           </div>
           <div className="mt-4 grid gap-3 text-sm text-[#dbe6d4]/85 md:grid-cols-2">
             <p>Cliente: {receipt.clientName}</p>
-            <p>Recolhe: {receipt.collectNumber}</p>
+            <p>Funcionário: {receipt.operatorName}</p>
             <p>Agente: {receipt.agentName}</p>
             <p>Recebeu: {receipt.receiverName}</p>
             {hideFinancials ? null : (
@@ -645,7 +649,6 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
             message={[
               "*Comprovante BX*",
               `Cliente: ${receipt.clientName}`,
-              `Recolhe: ${receipt.collectNumber}`,
               `Agente: ${receipt.agentName}`,
               `Despesas e gastos: ${formatCurrency(receipt.expenseAmount)}`,
               `Desconto: ${formatCurrency(receipt.discountAmount)}`,

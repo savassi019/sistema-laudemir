@@ -202,7 +202,9 @@ const createBxSchema = z.object({
   neighborhood: z.string().optional(),
   city: z.string().optional(),
   state: z.string().optional(),
-  collectNumber: z.string(),
+  // Quem fez a operacao passou a vir do login (session.name), nao mais de
+  // um numero digitado -- opcional so pra nao quebrar quem ainda manda.
+  collectNumber: z.string().optional(),
   agentName: z.string(),
   receiverName: z.string(),
   occurredAt: z.string(),
@@ -829,7 +831,9 @@ async function saveWithPrisma(
         record: {
           id: record.id,
           title: record.clientName,
-          summary: `Recolhe ${record.collectNumber ?? "-"}`,
+          // Quem fez a operacao vem do login, nao de um numero digitado --
+          // aqui e a propria criacao, entao o nome ja esta na sessao.
+          summary: `Funcionário: ${session.name}`,
           details: [
             `Agente: ${record.agentName ?? "-"}`,
             `Recebeu: ${record.receiverName ?? "-"}`,
@@ -1272,6 +1276,22 @@ export async function saveModuleRecord(
   return saveWithPrisma(session, slug, payload);
 }
 
+/**
+ * Nome de quem criou o registro (createdById -- string solta, sem relacao
+ * formal no Prisma). Usado no BX para mostrar "quem fez a operacao": isso
+ * ja era salvo pelo login em todo registro, so nunca tinha sido lido de
+ * volta pra tela -- ver [[project_bx_operator_from_login]].
+ */
+async function resolveCreatorNames(ids: (string | null | undefined)[]): Promise<Map<string, string>> {
+  const unicos = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (unicos.length === 0) return new Map();
+  const usuarios = await prisma.user.findMany({
+    where: { id: { in: unicos } },
+    select: { id: true, name: true },
+  });
+  return new Map(usuarios.map((u) => [u.id, u.name]));
+}
+
 function buildDateWhere(range?: DateRange, campo: string = "createdAt") {
   if (!range || (!range.from && !range.to)) {
     return {};
@@ -1392,11 +1412,12 @@ export async function listModuleRecords(
           orderBy: { createdAt: "desc" },
           take,
         });
+        const nomePorCriador = await resolveCreatorNames(records.map((r) => r.createdById));
 
         return records.map((record) => ({
           id: record.id,
           title: record.clientName,
-          summary: `Recolhe ${record.collectNumber ?? "-"}`,
+          summary: `Funcionário: ${record.createdById ? (nomePorCriador.get(record.createdById) ?? "-") : "-"}`,
           details: [
             `Agente: ${record.agentName ?? "-"}`,
             `Recebeu: ${record.receiverName ?? "-"}`,
@@ -1773,13 +1794,14 @@ export async function listModuleClients(
           orderBy: { createdAt: "desc" },
           take: take * 5,
         });
+        const nomePorCriadorBx = await resolveCreatorNames(records.map((r) => r.createdById));
 
         return dedupeByKey(records, (r) => r.clientName)
           .slice(0, take)
           .map((record) => ({
             id: record.id,
             name: record.clientName,
-            subtitle: `Recolhe ${record.collectNumber ?? "-"}`,
+            subtitle: `Funcionário: ${record.createdById ? (nomePorCriadorBx.get(record.createdById) ?? "-") : "-"}`,
             tags: [record.phone, record.cpf].filter(Boolean) as string[],
             badge: formatCurrency(Number(record.totalAmount)),
             phone: record.phone ?? undefined,
@@ -1976,10 +1998,11 @@ export async function listModuleClientRecords(
         orderBy: { createdAt: "desc" },
         take: 30,
       });
+      const nomePorCriadorBxCliente = await resolveCreatorNames(records.map((r) => r.createdById));
       return records.map((record) => ({
         id: record.id,
         title: record.clientName,
-        summary: `Recolhe ${record.collectNumber ?? "-"}`,
+        summary: `Funcionário: ${record.createdById ? (nomePorCriadorBxCliente.get(record.createdById) ?? "-") : "-"}`,
         details: [
           `Agente: ${record.agentName ?? "-"}`,
           `Recebeu: ${record.receiverName ?? "-"}`,

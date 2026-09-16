@@ -97,3 +97,13 @@ export async function setStaffStatusAction(
 
   await setStaffStatus(session, userId, status);
 }
+
+/**
+ * Nome de quem esta logado agora. Usado onde o formulario precisa mostrar
+ * "quem esta fazendo a operacao" sem pedir pra digitar -- essa informacao
+ * ja vem do login.
+ */
+export async function getCurrentUserNameAction(): Promise<string> {
+  const session = await requireSession();
+  return session.name;
+}
