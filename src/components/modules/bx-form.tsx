@@ -483,13 +483,13 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="agentName">
-              Mandou para agente
+              Nome do agente
             </label>
             <input id="agentName" className={fieldClass} {...form.register("agentName")} />
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="receiverName">
-              Levou cliente recebeu
+              Quem entregou ao cliente
             </label>
             <input
               id="receiverName"
