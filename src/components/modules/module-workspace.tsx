@@ -4,6 +4,7 @@ import type { ComponentType } from "react";
 
 import {
   ArrowLeft,
+  Award,
   BarChart2,
   Gauge,
   ChevronRight,
@@ -23,6 +24,7 @@ import { useState } from "react";
 import { BilliardForm } from "@/components/modules/billiard-form";
 import { BilliardHistoryOverview } from "@/components/modules/billiard-history-overview";
 import { BxForm } from "@/components/modules/bx-form";
+import { BxPrizeSection } from "@/components/modules/bx-prize-section";
 import { CarretaKidsForm } from "@/components/modules/carreta-kids-form";
 import { MachineContractForm } from "@/components/modules/machine-contract-form";
 import { MarketEntryForm } from "@/components/modules/market-entry-form";
@@ -47,7 +49,7 @@ import type { ModuleClientItem, ModuleRecordItem } from "@/server/services/modul
 import type { ModuleScopeSummary } from "@/server/services/module-scope-service";
 import type { ClientListItem, ClientVisitSummary } from "@/types/app";
 
-type SectionKey = "operacao" | "visita" | "rotas" | "calendario" | "clientes" | "financeiro" | "contas-pagar" | "historico" | "relatorio";
+type SectionKey = "operacao" | "visita" | "premio" | "rotas" | "calendario" | "clientes" | "financeiro" | "contas-pagar" | "historico" | "relatorio";
 
 type ModuleFormProps = {
   hideFinancials?: boolean;
@@ -83,6 +85,7 @@ type SectionCfg = {
 const SECTION_CFG: Record<SectionKey, SectionCfg> = {
   operacao:      { label: "Operação",   description: "Registrar fechamento",    icon: ClipboardList, accent: "#d1a04f", accentBg: "bg-[#d1a04f]/15", accentText: "text-[#f3dfae]" },
   visita:        { label: "Visita",     description: "Fechar ponto e registrar visita", icon: MapPin, accent: "#a78bfa", accentBg: "bg-[#a78bfa]/15", accentText: "text-[#c4b5fd]" },
+  premio:        { label: "Prêmio",     description: "Pagamento direto ao cliente", icon: Award, accent: "#b46c5d", accentBg: "bg-[#b46c5d]/15", accentText: "text-[#f0a08f]" },
   rotas:         { label: "Rotas",      description: "Pontos agrupados por rota", icon: Route,  accent: "#a78bfa", accentBg: "bg-[#a78bfa]/15", accentText: "text-[#c4b5fd]" },
   calendario:    { label: "Calendário", description: "Conteúdos e reuniões do mês", icon: CalendarDays, accent: "#60a5fa", accentBg: "bg-[#60a5fa]/15", accentText: "text-[#93c5fd]" },
   clientes:      { label: "Clientes",   description: "Pontos cadastrados",      icon: UserPlus,      accent: "#60a5fa", accentBg: "bg-[#60a5fa]/15", accentText: "text-[#93c5fd]" },
@@ -92,13 +95,16 @@ const SECTION_CFG: Record<SectionKey, SectionCfg> = {
   relatorio:     { label: "Relatório",  description: "Resumo financeiro",       icon: BarChart2,     accent: "#2dd4bf", accentBg: "bg-[#2dd4bf]/15", accentText: "text-[#5eead4]" },
 };
 
-const ALL_SECTIONS: SectionKey[] = ["operacao", "visita", "rotas", "calendario", "clientes", "financeiro", "contas-pagar", "historico", "relatorio"];
+const ALL_SECTIONS: SectionKey[] = ["operacao", "visita", "premio", "rotas", "calendario", "clientes", "financeiro", "contas-pagar", "historico", "relatorio"];
 
 const slugsWithoutClientConcept = new Set(["mercado-autonomo", "plataforma-online", "financas-pessoais"]);
 // Rotas de campo hoje so existem no Bilhar (RoutePlan/BilliardPoint).
 const slugsWithRoutes = new Set(["bilhar-pebolim"]);
 // Agenda de conteudo/reuniao hoje so existe no Marketing (MarketingContent).
 const slugsWithCalendar = new Set(["marketing"]);
+// "Premio pago direto ao cliente" e um fluxo de dinheiro proprio do BX --
+// funcionario as vezes paga o cliente sozinho, fora da operacao normal.
+const slugsWithPremio = new Set(["bx"]);
 const slugsWithVisitTracking = new Set([
   "bilhar-pebolim", "maquinas-de-pelucia", "bx", "h-caca-niquel", "carreta-kids", "locacao",
 ]);
@@ -128,6 +134,7 @@ export function ModuleWorkspace({
   const hasVisitTracking = slugsWithVisitTracking.has(slug);
   const hasRoutes = slugsWithRoutes.has(slug);
   const hasCalendar = slugsWithCalendar.has(slug);
+  const hasPremio = slugsWithPremio.has(slug);
   const needsClientPreselect = hasVisitTracking;
   // No Marketing o calendario e a tela principal: o menu de abas na frente
   // fazia o modulo parecer generico, igual aos de campo.
@@ -144,6 +151,7 @@ export function ModuleWorkspace({
   const visibleSections = ALL_SECTIONS.filter((k) => {
     if (k === "operacao"      && hasVisitTracking)    return false; // Visita absorve o fechamento
     if (k === "visita"        && !hasVisitTracking)   return false;
+    if (k === "premio"        && !hasPremio)          return false;
     if (k === "rotas"         && !hasRoutes)          return false;
     if (k === "calendario"    && !hasCalendar)        return false;
     // "Contratos" e uma lista generica compartilhada com os outros modulos:
@@ -415,6 +423,10 @@ export function ModuleWorkspace({
               </div>
             )}
           </div>
+        ) : null}
+
+        {activeSection === "premio" ? (
+          <BxPrizeSection hideFinancials={hideFinancials} financialEntries={financialEntries} />
         ) : null}
 
         {activeSection === "clientes" ? (
