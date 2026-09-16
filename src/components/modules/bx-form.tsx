@@ -175,10 +175,6 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialClientId]);
 
-  const incomeAmount = Number(useWatch({ control: form.control, name: "incomeAmount" }) ?? 0);
-  const expenseAmount = Number(useWatch({ control: form.control, name: "expenseAmount" }) ?? 0);
-  const discountAmount = Number(useWatch({ control: form.control, name: "discountAmount" }) ?? 0);
-  const liveNetAmount = incomeAmount - expenseAmount - discountAmount;
   const receiptStatusWatch = String(
     useWatch({ control: form.control, name: "receiptStatus" }) ?? "NOT_RECEIVED",
   );
@@ -521,22 +517,8 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
             />
           </div>
           <div className="space-y-2">
-            <label className={labelClass} htmlFor="incomeAmount">
-              Entradas
-            </label>
-            <input
-              id="incomeAmount"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("incomeAmount")}
-            />
-          </div>
-          <div className="space-y-2">
             <label className={labelClass} htmlFor="expenseAmount">
-              Saídas
+              Despesas e gastos
             </label>
             <input
               id="expenseAmount"
@@ -574,19 +556,6 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
             </select>
           </div>
         </div>
-
-        {hideFinancials ? null : (
-          <div
-            className={[
-              "rounded-2xl border px-4 py-3 text-sm font-semibold",
-              liveNetAmount < 0
-                ? "border-[#b46c5d]/40 bg-[#b46c5d]/10 text-[#f0a08f]"
-                : "border-[#6b9d6f]/35 bg-[#6b9d6f]/10 text-[#bfe3c2]",
-            ].join(" ")}
-          >
-            Saldo líquido: {formatCurrency(liveNetAmount)}
-          </div>
-        )}
 
         <div className="space-y-1">
           <PhotoCaptureInput
@@ -655,8 +624,8 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
             <p>Agente: {receipt.agentName}</p>
             <p>Recebeu: {receipt.receiverName}</p>
             {hideFinancials ? null : (
-              <p className={receipt.netAmount < 0 ? "font-semibold text-[#f0a08f]" : "font-semibold text-[#bfe3c2]"}>
-                Valor liquido: {formatCurrency(receipt.netAmount)}
+              <p className="font-semibold text-[#dbe6d4]">
+                Despesas e gastos: {formatCurrency(receipt.expenseAmount)}
               </p>
             )}
             <p className={receipt.receiptStatus === "RECEIVED" ? "font-semibold text-[#bfe3c2]" : "font-semibold text-[#f0a08f]"}>
@@ -678,10 +647,8 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
               `Cliente: ${receipt.clientName}`,
               `Recolhe: ${receipt.collectNumber}`,
               `Agente: ${receipt.agentName}`,
-              `Entradas: ${formatCurrency(receipt.incomeAmount)}`,
-              `Saídas: ${formatCurrency(receipt.expenseAmount)}`,
+              `Despesas e gastos: ${formatCurrency(receipt.expenseAmount)}`,
               `Desconto: ${formatCurrency(receipt.discountAmount)}`,
-              `*Líquido: ${formatCurrency(receipt.netAmount)}*`,
               `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
               `Status: ${receipt.receiptStatus === "RECEIVED" ? "Recebido" : "Não recebido"}`,
             ].join("\n")}
