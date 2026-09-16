@@ -164,6 +164,8 @@ enum MarketingContentKind {
 enum BxReceiptStatus {
   RECEIVED
   NOT_RECEIVED
+  /// A operacao foi deixar dinheiro com o cliente, nao receber dele.
+  DELIVERED
 }
 
 enum MachineCompensationStatus {

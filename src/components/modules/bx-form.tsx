@@ -8,7 +8,7 @@ import { z } from "zod";
 
 import { fetchAddressByCep } from "@/lib/cep";
 import { formatCurrency } from "@/lib/format";
-import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
+import { PAYMENT_METHOD_LABEL, RECEIPT_STATUS_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
@@ -38,7 +38,7 @@ const schema = z
     expenseAmount: z.coerce.number().min(0),
     discountAmount: z.coerce.number().min(0),
     paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
-    receiptStatus: z.enum(["RECEIVED", "NOT_RECEIVED"]),
+    receiptStatus: z.enum(["RECEIVED", "NOT_RECEIVED", "DELIVERED"]),
     exceptionClient: z.boolean().default(false),
     screenPhoto: z.any().optional(),
     paperPhoto: z.any().optional(),
@@ -122,6 +122,23 @@ async function uploadFile(file: File, category: string) {
 }
 
 type LoadedBxClient = { clientName: string; phone: string };
+
+/**
+ * Recebido/Nao recebido sao opostos (verde/vermelho). "Dinheiro deixado"
+ * e um terceiro tipo de operacao, nao um meio-termo entre os dois -- por
+ * isso cor propria (azul), nao uma escala entre as outras duas.
+ */
+const RECEIPT_STATUS_COLOR: Record<string, string> = {
+  RECEIVED: "border-[#6b9d6f]/45 bg-[#6b9d6f]/10 text-[#bfe3c2]",
+  NOT_RECEIVED: "border-[#b46c5d]/45 bg-[#b46c5d]/10 text-[#f0c3b9]",
+  DELIVERED: "border-[#6f8fb4]/45 bg-[#6f8fb4]/10 text-[#bcd4ed]",
+};
+
+const RECEIPT_STATUS_TEXT_COLOR: Record<string, string> = {
+  RECEIVED: "text-[#bfe3c2]",
+  NOT_RECEIVED: "text-[#f0a08f]",
+  DELIVERED: "text-[#a8c5e3]",
+};
 
 export function BxForm({ hideFinancials = false, initialClientName = "", initialPhone = "", initialClientId }: { hideFinancials?: boolean; initialClientName?: string; initialPhone?: string; initialClientId?: string } = {}) {
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
@@ -304,8 +321,8 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
       <div className="rounded-[24px] border border-[#d1a04f]/28 bg-[#3a2b18]/72 p-4 text-sm leading-6 text-[#f3dfae]">
         <p className="font-medium">Regra do BX</p>
         <p>
-          Recebido fica verde. Não recebido fica vermelho. Cliente exceção pode
-          trabalhar com 1 foto apenas.
+          Recebido fica verde. Não recebido fica vermelho. Dinheiro deixado
+          fica azul. Cliente exceção pode trabalhar com 1 foto apenas.
         </p>
       </div>
 
@@ -477,16 +494,12 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
             </label>
             <select
               id="receiptStatus"
-              className={[
-                selectClass,
-                receiptStatusWatch === "RECEIVED"
-                  ? "border-[#6b9d6f]/45 bg-[#6b9d6f]/10 text-[#bfe3c2]"
-                  : "border-[#b46c5d]/45 bg-[#b46c5d]/10 text-[#f0c3b9]",
-              ].join(" ")}
+              className={[selectClass, RECEIPT_STATUS_COLOR[receiptStatusWatch]].join(" ")}
               {...form.register("receiptStatus")}
             >
               <option value="RECEIVED">Recebido</option>
               <option value="NOT_RECEIVED">Não recebido</option>
+              <option value="DELIVERED">Dinheiro deixado</option>
             </select>
           </div>
         </div>
@@ -632,8 +645,8 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
                 Despesas e gastos: {formatCurrency(receipt.expenseAmount)}
               </p>
             )}
-            <p className={receipt.receiptStatus === "RECEIVED" ? "font-semibold text-[#bfe3c2]" : "font-semibold text-[#f0a08f]"}>
-              Status: {receipt.receiptStatus === "RECEIVED" ? "Recebido" : "Não recebido"}
+            <p className={`font-semibold ${RECEIPT_STATUS_TEXT_COLOR[receipt.receiptStatus] ?? ""}`}>
+              Status: {rotuloDeStatus(receipt.receiptStatus, RECEIPT_STATUS_LABEL)}
             </p>
           </div>
           <div className="mt-3 flex flex-wrap gap-2 text-xs text-[#dbe6d4]/75">
@@ -653,7 +666,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
               `Despesas e gastos: ${formatCurrency(receipt.expenseAmount)}`,
               `Desconto: ${formatCurrency(receipt.discountAmount)}`,
               `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
-              `Status: ${receipt.receiptStatus === "RECEIVED" ? "Recebido" : "Não recebido"}`,
+              `Status: ${rotuloDeStatus(receipt.receiptStatus, RECEIPT_STATUS_LABEL)}`,
             ].join("\n")}
           />
         </article>
