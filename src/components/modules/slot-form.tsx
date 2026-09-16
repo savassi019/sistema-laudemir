@@ -111,6 +111,11 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
   const [cepError, setCepError] = useState<string | null>(null);
   const [loadedMachine, setLoadedMachine] = useState<LoadedSlotMachine | null>(null);
   const [machineLoading, setMachineLoading] = useState(Boolean(initialClientId));
+  // Cliente com varias maquinas: em vez de reassociar a maquina aberta pra
+  // outro cliente (nao foi isso que o dono do projeto pediu), este modo
+  // registra uma maquina A MAIS pro mesmo cliente, numerada sozinha como a
+  // proxima dele.
+  const [addingNewMachine, setAddingNewMachine] = useState(false);
 
   const form = useForm<FormInput, unknown, FormValues>({
     resolver: zodResolver(schema),
@@ -139,8 +144,9 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
   });
   const { clearDraft } = useFormDraft(`slot:${initialClientId ?? "new"}`, form);
 
-  useEffect(() => {
+  function loadMachineData() {
     if (!initialClientId) return;
+    setMachineLoading(true);
     getClientPrefillDataAction("h-caca-niquel", initialClientId)
       .then((data) => {
         if (!data || data.kind !== "slot-machine") return;
@@ -163,11 +169,39 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
         // nao precisa digitar de novo o que ja foi "atual" da ultima vez.
         form.setValue("previousIncome", data.previousIncome);
         form.setValue("previousExpense", data.previousExpense);
+        form.setValue("newClient", false);
       })
       .catch(() => setSaveError("Erro ao carregar dados da máquina."))
       .finally(() => setMachineLoading(false));
+  }
+
+  useEffect(() => {
+    loadMachineData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialClientId]);
+
+  function startNewMachineForClient() {
+    setAddingNewMachine(true);
+    form.setValue("newClient", true);
+    // So os numeros do fechamento sao da maquina -- cadastro do cliente
+    // (nome, telefone, endereco) continua preenchido, e o mesmo cliente.
+    form.setValue("customerDebt", 0);
+    form.setValue("ppValue", 0);
+    form.setValue("initialAmount", 0);
+    form.setValue("initialAmountMode", "NONE");
+    form.setValue("previousIncome", 0);
+    form.setValue("previousExpense", 0);
+    form.setValue("currentIncome", 0);
+    form.setValue("currentExpense", 0);
+    form.setValue("conferenceCount", 0);
+    form.setValue("negativeEntries", [{ amount: 0 }]);
+    form.setValue("feedingNegativeAmount", 0);
+  }
+
+  function cancelNewMachineForClient() {
+    setAddingNewMachine(false);
+    loadMachineData();
+  }
 
   const negativeEntries = useFieldArray({ control: form.control, name: "negativeEntries" });
 
@@ -268,7 +302,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          machineId: initialClientId,
+          machineId: addingNewMachine ? undefined : initialClientId,
           newClient: values.newClient,
           clientName: values.clientName,
           phone: values.phone,
@@ -315,6 +349,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
     }
 
     clearDraft();
+    setAddingNewMachine(false);
     setReceipt({
       clientLabel,
       phone: values.phone,
@@ -390,18 +425,32 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
           <p className="text-sm text-slate-400">Carregando dados da máquina...</p>
         ) : (
           <>
-            {loadedMachine ? (
-              <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
-                <input type="checkbox" {...form.register("newClient")} />
-                Essa máquina passou para outro cliente (zera a dívida e conta como a próxima máquina do novo cliente)
-              </label>
+            {loadedMachine && addingNewMachine ? (
+              <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#d1a04f]/30 bg-[#3a2b18]/60 px-4 py-3 text-sm text-[#f3dfae]">
+                <span>Nova máquina para {loadedMachine.clientName}</span>
+                <button
+                  type="button"
+                  onClick={cancelNewMachineForClient}
+                  className="shrink-0 text-xs font-semibold text-[#9a958b] underline underline-offset-2 hover:text-white"
+                >
+                  Cancelar
+                </button>
+              </div>
             ) : null}
 
-            {loadedMachine && !newClient ? (
+            {loadedMachine && !addingNewMachine ? (
               <div className="rounded-[18px] border border-[#d1a04f]/30 bg-[#3a2b18]/60 p-4 text-sm text-[#f3dfae] space-y-0.5">
                 <p className="font-semibold text-white">{loadedMachine.clientName}</p>
                 <p className="text-[#9a958b]">{loadedMachine.phone}</p>
                 <p className="mt-1 text-xs text-[#9a958b]">Máquina {loadedMachine.clientMachineNumber} · Dívida {formatCurrency(loadedMachine.customerDebt)}</p>
+                <button
+                  type="button"
+                  onClick={startNewMachineForClient}
+                  className="mt-2 inline-flex items-center gap-1.5 rounded-xl border border-[#d1a04f]/30 bg-[#d1a04f]/10 px-3 py-1.5 text-xs font-semibold text-[#f3dfae] transition hover:bg-[#d1a04f]/20"
+                >
+                  <Plus className="size-3.5" />
+                  Nova máquina para {loadedMachine.clientName}
+                </button>
               </div>
             ) : (
               <div className="grid gap-4 md:grid-cols-2">
