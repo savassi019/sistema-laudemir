@@ -452,7 +452,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
                   Nova máquina para {loadedMachine.clientName}
                 </button>
               </div>
-            ) : (
+            ) : !loadedMachine ? (
               <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
@@ -552,7 +552,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
                 </div>
               ) : null}
               </div>
-            )}
+            ) : null}
           </>
         )}
 
