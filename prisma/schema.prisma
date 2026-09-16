@@ -988,7 +988,13 @@ model SlotMachine {
   organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   clientId             String?
   client               Client?          @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  /// Chave tecnica interna, gerada pelo servidor -- nao aparece mais na tela.
+  /// Antes era digitada pelo funcionario, mas so existe 1 numero por
+  /// sistema inteiro, sem relacao com "quantas maquinas o cliente tem".
   uniqueMachineNumber  String
+  /// Numero da maquina PARA O CLIENTE (1, 2, 3...) -- o que aparece na
+  /// tela. Comeca em 1 e conta so as maquinas daquele cliente.
+  clientMachineNumber  Int              @default(1)
   clientSequenceNumber String
   clientName           String?
   phone                String?

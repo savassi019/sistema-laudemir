@@ -20,7 +20,6 @@ import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
 const schema = z
   .object({
-    uniqueMachineNumber: z.string().min(1, "Informe o numero unico."),
     newClient: z.boolean().default(false),
     clientName: z.string().optional(),
     phone: z.string().optional(),
@@ -82,7 +81,6 @@ async function uploadFile(file: File, category: string) {
 }
 
 type ReceiptState = {
-  uniqueMachineNumber: string;
   clientLabel: string;
   phone?: string;
   occurredAt: string;
@@ -102,7 +100,7 @@ const modeLabels: Record<string, string> = {
   NEGATIVE: "Negativo",
 };
 
-type LoadedSlotMachine = { clientName: string; phone: string; uniqueMachineNumber: string; clientSequenceNumber: string; customerDebt: number; ppValue: number; initialAmount: number };
+type LoadedSlotMachine = { clientName: string; phone: string; clientMachineNumber: number; customerDebt: number; ppValue: number; initialAmount: number };
 
 export function SlotForm({ hideFinancials = false, initialClientName = "", initialPhone = "", initialClientId }: { hideFinancials?: boolean; initialClientName?: string; initialPhone?: string; initialClientId?: string } = {}) {
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
@@ -146,8 +144,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
     getClientPrefillDataAction("h-caca-niquel", initialClientId)
       .then((data) => {
         if (!data || data.kind !== "slot-machine") return;
-        setLoadedMachine({ clientName: data.clientName, phone: data.phone, uniqueMachineNumber: data.uniqueMachineNumber, clientSequenceNumber: data.clientSequenceNumber, customerDebt: data.customerDebt, ppValue: data.ppValue, initialAmount: data.initialAmount });
-        form.setValue("uniqueMachineNumber", data.uniqueMachineNumber);
+        setLoadedMachine({ clientName: data.clientName, phone: data.phone, clientMachineNumber: data.clientMachineNumber, customerDebt: data.customerDebt, ppValue: data.ppValue, initialAmount: data.initialAmount });
         form.setValue("clientName", data.clientName);
         form.setValue("phone", data.phone);
         form.setValue("cpf", data.cpf);
@@ -162,6 +159,10 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
         form.setValue("initialAmountMode", data.initialAmountMode as "NONE" | "DEBT" | "NEGATIVE");
         form.setValue("optionalGreedAmount", data.optionalGreedAmount);
         form.setValue("active", data.active);
+        // Entrada/saida anterior vem do ultimo fechamento dessa maquina --
+        // nao precisa digitar de novo o que ja foi "atual" da ultima vez.
+        form.setValue("previousIncome", data.previousIncome);
+        form.setValue("previousExpense", data.previousExpense);
       })
       .catch(() => setSaveError("Erro ao carregar dados da máquina."))
       .finally(() => setMachineLoading(false));
@@ -257,7 +258,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
     setLoading(true);
     setSaveError(null);
 
-    let clientLabel = values.clientName || values.uniqueMachineNumber;
+    let clientLabel = values.clientName || "Nova máquina";
 
     try {
       const screenPhotoFile = getFile(values.screenPhoto);
@@ -267,7 +268,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          uniqueMachineNumber: values.uniqueMachineNumber,
+          machineId: initialClientId,
           newClient: values.newClient,
           clientName: values.clientName,
           phone: values.phone,
@@ -315,7 +316,6 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
 
     clearDraft();
     setReceipt({
-      uniqueMachineNumber: values.uniqueMachineNumber,
       clientLabel,
       phone: values.phone,
       occurredAt: values.occurredAt,
@@ -374,46 +374,37 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
           ) : null}
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="uniqueMachineNumber">
-              Número único da máquina
-            </label>
-            <input
-              id="uniqueMachineNumber"
-              className={fieldClass}
-              {...form.register("uniqueMachineNumber")}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="occurredAt">
-              Data da conferência
-            </label>
-            <input
-              id="occurredAt"
-              type="date"
-              className={fieldClass}
-              {...form.register("occurredAt")}
-            />
-          </div>
+        <div className="space-y-2">
+          <label className={labelClass} htmlFor="occurredAt">
+            Data da conferência
+          </label>
+          <input
+            id="occurredAt"
+            type="date"
+            className={fieldClass}
+            {...form.register("occurredAt")}
+          />
         </div>
 
         {machineLoading ? (
           <p className="text-sm text-slate-400">Carregando dados da máquina...</p>
-        ) : loadedMachine ? (
-          <div className="rounded-[18px] border border-[#d1a04f]/30 bg-[#3a2b18]/60 p-4 text-sm text-[#f3dfae] space-y-0.5">
-            <p className="font-semibold text-white">{loadedMachine.clientName}</p>
-            <p className="text-[#9a958b]">{loadedMachine.phone}</p>
-            <p className="mt-1 text-xs text-[#9a958b]">Máq. {loadedMachine.uniqueMachineNumber} · Seq. {loadedMachine.clientSequenceNumber} · Dívida {formatCurrency(loadedMachine.customerDebt)}</p>
-          </div>
         ) : (
           <>
-            <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
-              <input type="checkbox" {...form.register("newClient")} />
-              Novo cliente nesta máquina (atribui novo número de sequência e zera a dívida)
-            </label>
+            {loadedMachine ? (
+              <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
+                <input type="checkbox" {...form.register("newClient")} />
+                Essa máquina passou para outro cliente (zera a dívida e conta como a próxima máquina do novo cliente)
+              </label>
+            ) : null}
 
-            <div className="grid gap-4 md:grid-cols-2">
+            {loadedMachine && !newClient ? (
+              <div className="rounded-[18px] border border-[#d1a04f]/30 bg-[#3a2b18]/60 p-4 text-sm text-[#f3dfae] space-y-0.5">
+                <p className="font-semibold text-white">{loadedMachine.clientName}</p>
+                <p className="text-[#9a958b]">{loadedMachine.phone}</p>
+                <p className="mt-1 text-xs text-[#9a958b]">Máquina {loadedMachine.clientMachineNumber} · Dívida {formatCurrency(loadedMachine.customerDebt)}</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
               <div className="space-y-2 md:col-span-2">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
                   Cadastro de cliente / ponto
@@ -511,7 +502,8 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
                   </a>
                 </div>
               ) : null}
-            </div>
+              </div>
+            )}
           </>
         )}
 
@@ -573,6 +565,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
               className={fieldClass}
               {...form.register("previousIncome")}
             />
+            <p className={hintClass}>Puxa sozinho da última conferência desta máquina.</p>
           </div>
           {incomeDifference < 0 ? (
             <div className="flex items-center gap-2 rounded-xl border border-[#d1a04f]/30 bg-[#3a2b18]/60 px-3 py-2 text-xs text-[#f3dfae] md:col-span-2">
@@ -607,6 +600,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
               className={fieldClass}
               {...form.register("previousExpense")}
             />
+            <p className={hintClass}>Puxa sozinho da última conferência desta máquina.</p>
           </div>
           {expenseDifference < 0 ? (
             <div className="flex items-center gap-2 rounded-xl border border-[#d1a04f]/30 bg-[#3a2b18]/60 px-3 py-2 text-xs text-[#f3dfae] md:col-span-2">
@@ -847,7 +841,6 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
             <p className="font-medium">{saveError ? "NAO salvo no servidor — confira a conexão" : "Registro do H salvo"}</p>
           </div>
           <div className="mt-4 grid gap-3 text-sm text-[#dbe6d4]/85 md:grid-cols-2">
-            <p>Máquina: {receipt.uniqueMachineNumber}</p>
             <p>{receipt.clientLabel}</p>
             <p>Data: {formatShortDate(receipt.occurredAt)}</p>
             <p>Conferências: {receipt.conferenceCount}</p>
@@ -865,7 +858,6 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
             autoOpen={!!receipt.phone}
             message={[
               "*Comprovante H (Caça-Níquel)*",
-              `Máquina: ${receipt.uniqueMachineNumber}`,
               receipt.clientLabel,
               `Data: ${formatShortDate(receipt.occurredAt)}`,
               `Entrada: ${formatCurrency(receipt.currentIncome)}`,

@@ -6,6 +6,7 @@ import type {
   PaymentMethod,
   PersonalEntryType,
 } from "@prisma/client";
+import { randomUUID } from "crypto";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
@@ -224,7 +225,10 @@ const createBxSchema = z.object({
 });
 
 const createSlotSchema = z.object({
-  uniqueMachineNumber: z.string(),
+  // Presente so quando volta numa maquina ja existente (veio do
+  // initialClientId, que e o id real da SlotMachine). Ausente = maquina
+  // nova, numero pro cliente e gerado pelo servidor.
+  machineId: z.string().optional(),
   newClient: z.boolean().optional(),
   clientName: z.string().optional(),
   phone: z.string().optional(),
@@ -855,14 +859,11 @@ async function saveWithPrisma(
     }
     case "h-caca-niquel": {
       const data = createSlotSchema.parse(payload);
-      const existingMachine = await prisma.slotMachine.findUnique({
-        where: {
-          organizationId_uniqueMachineNumber: {
-            organizationId: session.organizationId,
-            uniqueMachineNumber: data.uniqueMachineNumber,
-          },
-        },
-      });
+      const existingMachine = data.machineId
+        ? await prisma.slotMachine.findFirst({
+            where: { id: data.machineId, organizationId: session.organizationId },
+          })
+        : null;
 
       const clientSequenceNumber = !existingMachine
         ? "1"
@@ -871,6 +872,22 @@ async function saveWithPrisma(
           : existingMachine.clientSequenceNumber;
 
       const resetDebtForNewClient = !existingMachine || data.newClient;
+
+      // Numero da maquina PARA O CLIENTE (1, 2, 3...) -- conta quantas
+      // maquinas esse cliente ja tem e usa a proxima. So recalcula quando a
+      // maquina e nova ou trocou de cliente (newClient); senao mantem o
+      // numero que ja tinha.
+      let clientMachineNumber = existingMachine?.clientMachineNumber ?? 1;
+      if (resetDebtForNewClient) {
+        const outrasMaquinasDoCliente = await prisma.slotMachine.count({
+          where: {
+            organizationId: session.organizationId,
+            clientName: data.clientName ?? "",
+            ...(existingMachine ? { id: { not: existingMachine.id } } : {}),
+          },
+        });
+        clientMachineNumber = outrasMaquinasDoCliente + 1;
+      }
       const baseDebt = resetDebtForNewClient
         ? data.initialAmountMode === "DEBT"
           ? data.initialAmount ?? 0
@@ -907,35 +924,38 @@ async function saveWithPrisma(
             state: data.state,
           };
 
-      const machine = await prisma.slotMachine.upsert({
-        where: {
-          organizationId_uniqueMachineNumber: {
-            organizationId: session.organizationId,
-            uniqueMachineNumber: data.uniqueMachineNumber,
-          },
-        },
-        create: {
-          organizationId: session.organizationId,
-          uniqueMachineNumber: data.uniqueMachineNumber,
-          clientSequenceNumber,
-          ...clientFields,
-          customerDebt,
-          ppValue: data.ppValue ?? 0,
-          initialAmount: data.initialAmount ?? 0,
-          initialAmountMode: data.initialAmountMode,
-          optionalGreedAmount: data.optionalGreedAmount ?? 0,
-          active: data.active ?? true,
-        },
-        update: {
-          clientSequenceNumber,
-          ...clientFields,
-          customerDebt,
-          ppValue: data.ppValue ?? 0,
-          initialAmount: data.initialAmount ?? 0,
-          initialAmountMode: data.initialAmountMode,
-          optionalGreedAmount: data.optionalGreedAmount ?? 0,
-          active: data.active ?? true,
-        },
+      // Antes era upsert por um numero digitado pelo funcionario -- agora a
+      // maquina existente e sempre achada pelo id real (machineId, que veio
+      // do initialClientId da tela), nunca por um numero que ele digitou.
+      const machine = existingMachine
+        ? await prisma.slotMachine.update({
+            where: { id: existingMachine.id },
+            data: {
+              clientSequenceNumber,
+              clientMachineNumber,
+              ...clientFields,
+              customerDebt,
+              ppValue: data.ppValue ?? 0,
+              initialAmount: data.initialAmount ?? 0,
+              initialAmountMode: data.initialAmountMode,
+              optionalGreedAmount: data.optionalGreedAmount ?? 0,
+              active: data.active ?? true,
+            },
+          })
+        : await prisma.slotMachine.create({
+            data: {
+              organizationId: session.organizationId,
+              uniqueMachineNumber: randomUUID(),
+              clientSequenceNumber,
+              clientMachineNumber,
+              ...clientFields,
+              customerDebt,
+              ppValue: data.ppValue ?? 0,
+              initialAmount: data.initialAmount ?? 0,
+              initialAmountMode: data.initialAmountMode,
+              optionalGreedAmount: data.optionalGreedAmount ?? 0,
+              active: data.active ?? true,
+            },
       });
 
       const record = await prisma.slotCollection.create({
@@ -984,8 +1004,10 @@ async function saveWithPrisma(
       return {
         record: {
           id: record.id,
-          title: record.slotMachine.uniqueMachineNumber,
-          summary: `Cliente ${record.slotMachine.clientSequenceNumber}${data.clientName ? " - " + data.clientName : ""}`,
+          title: record.slotMachine.clientName || `Máquina ${record.slotMachine.clientMachineNumber}`,
+          summary: record.slotMachine.clientName
+            ? `${record.slotMachine.clientName} · Máquina ${record.slotMachine.clientMachineNumber}`
+            : `Máquina ${record.slotMachine.clientMachineNumber}`,
           details: [
             `Conferencias: ${record.conferenceCount}`,
             `Mode: ${record.debtMode}`,
@@ -1519,8 +1541,8 @@ export async function listModuleRecords(
 
           return {
             id: record.id,
-            title: record.slotMachine.uniqueMachineNumber,
-            summary: `Cliente ${record.slotMachine.clientSequenceNumber}${record.slotMachine.clientName ? " - " + record.slotMachine.clientName : ""}`,
+            title: record.slotMachine.clientName || `Máquina ${record.slotMachine.clientMachineNumber}`,
+            summary: `Máquina ${record.slotMachine.clientMachineNumber}`,
             details: [
               `Conferencias: ${record.conferenceCount}`,
               `Mode: ${record.debtMode}`,
@@ -1910,8 +1932,8 @@ export async function listModuleClients(
 
         return machines.map((machine) => ({
           id: machine.id,
-          name: machine.clientName || `Maquina ${machine.uniqueMachineNumber}`,
-          subtitle: `Maquina ${machine.uniqueMachineNumber} - Cliente ${machine.clientSequenceNumber}`,
+          name: machine.clientName || `Máquina ${machine.clientMachineNumber}`,
+          subtitle: `Máquina ${machine.clientMachineNumber}`,
           tags: [machine.phone, machine.cpf].filter(Boolean) as string[],
           badge: machine.active ? "Ativa" : "Inativa",
         }));
@@ -2034,8 +2056,8 @@ export async function listModuleClientRecords(
         });
         return {
           id: record.id,
-          title: record.slotMachine.uniqueMachineNumber,
-          summary: `Cliente ${record.slotMachine.clientSequenceNumber}${record.slotMachine.clientName ? " - " + record.slotMachine.clientName : ""}`,
+          title: record.slotMachine.clientName || `Máquina ${record.slotMachine.clientMachineNumber}`,
+          summary: `Máquina ${record.slotMachine.clientMachineNumber}`,
           details: [
             `Conferencias: ${record.conferenceCount}`,
             `Entrada: ${formatCurrency(currentIncome)}`,
@@ -2222,7 +2244,7 @@ export async function listModuleVisitTargets(
 
 export type ClientPrefillData =
   | { kind: "plush-machine"; clientName: string; phone: string; cpf: string; code: string; name: string; machineNumber: string; noteNumber: string; noteiroFixed: string; coinPhotoRule: boolean; giftPhotoRule: boolean; active: boolean }
-  | { kind: "slot-machine"; clientName: string; phone: string; cpf: string; cep: string; street: string; neighborhood: string; city: string; state: string; uniqueMachineNumber: string; clientSequenceNumber: string; customerDebt: number; ppValue: number; initialAmount: number; initialAmountMode: string; optionalGreedAmount: number; active: boolean }
+  | { kind: "slot-machine"; clientName: string; phone: string; cpf: string; cep: string; street: string; neighborhood: string; city: string; state: string; clientMachineNumber: number; customerDebt: number; ppValue: number; initialAmount: number; initialAmountMode: string; optionalGreedAmount: number; active: boolean; previousIncome: number; previousExpense: number }
   | { kind: "bx-transaction"; clientName: string; phone: string; cpf: string; cep: string; street: string; neighborhood: string; city: string; state: string; exceptionClient: boolean; debt: number }
   | { kind: "carreta-kids-record"; localName: string; sheetName: string; phone: string }
   | { kind: "rental-order"; clientName: string; phone: string; localName: string; document: string };
@@ -2243,7 +2265,15 @@ export async function getClientPrefillData(
     case "h-caca-niquel": {
       const m = await prisma.slotMachine.findFirst({ where: { id, organizationId: org } });
       if (!m) return null;
-      return { kind: "slot-machine", clientName: m.clientName ?? "", phone: m.phone ?? "", cpf: m.cpf ?? "", cep: m.cep ?? "", street: m.street ?? "", neighborhood: m.neighborhood ?? "", city: m.city ?? "", state: m.state ?? "", uniqueMachineNumber: m.uniqueMachineNumber, clientSequenceNumber: m.clientSequenceNumber, customerDebt: Number(m.customerDebt ?? 0), ppValue: Number(m.ppValue ?? 0), initialAmount: Number(m.initialAmount ?? 0), initialAmountMode: m.initialAmountMode, optionalGreedAmount: Number(m.optionalGreedAmount ?? 0), active: m.active };
+      // Entrada/saida anterior vem sozinha do ultimo fechamento dessa
+      // maquina -- o "atual" de ontem e o "anterior" de hoje, funcionario
+      // nao precisa lembrar/digitar de novo.
+      const ultimaColeta = await prisma.slotCollection.findFirst({
+        where: { slotMachineId: m.id },
+        orderBy: { occurredAt: "desc" },
+        select: { currentIncome: true, currentExpense: true },
+      });
+      return { kind: "slot-machine", clientName: m.clientName ?? "", phone: m.phone ?? "", cpf: m.cpf ?? "", cep: m.cep ?? "", street: m.street ?? "", neighborhood: m.neighborhood ?? "", city: m.city ?? "", state: m.state ?? "", clientMachineNumber: m.clientMachineNumber, customerDebt: Number(m.customerDebt ?? 0), ppValue: Number(m.ppValue ?? 0), initialAmount: Number(m.initialAmount ?? 0), initialAmountMode: m.initialAmountMode, optionalGreedAmount: Number(m.optionalGreedAmount ?? 0), active: m.active, previousIncome: Number(ultimaColeta?.currentIncome ?? 0), previousExpense: Number(ultimaColeta?.currentExpense ?? 0) };
     }
     case "bx": {
       const r = await prisma.bxTransaction.findFirst({ where: { id, organizationId: org } });
