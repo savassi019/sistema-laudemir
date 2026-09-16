@@ -587,7 +587,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="generatedDebtAmount">
-              Dívida gerada agora
+              Ficou devendo
             </label>
             <input
               id="generatedDebtAmount"
