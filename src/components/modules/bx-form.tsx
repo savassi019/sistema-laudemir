@@ -306,6 +306,36 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
       </div>
 
       <form onSubmit={onSubmit} className="space-y-4">
+        {/* Primeira coisa do formulario: a evidencia (foto da tela/do papel)
+            se registra antes de qualquer outro dado, nao no fim. Pedido do
+            usuario apos reuniao de alinhamento. */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-1">
+            <PhotoCaptureInput
+              registration={form.register("screenPhoto")}
+              label="Foto da tela"
+              hint="Tela do terminal BX"
+            />
+            {form.formState.errors.screenPhoto ? (
+              <p className="text-sm text-[#d59a8b]">
+                {form.formState.errors.screenPhoto.message?.toString()}
+              </p>
+            ) : null}
+          </div>
+          <div className="space-y-1">
+            <PhotoCaptureInput
+              registration={form.register("paperPhoto")}
+              label="Foto do papel"
+              hint="Comprovante impresso"
+            />
+            {form.formState.errors.paperPhoto ? (
+              <p className="text-sm text-[#d59a8b]">
+                {form.formState.errors.paperPhoto.message?.toString()}
+              </p>
+            ) : null}
+          </div>
+        </div>
+
         {clientLoading ? (
           <p className="text-sm text-slate-400">Carregando dados do cliente...</p>
         ) : loadedClient ? (
@@ -570,33 +600,6 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
             Saldo líquido: {formatCurrency(liveNetAmount)}
           </div>
         )}
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-1">
-            <PhotoCaptureInput
-              registration={form.register("screenPhoto")}
-              label="Foto da tela"
-              hint="Tela do terminal BX"
-            />
-            {form.formState.errors.screenPhoto ? (
-              <p className="text-sm text-[#d59a8b]">
-                {form.formState.errors.screenPhoto.message?.toString()}
-              </p>
-            ) : null}
-          </div>
-          <div className="space-y-1">
-            <PhotoCaptureInput
-              registration={form.register("paperPhoto")}
-              label="Foto do papel"
-              hint="Comprovante impresso"
-            />
-            {form.formState.errors.paperPhoto ? (
-              <p className="text-sm text-[#d59a8b]">
-                {form.formState.errors.paperPhoto.message?.toString()}
-              </p>
-            ) : null}
-          </div>
-        </div>
 
         <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
           <input type="checkbox" {...form.register("exceptionClient")} />
