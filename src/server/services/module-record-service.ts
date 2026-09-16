@@ -1926,14 +1926,19 @@ export async function listModuleClients(
       case "h-caca-niquel": {
         const machines = await prisma.slotMachine.findMany({
           where: { organizationId: session.organizationId },
-          orderBy: { updatedAt: "desc" },
+          // Agrupado por cliente e ordenado pelo numero da maquina --
+          // senao as maquinas do mesmo cliente ficam espalhadas pela lista
+          // (misturadas com as de outros clientes), dificultando saber
+          // qual delas escolher. Ver [[project_slot_machine_per_client_numbering]].
+          orderBy: [{ clientName: "asc" }, { clientMachineNumber: "asc" }],
           take,
         });
 
         return machines.map((machine) => ({
           id: machine.id,
-          name: machine.clientName || `Máquina ${machine.clientMachineNumber}`,
-          subtitle: `Máquina ${machine.clientMachineNumber}`,
+          name: machine.clientName
+            ? `${machine.clientName} — Máquina ${machine.clientMachineNumber}`
+            : `Máquina ${machine.clientMachineNumber}`,
           tags: [machine.phone, machine.cpf].filter(Boolean) as string[],
           badge: machine.active ? "Ativa" : "Inativa",
         }));
