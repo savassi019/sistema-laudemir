@@ -3,6 +3,7 @@
 import { requireSession } from "@/lib/auth";
 import {
   getClientPrefillData,
+  listBxPrizeRecords,
   listModuleClientRecords,
   listModuleRecords,
   moduleSlugs,
@@ -42,6 +43,11 @@ export async function listModuleRecordsAction(
     from: from ? new Date(from) : undefined,
     to:   to   ? new Date(to)   : undefined,
   });
+}
+
+export async function listBxPrizeRecordsAction() {
+  const session = await requireSession();
+  return listBxPrizeRecords(session);
 }
 
 export async function getModuleReportAction(slug: string, from?: string, to?: string) {

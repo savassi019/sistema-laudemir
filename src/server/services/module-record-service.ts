@@ -1318,6 +1318,41 @@ async function resolveBxClientDebt(organizationId: string, clientName: string): 
   return saldoRestante + Number(anterior.generatedDebtAmount ?? 0);
 }
 
+export type BxPrizeItem = {
+  id: string;
+  clientName: string;
+  amount: number;
+  paymentMethod: string | null;
+  occurredAt: string;
+  operatorName: string;
+};
+
+/**
+ * Lista as operacoes do BX marcadas como "Premio" (receiptStatus PRIZE) --
+ * a aba Premio mostra o que ja foi registrado no fechamento normal, nao um
+ * lancamento avulso separado. Ver [[project_bx_prize_tab]].
+ */
+export async function listBxPrizeRecords(
+  session: SessionData,
+  take = 50,
+): Promise<BxPrizeItem[]> {
+  const records = await prisma.bxTransaction.findMany({
+    where: { organizationId: session.organizationId, receiptStatus: "PRIZE" },
+    orderBy: { occurredAt: "desc" },
+    take,
+  });
+  const nomes = await resolveCreatorNames(records.map((r) => r.createdById));
+
+  return records.map((r) => ({
+    id: r.id,
+    clientName: r.clientName,
+    amount: Number(r.deliveredAmount ?? r.expenseAmount ?? r.totalAmount ?? 0),
+    paymentMethod: r.paymentMethod,
+    occurredAt: r.occurredAt.toISOString(),
+    operatorName: r.createdById ? (nomes.get(r.createdById) ?? "-") : "-",
+  }));
+}
+
 function buildDateWhere(range?: DateRange, campo: string = "createdAt") {
   if (!range || (!range.from && !range.to)) {
     return {};

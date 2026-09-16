@@ -426,7 +426,7 @@ export function ModuleWorkspace({
         ) : null}
 
         {activeSection === "premio" ? (
-          <BxPrizeSection hideFinancials={hideFinancials} financialEntries={financialEntries} />
+          <BxPrizeSection hideFinancials={hideFinancials} />
         ) : null}
 
         {activeSection === "clientes" ? (
