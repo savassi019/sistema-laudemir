@@ -507,7 +507,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className={labelClass} htmlFor="sentToAgentAmount">
-              Mandou para agente recebe
+              Valor mandado ao agente
             </label>
             <input
               id="sentToAgentAmount"
