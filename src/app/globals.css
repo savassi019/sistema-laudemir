@@ -51,6 +51,22 @@ body {
   overflow-x: hidden;
 }
 
+/*
+ * O <select> fechado ja fica escuro via className (selectClass, usado em
+ * todo modulo) -- mas <option> e renderizado pelo navegador/SO quando o
+ * menu abre, e isso ignora a maioria do CSS. Sem esta regra, o menu abre
+ * com fundo quase branco e texto claro em cima, quase ilegivel. Corrige
+ * em todo select do sistema de uma vez, nao so num campo isolado.
+ */
+select {
+  color-scheme: dark;
+}
+
+select option {
+  background-color: var(--surface-strong);
+  color: var(--foreground);
+}
+
 ::selection {
   background: rgba(209, 160, 79, 0.28);
   color: #fff;
