@@ -960,6 +960,13 @@ model BxTransaction {
   expenseAmount     Decimal?        @db.Decimal(14, 2)
   totalAmount       Decimal         @db.Decimal(14, 2)
   discountAmount    Decimal?        @db.Decimal(14, 2)
+  /// Divida do cliente ao ENTRAR nesta operacao (puxada da operacao
+  /// anterior dele). O discountAmount desta operacao abate esse saldo,
+  /// podendo ser parcial -- o resto carrega pra proxima operacao.
+  customerDebt        Decimal?        @db.Decimal(14, 2)
+  /// Divida nova que esta operacao gera (digitada pelo funcionario quando
+  /// fica "Nao recebido"), somada ao saldo que sobra pra proxima operacao.
+  generatedDebtAmount Decimal?        @db.Decimal(14, 2)
   paymentMethod     PaymentMethod?
   employeeFilled    Boolean         @default(true)
   screenPhotoId     String?

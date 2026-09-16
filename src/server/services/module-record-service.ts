@@ -213,6 +213,8 @@ const createBxSchema = z.object({
   incomeAmount: z.number(),
   expenseAmount: z.number(),
   discountAmount: z.number(),
+  customerDebt: z.number().optional(),
+  generatedDebtAmount: z.number().optional(),
   paymentMethod: z.string().optional(),
   receiptStatus: z.string(),
   exceptionClient: z.boolean(),
@@ -806,6 +808,8 @@ async function saveWithPrisma(
           expenseAmount: data.expenseAmount,
           totalAmount: data.incomeAmount - data.expenseAmount - data.discountAmount,
           discountAmount: data.discountAmount,
+          customerDebt: data.customerDebt ?? 0,
+          generatedDebtAmount: data.generatedDebtAmount ?? 0,
           paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
           exceptionClient: data.exceptionClient,
           receiptStatus: data.receiptStatus as BxReceiptStatus,
@@ -1290,6 +1294,26 @@ async function resolveCreatorNames(ids: (string | null | undefined)[]): Promise<
     select: { id: true, name: true },
   });
   return new Map(usuarios.map((u) => [u.id, u.name]));
+}
+
+/**
+ * Saldo devedor atual de um cliente do BX: pega a ultima operacao dele
+ * (por clientName, BX nao tem cadastro de cliente compartilhado) e calcula
+ * o que sobrou depois do desconto dela, mais a divida nova que ela gerou.
+ * So operacao "Nao recebido" gera divida nova -- decisao do dono do projeto.
+ */
+async function resolveBxClientDebt(organizationId: string, clientName: string): Promise<number> {
+  const anterior = await prisma.bxTransaction.findFirst({
+    where: { organizationId, clientName },
+    orderBy: { createdAt: "desc" },
+    select: { customerDebt: true, discountAmount: true, generatedDebtAmount: true },
+  });
+  if (!anterior) return 0;
+  const saldoRestante = Math.max(
+    Number(anterior.customerDebt ?? 0) - Number(anterior.discountAmount ?? 0),
+    0,
+  );
+  return saldoRestante + Number(anterior.generatedDebtAmount ?? 0);
 }
 
 function buildDateWhere(range?: DateRange, campo: string = "createdAt") {
@@ -2162,7 +2186,7 @@ export async function listModuleVisitTargets(
 export type ClientPrefillData =
   | { kind: "plush-machine"; clientName: string; phone: string; cpf: string; code: string; name: string; machineNumber: string; noteNumber: string; noteiroFixed: string; coinPhotoRule: boolean; giftPhotoRule: boolean; active: boolean }
   | { kind: "slot-machine"; clientName: string; phone: string; cpf: string; cep: string; street: string; neighborhood: string; city: string; state: string; uniqueMachineNumber: string; clientSequenceNumber: string; customerDebt: number; ppValue: number; initialAmount: number; initialAmountMode: string; optionalGreedAmount: number; active: boolean }
-  | { kind: "bx-transaction"; clientName: string; phone: string; cpf: string; cep: string; street: string; neighborhood: string; city: string; state: string; exceptionClient: boolean }
+  | { kind: "bx-transaction"; clientName: string; phone: string; cpf: string; cep: string; street: string; neighborhood: string; city: string; state: string; exceptionClient: boolean; debt: number }
   | { kind: "carreta-kids-record"; localName: string; sheetName: string; phone: string }
   | { kind: "rental-order"; clientName: string; phone: string; localName: string; document: string };
 
@@ -2187,7 +2211,8 @@ export async function getClientPrefillData(
     case "bx": {
       const r = await prisma.bxTransaction.findFirst({ where: { id, organizationId: org } });
       if (!r) return null;
-      return { kind: "bx-transaction", clientName: r.clientName, phone: r.phone ?? "", cpf: r.cpf ?? "", cep: r.cep ?? "", street: r.street ?? "", neighborhood: r.neighborhood ?? "", city: r.city ?? "", state: r.state ?? "", exceptionClient: r.exceptionClient };
+      const debt = await resolveBxClientDebt(org, r.clientName);
+      return { kind: "bx-transaction", clientName: r.clientName, phone: r.phone ?? "", cpf: r.cpf ?? "", cep: r.cep ?? "", street: r.street ?? "", neighborhood: r.neighborhood ?? "", city: r.city ?? "", state: r.state ?? "", exceptionClient: r.exceptionClient, debt };
     }
     case "carreta-kids": {
       const r = await prisma.carretaKidsRecord.findFirst({ where: { id, organizationId: org } });

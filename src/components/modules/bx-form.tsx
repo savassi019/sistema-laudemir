@@ -37,6 +37,7 @@ const schema = z
     incomeAmount: z.coerce.number().min(0),
     expenseAmount: z.coerce.number().min(0),
     discountAmount: z.coerce.number().min(0),
+    generatedDebtAmount: z.coerce.number().min(0),
     paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
     receiptStatus: z.enum(["RECEIVED", "NOT_RECEIVED", "DELIVERED"]),
     exceptionClient: z.boolean().default(false),
@@ -92,6 +93,9 @@ type ReceiptState = {
   incomeAmount: number;
   expenseAmount: number;
   discountAmount: number;
+  clientDebt: number;
+  generatedDebtAmount: number;
+  remainingDebt: number;
   netAmount: number;
   paymentMethod: string;
   receiptStatus: string;
@@ -121,7 +125,7 @@ async function uploadFile(file: File, category: string) {
   return result.id;
 }
 
-type LoadedBxClient = { clientName: string; phone: string };
+type LoadedBxClient = { clientName: string; phone: string; debt: number };
 
 /**
  * Recebido/Nao recebido sao opostos (verde/vermelho). "Dinheiro deixado"
@@ -171,6 +175,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
       incomeAmount: 0,
       expenseAmount: 0,
       discountAmount: 0,
+      generatedDebtAmount: 0,
       paymentMethod: "PIX",
     },
   });
@@ -181,9 +186,12 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
     getClientPrefillDataAction("bx", initialClientId)
       .then((data) => {
         if (!data || data.kind !== "bx-transaction") return;
-        setLoadedClient({ clientName: data.clientName, phone: data.phone });
+        setLoadedClient({ clientName: data.clientName, phone: data.phone, debt: data.debt });
         form.setValue("clientName", data.clientName);
         form.setValue("phone", data.phone);
+        // Desconto puxa a divida do cliente automatico -- fica editavel pra
+        // dar pra pagar so uma parte, o resto continua pra proxima operacao.
+        form.setValue("discountAmount", data.debt);
         // CPF invalido gravado antes da validacao existir travava o
         // fechamento: o campo nao aparece nesta tela, entao o erro nao tinha
         // onde ser exibido e o botao Salvar simplesmente nao respondia.
@@ -246,6 +254,10 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
       Number(values.incomeAmount) -
       Number(values.expenseAmount) -
       Number(values.discountAmount);
+    const clientDebt = loadedClient?.debt ?? 0;
+    const remainingDebt =
+      Math.max(clientDebt - Number(values.discountAmount), 0) +
+      Number(values.generatedDebtAmount);
 
     const [screenPhotoFileId, paperPhotoFileId] = await Promise.all([
       screenPhoto ? uploadFile(screenPhoto, "PROOF") : Promise.resolve(null),
@@ -273,6 +285,8 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           incomeAmount: Number(values.incomeAmount),
           expenseAmount: Number(values.expenseAmount),
           discountAmount: Number(values.discountAmount),
+          customerDebt: clientDebt,
+          generatedDebtAmount: Number(values.generatedDebtAmount),
           paymentMethod: values.paymentMethod,
           receiptStatus: values.receiptStatus,
           exceptionClient: values.exceptionClient,
@@ -302,6 +316,9 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
       incomeAmount: Number(values.incomeAmount),
       expenseAmount: Number(values.expenseAmount),
       discountAmount: Number(values.discountAmount),
+      clientDebt,
+      generatedDebtAmount: Number(values.generatedDebtAmount),
+      remainingDebt,
       netAmount,
       paymentMethod: values.paymentMethod,
       receiptStatus: values.receiptStatus,
@@ -350,6 +367,9 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           <div className="rounded-[18px] border border-[#6b9d6f]/30 bg-[#1a2e1e]/60 p-4 text-sm text-[#bfe3c2] space-y-0.5">
             <p className="font-semibold text-white">{loadedClient.clientName}</p>
             <p className="text-[#9a958b]">{loadedClient.phone}</p>
+            <p className={loadedClient.debt > 0 ? "text-[#f0c3b9]" : "text-[#9a958b]"}>
+              Dívida: {formatCurrency(loadedClient.debt)}
+            </p>
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
@@ -560,6 +580,28 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
               className={fieldClass}
               {...form.register("discountAmount")}
             />
+            <p className={hintClass}>
+              Puxa a dívida do cliente sozinho. Pode pagar só uma parte: o que
+              sobrar continua pra próxima operação dele.
+            </p>
+          </div>
+          <div className="space-y-2">
+            <label className={labelClass} htmlFor="generatedDebtAmount">
+              Dívida gerada agora
+            </label>
+            <input
+              id="generatedDebtAmount"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              className={fieldClass}
+              {...form.register("generatedDebtAmount")}
+            />
+            <p className={hintClass}>
+              Só preencher se ficar &quot;Não recebido&quot;: quanto o cliente
+              fica devendo a partir desta operação.
+            </p>
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="paymentMethod">
@@ -643,6 +685,11 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
             {hideFinancials ? null : (
               <p className="font-semibold text-[#dbe6d4]">
                 Despesas e gastos: {formatCurrency(receipt.expenseAmount)}
+              </p>
+            )}
+            {hideFinancials || (receipt.clientDebt <= 0 && receipt.remainingDebt <= 0) ? null : (
+              <p className="font-semibold text-[#dbe6d4]">
+                Dívida restante do cliente: {formatCurrency(receipt.remainingDebt)}
               </p>
             )}
             <p className={`font-semibold ${RECEIPT_STATUS_TEXT_COLOR[receipt.receiptStatus] ?? ""}`}>
