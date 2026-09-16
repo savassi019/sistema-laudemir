@@ -359,6 +359,21 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
       )}
 
       <form onSubmit={onSubmit} className="space-y-4">
+        {/* Primeira coisa do formulario, mesmo padrao do BX -- pedido do
+            usuario apos reuniao de alinhamento. */}
+        <div className="space-y-1">
+          <PhotoCaptureInput
+            registration={form.register("screenPhoto")}
+            label="Foto da tela da máquina"
+            hint="Obrigatório para salvar o fechamento"
+          />
+          {form.formState.errors.screenPhoto ? (
+            <p className="text-sm text-[#d59a8b]">
+              {form.formState.errors.screenPhoto.message?.toString()}
+            </p>
+          ) : null}
+        </div>
+
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className={labelClass} htmlFor="uniqueMachineNumber">
@@ -807,19 +822,6 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
             </p>
           </div>
         )}
-
-        <div className="space-y-1">
-          <PhotoCaptureInput
-            registration={form.register("screenPhoto")}
-            label="Foto da tela da máquina"
-            hint="Obrigatório para salvar o fechamento"
-          />
-          {form.formState.errors.screenPhoto ? (
-            <p className="text-sm text-[#d59a8b]">
-              {form.formState.errors.screenPhoto.message?.toString()}
-            </p>
-          ) : null}
-        </div>
 
         <button
           type="submit"
