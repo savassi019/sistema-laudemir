@@ -166,6 +166,8 @@ enum BxReceiptStatus {
   NOT_RECEIVED
   /// A operacao foi deixar dinheiro com o cliente, nao receber dele.
   DELIVERED
+  /// Cliente ganhou um premio: valor entregue, mas nao vira divida (diferente de DELIVERED).
+  PRIZE
 }
 
 enum MachineCompensationStatus {

@@ -204,9 +204,9 @@ const createBxSchema = z.object({
   state: z.string().optional(),
   // Quem fez a operacao passou a vir do login (session.name), nao mais de
   // um numero digitado -- opcional so pra nao quebrar quem ainda manda.
+  // Agente e quem entregou ao cliente sao sempre a mesma pessoa que fez o
+  // fechamento -- tambem vem do login, o form nao manda mais esses campos.
   collectNumber: z.string().optional(),
-  agentName: z.string(),
-  receiverName: z.string(),
   occurredAt: z.string(),
   sentToAgentAmount: z.number(),
   deliveredAmount: z.number(),
@@ -799,8 +799,10 @@ async function saveWithPrisma(
           city: data.city,
           state: data.state,
           collectNumber: data.collectNumber,
-          agentName: data.agentName,
-          receiverName: data.receiverName,
+          // Agente e quem entregou ao cliente sao sempre quem fez o
+          // fechamento -- ver [[project_bx_operator_from_login]].
+          agentName: session.name,
+          receiverName: session.name,
           occurredAt: toDate(data.occurredAt),
           sentToAgentAmount: data.sentToAgentAmount,
           deliveredAmount: data.deliveredAmount,

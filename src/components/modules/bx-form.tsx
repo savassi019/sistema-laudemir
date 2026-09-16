@@ -29,8 +29,6 @@ const schema = z
     neighborhood: z.string().optional(),
     city: z.string().optional(),
     state: z.string().optional(),
-    agentName: z.string().min(2, "Informe o agente."),
-    receiverName: z.string().min(2, "Informe quem recebeu."),
     occurredAt: z.string().min(1, "Informe a data e hora."),
     sentToAgentAmount: z.coerce.number().min(0),
     deliveredAmount: z.coerce.number().min(0),
@@ -39,7 +37,7 @@ const schema = z
     discountAmount: z.coerce.number().min(0),
     generatedDebtAmount: z.coerce.number().min(0),
     paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
-    receiptStatus: z.enum(["RECEIVED", "NOT_RECEIVED", "DELIVERED"]),
+    receiptStatus: z.enum(["RECEIVED", "NOT_RECEIVED", "DELIVERED", "PRIZE"]),
     exceptionClient: z.boolean().default(false),
     screenPhoto: z.any().optional(),
     paperPhoto: z.any().optional(),
@@ -85,8 +83,6 @@ type ReceiptState = {
   clientName: string;
   phone?: string;
   operatorName: string;
-  agentName: string;
-  receiverName: string;
   occurredAt: string;
   sentToAgentAmount: number;
   deliveredAmount: number;
@@ -130,18 +126,22 @@ type LoadedBxClient = { clientName: string; phone: string; debt: number };
 /**
  * Recebido/Nao recebido sao opostos (verde/vermelho). "Dinheiro deixado"
  * e um terceiro tipo de operacao, nao um meio-termo entre os dois -- por
- * isso cor propria (azul), nao uma escala entre as outras duas.
+ * isso cor propria (azul), nao uma escala entre as outras duas. "Premio"
+ * e um quarto tipo (dourado, cor de destaque do sistema): o cliente ganhou
+ * e o valor entregue nao vira divida, diferente de "Dinheiro deixado".
  */
 const RECEIPT_STATUS_COLOR: Record<string, string> = {
   RECEIVED: "border-[#6b9d6f]/45 bg-[#6b9d6f]/10 text-[#bfe3c2]",
   NOT_RECEIVED: "border-[#b46c5d]/45 bg-[#b46c5d]/10 text-[#f0c3b9]",
   DELIVERED: "border-[#6f8fb4]/45 bg-[#6f8fb4]/10 text-[#bcd4ed]",
+  PRIZE: "border-[#d1a04f]/45 bg-[#d1a04f]/10 text-[#f3dfae]",
 };
 
 const RECEIPT_STATUS_TEXT_COLOR: Record<string, string> = {
   RECEIVED: "text-[#bfe3c2]",
   NOT_RECEIVED: "text-[#f0a08f]",
   DELIVERED: "text-[#a8c5e3]",
+  PRIZE: "text-[#f3dfae]",
 };
 
 export function BxForm({ hideFinancials = false, initialClientName = "", initialPhone = "", initialClientId }: { hideFinancials?: boolean; initialClientName?: string; initialPhone?: string; initialClientId?: string } = {}) {
@@ -277,8 +277,6 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           neighborhood: values.neighborhood,
           city: values.city,
           state: values.state,
-          agentName: values.agentName,
-          receiverName: values.receiverName,
           occurredAt: values.occurredAt,
           sentToAgentAmount: Number(values.sentToAgentAmount),
           deliveredAmount: Number(values.deliveredAmount),
@@ -308,8 +306,6 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
       clientName: values.clientName,
       phone: values.phone,
       operatorName,
-      agentName: values.agentName,
-      receiverName: values.receiverName,
       occurredAt: values.occurredAt,
       sentToAgentAmount: Number(values.sentToAgentAmount),
       deliveredAmount: Number(values.deliveredAmount),
@@ -339,7 +335,8 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
         <p className="font-medium">Regra do BX</p>
         <p>
           Recebido fica verde. Não recebido fica vermelho. Dinheiro deixado
-          fica azul. Cliente exceção pode trabalhar com 1 foto apenas.
+          fica azul. Prêmio fica dourado. Cliente exceção pode trabalhar com
+          1 foto apenas.
         </p>
       </div>
 
@@ -479,23 +476,10 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
             <div className={`${fieldClass} flex items-center text-slate-300`}>
               {operatorName || "Carregando..."}
             </div>
-            <p className={hintClass}>Quem está fazendo o fechamento, direto do login.</p>
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="agentName">
-              Nome do agente
-            </label>
-            <input id="agentName" className={fieldClass} {...form.register("agentName")} />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="receiverName">
-              Quem entregou ao cliente
-            </label>
-            <input
-              id="receiverName"
-              className={fieldClass}
-              {...form.register("receiverName")}
-            />
+            <p className={hintClass}>
+              Quem fez o fechamento, mandou pro agente e entregou ao cliente
+              -- direto do login, é sempre a mesma pessoa.
+            </p>
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="occurredAt">
@@ -520,6 +504,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
               <option value="RECEIVED">Recebido</option>
               <option value="NOT_RECEIVED">Não recebido</option>
               <option value="DELIVERED">Dinheiro deixado</option>
+              <option value="PRIZE">Prêmio</option>
             </select>
           </div>
         </div>
@@ -680,8 +665,6 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           <div className="mt-4 grid gap-3 text-sm text-[#dbe6d4]/85 md:grid-cols-2">
             <p>Cliente: {receipt.clientName}</p>
             <p>Funcionário: {receipt.operatorName}</p>
-            <p>Agente: {receipt.agentName}</p>
-            <p>Recebeu: {receipt.receiverName}</p>
             {hideFinancials ? null : (
               <p className="font-semibold text-[#dbe6d4]">
                 Despesas e gastos: {formatCurrency(receipt.expenseAmount)}
@@ -709,7 +692,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
             message={[
               "*Comprovante BX*",
               `Cliente: ${receipt.clientName}`,
-              `Agente: ${receipt.agentName}`,
+              `Atendido por: ${receipt.operatorName}`,
               `Despesas e gastos: ${formatCurrency(receipt.expenseAmount)}`,
               `Desconto: ${formatCurrency(receipt.discountAmount)}`,
               `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,

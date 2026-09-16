@@ -44,6 +44,7 @@ export const RECEIPT_STATUS_LABEL: Record<string, string> = {
   RECEIVED: "Recebido",
   NOT_RECEIVED: "Não recebido",
   DELIVERED: "Dinheiro deixado",
+  PRIZE: "Prêmio",
 };
 
 /** ContractStatus */
