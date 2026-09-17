@@ -371,11 +371,6 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
 
   return (
     <div className="space-y-5">
-      <div className="rounded-[24px] border border-[#d1a04f]/28 bg-[#3a2b18]/72 p-4 text-sm leading-6 text-[#f3dfae]">
-        <p className="font-medium">Regra do H</p>
-        <p>Controle entrada, saída, 50 por cento, dívida, negativo e conferências.</p>
-      </div>
-
       {hideFinancials ? null : (
         <div className="grid gap-3 sm:grid-cols-3">
           <article className={`rounded-[24px] border p-4 ${netRevenue < 0 ? "border-[#f87171]/20 bg-[#2b1212]/60" : "border-white/8 bg-white/[0.03]"}`}>
