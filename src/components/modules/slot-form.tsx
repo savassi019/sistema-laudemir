@@ -519,7 +519,7 @@ function MachineFieldset({
               />
             </div>
             <div className="space-y-1.5">
-              <label className={labelClass}>Negativo</label>
+              <label className={labelClass}>Débito da máquina (saldo)</label>
               <input
                 type="number"
                 inputMode="decimal"
@@ -649,7 +649,7 @@ function SlotVisitForm({
             previousExpense: m.previousExpense,
             percentageSplit: 50,
             conferenceCount: 0,
-            negativeAmount: 0,
+            negativeAmount: m.machineDebt,
             feedingNegativeAmount: 0,
             customerDebtDiscounted: 0,
             generatedDebtAmount: 0,

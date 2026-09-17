@@ -303,6 +303,7 @@ export async function registerSlotClient(
       city: data.city,
       state: data.state,
       customerDebt: 0,
+      machineDebt: 0,
       ppValue: 0,
       initialAmount: 0,
       initialAmountMode: "NONE" as const,
@@ -320,6 +321,7 @@ export type SlotClientMachine = {
   previousIncome: number;
   previousExpense: number;
   customerDebt: number;
+  machineDebt: number;
   active: boolean;
 };
 
@@ -350,6 +352,7 @@ export async function getSlotClientMachines(
         previousIncome: Number(ultima?.currentIncome ?? 0),
         previousExpense: Number(ultima?.currentExpense ?? 0),
         customerDebt: Number(m.customerDebt ?? 0),
+        machineDebt: Number(m.machineDebt ?? 0),
         active: m.active,
       };
     }),
@@ -1001,6 +1004,10 @@ async function saveWithPrisma(
       const initialNegativeBonus =
         resetDebtForNewClient && data.initialAmountMode === "NEGATIVE" ? data.initialAmount ?? 0 : 0;
       const effectiveNegativeAmount = (data.negativeAmount ?? 0) + initialNegativeBonus;
+      // "Negativo" agora e um saldo lembrado (igual a divida do cliente): o
+      // valor enviado pelo funcionario JA E o novo saldo da maquina, nao um
+      // lancamento avulso que se perde no fim do fechamento.
+      const machineDebt = effectiveNegativeAmount;
 
       // newClient force-clears cadastro fields not resent, so the old client's data never lingers under the new one.
       const clientFields = resetDebtForNewClient
@@ -1036,6 +1043,7 @@ async function saveWithPrisma(
               clientMachineNumber,
               ...clientFields,
               customerDebt,
+              machineDebt,
               ppValue: data.ppValue ?? 0,
               initialAmount: data.initialAmount ?? 0,
               initialAmountMode: data.initialAmountMode,
@@ -1051,6 +1059,7 @@ async function saveWithPrisma(
               clientMachineNumber,
               ...clientFields,
               customerDebt,
+              machineDebt,
               ppValue: data.ppValue ?? 0,
               initialAmount: data.initialAmount ?? 0,
               initialAmountMode: data.initialAmountMode,

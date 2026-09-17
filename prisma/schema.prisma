@@ -1005,6 +1005,10 @@ model SlotMachine {
   city                 String?
   state                String?
   customerDebt         Decimal?         @db.Decimal(14, 2)
+  /// Saldo de "Negativo" que fica acumulado nesta maquina, lembrado
+  /// automaticamente a cada fechamento (o funcionario nao precisa saber de
+  /// cabeca) -- diferente da divida do cliente, esse debito e da MAQUINA.
+  machineDebt          Decimal?         @db.Decimal(14, 2)
   ppValue              Decimal?         @db.Decimal(14, 2)
   initialAmount        Decimal?         @db.Decimal(14, 2)
   initialAmountMode    SlotDebtMode     @default(NONE)
