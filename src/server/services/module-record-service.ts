@@ -2333,6 +2333,34 @@ export async function listModuleVisitTargets(
   session: SessionData,
   slug: ModuleSlug,
 ): Promise<ClientListItem[]> {
+  if (slug === "h-caca-niquel") {
+    // A visita fecha TODAS as maquinas do cliente de uma vez (ver
+    // SlotVisitForm), entao o seletor tem que listar um item por CLIENTE,
+    // nao um por maquina -- senao "Bar do Chico" aparece repetido 5x na
+    // lista e escolher qualquer uma delas parecia abrir so aquela maquina.
+    const machines = await prisma.slotMachine.findMany({
+      where: { organizationId: session.organizationId },
+      orderBy: [{ clientName: "asc" }, { clientMachineNumber: "asc" }],
+      take: 500,
+    });
+    const porCliente = new Map<string, (typeof machines)[number]>();
+    for (const m of machines) {
+      const chave = m.clientName || m.id;
+      if (!porCliente.has(chave)) porCliente.set(chave, m);
+    }
+    return [...porCliente.values()].map((m) => ({
+      id: m.id,
+      code: m.id.slice(0, 8),
+      name: m.clientName || `Máquina ${m.clientMachineNumber}`,
+      phone: m.phone ?? "",
+      city: "",
+      status: m.active ? ("ativo" as const) : ("inativo" as const),
+      balance: 0,
+      updatedAt: new Date().toISOString(),
+      routeNumber: undefined,
+    }));
+  }
+
   const items = await listModuleClients(session, slug, 200);
 
   return items.map((item) => ({
