@@ -1,69 +1,32 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { ArrowRight, LoaderCircle, Plus, ReceiptText, TriangleAlert, X } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useFieldArray, useForm, useWatch } from "react-hook-form";
+import {
+  ArrowRight,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  LoaderCircle,
+  Plus,
+  ReceiptText,
+  X,
+} from "lucide-react";
+import { useEffect, useState } from "react";
+import { useFieldArray, useForm, useWatch, type UseFormReturn } from "react-hook-form";
 import { z } from "zod";
 
 import { fetchAddressByCep } from "@/lib/cep";
-import { formatCurrency, formatShortDate } from "@/lib/format";
-import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
-import { useFormDraft } from "@/hooks/use-form-draft";
+import { formatCurrency } from "@/lib/format";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import { isValidCpf } from "@/lib/validators";
-import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
+import {
+  getClientPrefillDataAction,
+  getSlotClientMachinesAction,
+  registerSlotClientAction,
+} from "@/server/actions/module-record-actions";
 import { PhotoCaptureInput } from "./photo-capture-input";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
-import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
-
-const schema = z
-  .object({
-    newClient: z.boolean().default(false),
-    clientName: z.string().optional(),
-    phone: z.string().optional(),
-    cpf: z.string().optional(),
-    cep: z.string().optional(),
-    street: z.string().optional(),
-    neighborhood: z.string().optional(),
-    city: z.string().optional(),
-    state: z.string().optional(),
-    customerDebt: z.coerce.number().min(0),
-    ppValue: z.coerce.number().min(0),
-    initialAmount: z.coerce.number().min(0),
-    initialAmountMode: z.enum(["NONE", "DEBT", "NEGATIVE"]),
-    optionalGreedAmount: z.coerce.number().min(0),
-    active: z.boolean().default(true),
-    occurredAt: z.string().min(1, "Informe a data."),
-    currentIncome: z.coerce.number().min(0),
-    previousIncome: z.coerce.number().min(0),
-    currentExpense: z.coerce.number().min(0),
-    previousExpense: z.coerce.number().min(0),
-    percentageSplit: z.coerce.number().min(0).max(100),
-    conferenceCount: z.coerce.number().min(0),
-    negativeEntries: z.array(z.object({ amount: z.coerce.number().min(0) })),
-    feedingNegativeAmount: z.coerce.number().min(0),
-    customerDebtDiscounted: z.coerce.number().min(0),
-    generatedDebtAmount: z.coerce.number().min(0),
-    debtMode: z.enum(["NONE", "DEBT", "NEGATIVE"]),
-    paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
-    screenPhoto: z.any().optional(),
-    notes: z.string().optional(),
-  })
-  .refine((data) => !data.cpf?.trim() || isValidCpf(data.cpf), {
-    message: "CPF invalido.",
-    path: ["cpf"],
-  })
-  .superRefine((data, ctx) => {
-    const photo = (data.screenPhoto as FileList | undefined)?.[0];
-    if (!photo) {
-      ctx.addIssue({ code: "custom", path: ["screenPhoto"], message: "Tire uma foto da tela antes de salvar." });
-    }
-  });
-
-type FormInput = z.input<typeof schema>;
-type FormValues = z.output<typeof schema>;
 
 function getFile(value: unknown) {
   const file = Array.isArray(value) ? value[0] : (value as FileList | undefined)?.[0];
@@ -80,182 +43,60 @@ async function uploadFile(file: File, category: string) {
   return result.id;
 }
 
-type ReceiptState = {
-  clientLabel: string;
-  phone?: string;
-  occurredAt: string;
-  currentIncome: number;
-  currentExpense: number;
-  percentageSplit: number;
-  clientShareFinal: number;
-  houseAmount: number;
-  conferenceCount: number;
-  paymentMethod: string;
-  notes?: string;
-};
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
 
-const modeLabels: Record<string, string> = {
-  NONE: "Nenhum",
-  DEBT: "Dívida",
-  NEGATIVE: "Negativo",
-};
+// ──────────────────────────────────────────────────────────────────────────
+// Cadastro: aqui e onde se decide QUANTAS maquinas o cliente tem. O
+// fechamento de cada uma acontece depois, na visita (SlotVisitForm) --
+// registrar so cria as maquinas vazias, numeradas 1..N.
+// ──────────────────────────────────────────────────────────────────────────
 
-type LoadedSlotMachine = { clientName: string; phone: string; clientMachineNumber: number; customerDebt: number; ppValue: number; initialAmount: number };
+const registerSchema = z
+  .object({
+    clientName: z.string().min(1, "Informe o cliente."),
+    phone: z.string().optional(),
+    cpf: z.string().optional(),
+    cep: z.string().optional(),
+    street: z.string().optional(),
+    neighborhood: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    machineCount: z.coerce.number().int().min(1, "Informe quantas máquinas."),
+  })
+  .refine((data) => !data.cpf?.trim() || isValidCpf(data.cpf), {
+    message: "CPF invalido.",
+    path: ["cpf"],
+  });
 
-export function SlotForm({ hideFinancials = false, initialClientName = "", initialPhone = "", initialClientId }: { hideFinancials?: boolean; initialClientName?: string; initialPhone?: string; initialClientId?: string } = {}) {
-  const [receipt, setReceipt] = useState<ReceiptState | null>(null);
-  const [loading, setLoading] = useState(false);
-  const submittingRef = useRef(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+type RegisterInput = z.input<typeof registerSchema>;
+type RegisterValues = z.output<typeof registerSchema>;
+
+function SlotRegisterForm({
+  initialClientName,
+  initialPhone,
+  addingToClientName,
+  onRegistered,
+}: {
+  initialClientName?: string;
+  initialPhone?: string;
+  addingToClientName?: string;
+  onRegistered: (clientName: string) => void;
+}) {
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState<string | null>(null);
-  const [loadedMachine, setLoadedMachine] = useState<LoadedSlotMachine | null>(null);
-  const [machineLoading, setMachineLoading] = useState(Boolean(initialClientId));
-  // Cliente com varias maquinas: em vez de reassociar a maquina aberta pra
-  // outro cliente (nao foi isso que o dono do projeto pediu), este modo
-  // registra uma maquina A MAIS pro mesmo cliente, numerada sozinha como a
-  // proxima dele.
-  const [addingNewMachine, setAddingNewMachine] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
-  const form = useForm<FormInput, unknown, FormValues>({
-    resolver: zodResolver(schema),
+  const form = useForm<RegisterInput, unknown, RegisterValues>({
+    resolver: zodResolver(registerSchema),
     defaultValues: {
-      clientName: initialClientName,
-      active: true,
-      newClient: false,
-      initialAmountMode: "NONE",
-      debtMode: "NONE",
-      paymentMethod: "PIX",
-      percentageSplit: 50,
-      customerDebt: 0,
-      ppValue: 0,
-      initialAmount: 0,
-      optionalGreedAmount: 0,
-      currentIncome: 0,
-      previousIncome: 0,
-      currentExpense: 0,
-      previousExpense: 0,
-      conferenceCount: 0,
-      negativeEntries: [{ amount: 0 }],
-      feedingNegativeAmount: 0,
-      customerDebtDiscounted: 0,
-      generatedDebtAmount: 0,
+      clientName: addingToClientName ?? initialClientName ?? "",
+      phone: initialPhone ?? "",
+      machineCount: 1,
     },
   });
-  const { clearDraft } = useFormDraft(`slot:${initialClientId ?? "new"}`, form);
-
-  function loadMachineData() {
-    if (!initialClientId) return;
-    setMachineLoading(true);
-    getClientPrefillDataAction("h-caca-niquel", initialClientId)
-      .then((data) => {
-        if (!data || data.kind !== "slot-machine") return;
-        setLoadedMachine({ clientName: data.clientName, phone: data.phone, clientMachineNumber: data.clientMachineNumber, customerDebt: data.customerDebt, ppValue: data.ppValue, initialAmount: data.initialAmount });
-        form.setValue("clientName", data.clientName);
-        form.setValue("phone", data.phone);
-        form.setValue("cpf", data.cpf);
-        form.setValue("cep", data.cep);
-        form.setValue("street", data.street);
-        form.setValue("neighborhood", data.neighborhood);
-        form.setValue("city", data.city);
-        form.setValue("state", data.state);
-        form.setValue("customerDebt", data.customerDebt);
-        form.setValue("ppValue", data.ppValue);
-        form.setValue("initialAmount", data.initialAmount);
-        form.setValue("initialAmountMode", data.initialAmountMode as "NONE" | "DEBT" | "NEGATIVE");
-        form.setValue("optionalGreedAmount", data.optionalGreedAmount);
-        form.setValue("active", data.active);
-        // Entrada/saida anterior vem do ultimo fechamento dessa maquina --
-        // nao precisa digitar de novo o que ja foi "atual" da ultima vez.
-        form.setValue("previousIncome", data.previousIncome);
-        form.setValue("previousExpense", data.previousExpense);
-        form.setValue("newClient", false);
-      })
-      .catch(() => setSaveError("Erro ao carregar dados da máquina."))
-      .finally(() => setMachineLoading(false));
-  }
-
-  useEffect(() => {
-    loadMachineData();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [initialClientId]);
-
-  function startNewMachineForClient() {
-    setAddingNewMachine(true);
-    form.setValue("newClient", true);
-    // So os numeros do fechamento sao da maquina -- cadastro do cliente
-    // (nome, telefone, endereco) continua preenchido, e o mesmo cliente.
-    form.setValue("customerDebt", 0);
-    form.setValue("ppValue", 0);
-    form.setValue("initialAmount", 0);
-    form.setValue("initialAmountMode", "NONE");
-    form.setValue("previousIncome", 0);
-    form.setValue("previousExpense", 0);
-    form.setValue("currentIncome", 0);
-    form.setValue("currentExpense", 0);
-    form.setValue("conferenceCount", 0);
-    form.setValue("negativeEntries", [{ amount: 0 }]);
-    form.setValue("feedingNegativeAmount", 0);
-  }
-
-  function cancelNewMachineForClient() {
-    setAddingNewMachine(false);
-    loadMachineData();
-  }
-
-  const negativeEntries = useFieldArray({ control: form.control, name: "negativeEntries" });
-
-  const currentIncome = Number(useWatch({ control: form.control, name: "currentIncome" }) ?? 0);
-  const currentExpense = Number(useWatch({ control: form.control, name: "currentExpense" }) ?? 0);
-  const previousIncome = Number(useWatch({ control: form.control, name: "previousIncome" }) ?? 0);
-  const previousExpense = Number(useWatch({ control: form.control, name: "previousExpense" }) ?? 0);
-  const percentageSplit = Number(
-    useWatch({ control: form.control, name: "percentageSplit" }) ?? 0,
-  );
-  const watchedNegativeEntries = useWatch({ control: form.control, name: "negativeEntries" }) ?? [];
-  const feedingNegativeAmount =
-    Number(useWatch({ control: form.control, name: "feedingNegativeAmount" }) ?? 0);
-  const optionalGreedAmount =
-    Number(useWatch({ control: form.control, name: "optionalGreedAmount" }) ?? 0);
-  const customerDebtDiscounted =
-    Number(useWatch({ control: form.control, name: "customerDebtDiscounted" }) ?? 0);
-  const generatedDebtAmount =
-    Number(useWatch({ control: form.control, name: "generatedDebtAmount" }) ?? 0);
-  const newClient = Boolean(useWatch({ control: form.control, name: "newClient" }) ?? false);
-  const initialAmountMode = String(
-    useWatch({ control: form.control, name: "initialAmountMode" }) ?? "NONE",
-  );
-  const initialAmount = Number(useWatch({ control: form.control, name: "initialAmount" }) ?? 0);
-  const ppValue = Number(useWatch({ control: form.control, name: "ppValue" }) ?? 0);
-  const customerDebt = Number(useWatch({ control: form.control, name: "customerDebt" }) ?? 0);
-
-  const manualNegativeAmount = useMemo(
-    () => watchedNegativeEntries.reduce((sum, entry) => sum + Number(entry?.amount ?? 0), 0),
-    [watchedNegativeEntries],
-  );
-  const initialNegativeBonus = newClient && initialAmountMode === "NEGATIVE" ? initialAmount : 0;
-  const negativeAmount = manualNegativeAmount + initialNegativeBonus;
-
-  const baseDebt = newClient ? (initialAmountMode === "DEBT" ? initialAmount : 0) : customerDebt;
-  const effectiveCustomerDebt = Math.max(baseDebt - ppValue, 0);
-
-  const incomeDifference = useMemo(
-    () => currentIncome - previousIncome,
-    [currentIncome, previousIncome],
-  );
-  const expenseDifference = useMemo(
-    () => currentExpense - previousExpense,
-    [currentExpense, previousExpense],
-  );
-  const netRevenue = incomeDifference - expenseDifference;
-  const totalNegative = negativeAmount + feedingNegativeAmount;
-  const adjustedTotal = netRevenue - totalNegative;
-  const clientShareBase = adjustedTotal * (percentageSplit / 100);
-  const houseShareBase = adjustedTotal - clientShareBase;
-  const clientShareAfterGreed = clientShareBase - optionalGreedAmount;
-  const houseShareAfterGreed = houseShareBase + optionalGreedAmount;
-  const clientShareFinal = clientShareAfterGreed - customerDebtDiscounted;
-  const houseAmount = houseShareAfterGreed - generatedDebtAmount;
 
   const watchedStreet = useWatch({ control: form.control, name: "street" });
   const watchedNeighborhood = useWatch({ control: form.control, name: "neighborhood" });
@@ -274,12 +115,10 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
     setCepLoading(true);
     const address = await fetchAddressByCep(cep);
     setCepLoading(false);
-
     if (!address) {
       setCepError("CEP nao encontrado.");
       return;
     }
-
     form.setValue("street", address.street, { shouldDirty: true });
     form.setValue("neighborhood", address.neighborhood, { shouldDirty: true });
     form.setValue("city", address.city, { shouldDirty: true });
@@ -287,177 +126,74 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
   }
 
   const onSubmit = form.handleSubmit(async (values) => {
-    if (submittingRef.current) return;
-    submittingRef.current = true;
-    setLoading(true);
+    setSaving(true);
     setSaveError(null);
-
-    let clientLabel = values.clientName || "Nova máquina";
-
     try {
-      const screenPhotoFile = getFile(values.screenPhoto);
-      const screenPhotoFileId = screenPhotoFile ? await uploadFile(screenPhotoFile, "PHOTO") : null;
-
-      const response = await fetch("/api/modules/h-caca-niquel/records", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          machineId: addingNewMachine ? undefined : initialClientId,
-          newClient: values.newClient,
-          clientName: values.clientName,
-          phone: values.phone,
-          cpf: values.cpf,
-          cep: values.cep,
-          street: values.street,
-          neighborhood: values.neighborhood,
-          city: values.city,
-          state: values.state,
-          customerDebt: Number(values.customerDebt),
-          ppValue: Number(values.ppValue),
-          initialAmount: Number(values.initialAmount),
-          initialAmountMode: values.initialAmountMode,
-          optionalGreedAmount: Number(values.optionalGreedAmount),
-          active: values.active,
-          occurredAt: values.occurredAt,
-          currentIncome: Number(values.currentIncome),
-          previousIncome: Number(values.previousIncome),
-          currentExpense: Number(values.currentExpense),
-          previousExpense: Number(values.previousExpense),
-          percentageSplit: Number(values.percentageSplit),
-          conferenceCount: Number(values.conferenceCount),
-          negativeAmount,
-          feedingNegativeAmount: Number(values.feedingNegativeAmount),
-          customerDebtDiscounted: Number(values.customerDebtDiscounted),
-          generatedDebtAmount: Number(values.generatedDebtAmount),
-          debtMode: values.debtMode,
-          paymentMethod: values.paymentMethod,
-          screenPhotoFileId: screenPhotoFileId ?? undefined,
-          notes: values.notes,
-        }),
+      const result = await registerSlotClientAction({
+        clientName: values.clientName,
+        phone: values.phone,
+        cpf: values.cpf,
+        cep: values.cep,
+        street: values.street,
+        neighborhood: values.neighborhood,
+        city: values.city,
+        state: values.state,
+        machineCount: Number(values.machineCount),
       });
-
-      if (!response.ok) {
-        throw new Error("Falha ao salvar o H.");
-      }
-
-      const result = (await response.json()) as { record?: { summary?: string } };
-      if (result.record?.summary) {
-        clientLabel = result.record.summary;
-      }
+      onRegistered(result.clientName);
     } catch {
-      setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
+      setSaveError("Não foi possível cadastrar. Confira os campos e tente novamente.");
+      setSaving(false);
     }
-
-    clearDraft();
-    setAddingNewMachine(false);
-    setReceipt({
-      clientLabel,
-      phone: values.phone,
-      occurredAt: values.occurredAt,
-      currentIncome,
-      currentExpense,
-      percentageSplit,
-      clientShareFinal,
-      houseAmount,
-      conferenceCount: Number(values.conferenceCount),
-      paymentMethod: values.paymentMethod,
-      notes: values.notes,
-    });
-
-    setLoading(false);
-
-    submittingRef.current = false;
   });
 
   return (
     <div className="space-y-5">
-      {hideFinancials ? null : (
-        <div className="grid gap-3 sm:grid-cols-3">
-          <article className={`rounded-[24px] border p-4 ${netRevenue < 0 ? "border-[#f87171]/20 bg-[#2b1212]/60" : "border-white/8 bg-white/[0.03]"}`}>
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Receita líquida</p>
-            <p className={`mt-2 text-xl font-semibold ${netRevenue < 0 ? "text-[#f87171]" : "text-white"}`}>{formatCurrency(netRevenue)}</p>
-          </article>
-          <article className={`rounded-[24px] border p-4 ${clientShareFinal < 0 ? "border-[#f87171]/20 bg-[#2b1212]/60" : "border-white/8 bg-white/[0.03]"}`}>
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Cliente</p>
-            <p className={`mt-2 text-xl font-semibold ${clientShareFinal < 0 ? "text-[#f87171]" : "text-white"}`}>{formatCurrency(clientShareFinal)}</p>
-          </article>
-          <article className={`rounded-[24px] border p-4 ${houseAmount < 0 ? "border-[#f87171]/20 bg-[#2b1212]/60" : "border-white/8 bg-white/[0.03]"}`}>
-            <p className="text-xs uppercase tracking-[0.22em] text-slate-500">Casa</p>
-            <p className={`mt-2 text-xl font-semibold ${houseAmount < 0 ? "text-[#f87171]" : "text-white"}`}>{formatCurrency(houseAmount)}</p>
-          </article>
-        </div>
-      )}
-
       <form onSubmit={onSubmit} className="space-y-4">
-        {/* Primeira coisa do formulario, mesmo padrao do BX -- pedido do
-            usuario apos reuniao de alinhamento. */}
-        <div className="space-y-1">
-          <PhotoCaptureInput
-            registration={form.register("screenPhoto")}
-            label="Foto da tela da máquina"
-            hint="Obrigatório para salvar o fechamento"
-          />
-          {form.formState.errors.screenPhoto ? (
-            <p className="text-sm text-[#d59a8b]">
-              {form.formState.errors.screenPhoto.message?.toString()}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2 md:col-span-2">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
+              {addingToClientName ? "Adicionar máquinas" : "Cadastro de cliente / ponto"}
             </p>
-          ) : null}
-        </div>
-
-        <div className="space-y-2">
-          <label className={labelClass} htmlFor="occurredAt">
-            Data da conferência
-          </label>
-          <input
-            id="occurredAt"
-            type="date"
-            className={fieldClass}
-            {...form.register("occurredAt")}
-          />
-        </div>
-
-        {machineLoading ? (
-          <p className="text-sm text-slate-400">Carregando dados da máquina...</p>
-        ) : (
-          <>
-            {loadedMachine && addingNewMachine ? (
-              <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#d1a04f]/30 bg-[#3a2b18]/60 px-4 py-3 text-sm text-[#f3dfae]">
-                <span>Nova máquina para {loadedMachine.clientName}</span>
-                <button
-                  type="button"
-                  onClick={cancelNewMachineForClient}
-                  className="shrink-0 text-xs font-semibold text-[#9a958b] underline underline-offset-2 hover:text-white"
-                >
-                  Cancelar
-                </button>
-              </div>
+            <label className={labelClass} htmlFor="clientName">
+              Nome do cliente
+            </label>
+            <input
+              id="clientName"
+              className={fieldClass}
+              disabled={Boolean(addingToClientName)}
+              {...form.register("clientName")}
+            />
+            {form.formState.errors.clientName ? (
+              <p className="text-[12px] text-[#d59a8b]">{form.formState.errors.clientName.message}</p>
             ) : null}
+          </div>
+          <div className="space-y-2">
+            <label className={labelClass} htmlFor="machineCount">
+              Quantidade de máquinas
+            </label>
+            <input
+              id="machineCount"
+              type="number"
+              inputMode="numeric"
+              min="1"
+              step="1"
+              className={fieldClass}
+              {...form.register("machineCount")}
+            />
+            {form.formState.errors.machineCount ? (
+              <p className="text-[12px] text-[#d59a8b]">{form.formState.errors.machineCount.message}</p>
+            ) : (
+              <p className={hintClass}>
+                {addingToClientName
+                  ? "Quantas máquinas a mais para este cliente."
+                  : "Numeradas sozinhas, de 1 até essa quantidade."}
+              </p>
+            )}
+          </div>
 
-            {loadedMachine && !addingNewMachine ? (
-              <div className="rounded-[18px] border border-[#d1a04f]/30 bg-[#3a2b18]/60 p-4 text-sm text-[#f3dfae] space-y-0.5">
-                <p className="font-semibold text-white">{loadedMachine.clientName}</p>
-                <p className="text-[#9a958b]">{loadedMachine.phone}</p>
-                <p className="mt-1 text-xs text-[#9a958b]">Máquina {loadedMachine.clientMachineNumber} · Dívida {formatCurrency(loadedMachine.customerDebt)}</p>
-                <button
-                  type="button"
-                  onClick={startNewMachineForClient}
-                  className="mt-2 inline-flex items-center gap-1.5 rounded-xl border border-[#d1a04f]/30 bg-[#d1a04f]/10 px-3 py-1.5 text-xs font-semibold text-[#f3dfae] transition hover:bg-[#d1a04f]/20"
-                >
-                  <Plus className="size-3.5" />
-                  Nova máquina para {loadedMachine.clientName}
-                </button>
-              </div>
-            ) : !loadedMachine ? (
-              <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2 md:col-span-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
-                  Cadastro de cliente / ponto
-                </p>
-                <label className={labelClass} htmlFor="clientName">
-                  Nome do cliente
-                </label>
-                <input id="clientName" className={fieldClass} {...form.register("clientName")} />
-              </div>
+          {!addingToClientName ? (
+            <>
               <div className="space-y-2">
                 <label className={labelClass} htmlFor="phone">
                   Telefone
@@ -532,7 +268,7 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
                 <label className={labelClass} htmlFor="state">
                   Estado
                 </label>
-                <input id="state" className={fieldClass} {...form.register("state")} />
+                <input id="state" className={fieldClass} maxLength={2} {...form.register("state")} />
               </div>
               {mapsLink ? (
                 <div className="md:col-span-2">
@@ -546,287 +282,527 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
                   </a>
                 </div>
               ) : null}
-              </div>
-            ) : null}
-          </>
-        )}
+            </>
+          ) : null}
+        </div>
 
-        {newClient ? (
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-2">
-              <label className={labelClass} htmlFor="initialAmount">
-                Valor inicial do cliente
-              </label>
+        {saveError ? <p className="text-sm text-[#d59a8b]">{saveError}</p> : null}
+
+        <button
+          type="submit"
+          disabled={saving}
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d1a04f] px-4 py-3.5 text-sm font-semibold text-[#0d0a05] shadow-[0_6px_20px_rgba(209,160,79,0.32)] transition hover:bg-[#daa855] disabled:opacity-70"
+        >
+          {saving ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
+          {addingToClientName ? "Adicionar máquinas" : "Cadastrar e ir para a visita"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Visita: fecha varias maquinas do mesmo cliente de uma vez, tudo na mesma
+// tela (pedido do dono do projeto) -- cada maquina e uma secao que abre e
+// fecha, com o "anterior" ja vindo do ultimo fechamento dela.
+// ──────────────────────────────────────────────────────────────────────────
+
+const visitMachineSchema = z
+  .object({
+    machineId: z.string(),
+    clientMachineNumber: z.number(),
+    included: z.boolean(),
+    customerDebt: z.coerce.number().min(0),
+    currentIncome: z.coerce.number().min(0),
+    previousIncome: z.coerce.number().min(0),
+    currentExpense: z.coerce.number().min(0),
+    previousExpense: z.coerce.number().min(0),
+    percentageSplit: z.coerce.number().min(0).max(100),
+    conferenceCount: z.coerce.number().min(0),
+    negativeAmount: z.coerce.number().min(0),
+    feedingNegativeAmount: z.coerce.number().min(0),
+    customerDebtDiscounted: z.coerce.number().min(0),
+    generatedDebtAmount: z.coerce.number().min(0),
+    debtMode: z.enum(["NONE", "DEBT", "NEGATIVE"]),
+    screenPhoto: z.any().optional(),
+    notes: z.string().optional(),
+  })
+  .superRefine((data, ctx) => {
+    if (!data.included) return;
+    const photo = (data.screenPhoto as FileList | undefined)?.[0];
+    if (!photo) {
+      ctx.addIssue({ code: "custom", path: ["screenPhoto"], message: "Tire uma foto da tela antes de salvar." });
+    }
+  });
+
+const visitSchema = z.object({
+  occurredAt: z.string().min(1, "Informe a data."),
+  paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
+  machines: z.array(visitMachineSchema).min(1),
+});
+
+type VisitInput = z.input<typeof visitSchema>;
+type VisitValues = z.output<typeof visitSchema>;
+
+function computeMachineSplit(m: {
+  currentIncome: number;
+  previousIncome: number;
+  currentExpense: number;
+  previousExpense: number;
+  percentageSplit: number;
+  negativeAmount: number;
+  feedingNegativeAmount: number;
+  customerDebtDiscounted: number;
+  generatedDebtAmount: number;
+}) {
+  const incomeDifference = m.currentIncome - m.previousIncome;
+  const expenseDifference = m.currentExpense - m.previousExpense;
+  const netRevenue = incomeDifference - expenseDifference;
+  const totalNegative = m.negativeAmount + m.feedingNegativeAmount;
+  const adjustedTotal = netRevenue - totalNegative;
+  const clientShareBase = adjustedTotal * (m.percentageSplit / 100);
+  const houseShareBase = adjustedTotal - clientShareBase;
+  const clientShareFinal = clientShareBase - m.customerDebtDiscounted;
+  const houseAmount = houseShareBase - m.generatedDebtAmount;
+  return { incomeDifference, expenseDifference, netRevenue, clientShareFinal, houseAmount };
+}
+
+type MachineResult = {
+  clientMachineNumber: number;
+  ok: boolean;
+  clientShareFinal: number;
+  houseAmount: number;
+};
+
+function MachineFieldset({
+  index,
+  form,
+  expanded,
+  onToggle,
+  watchedMachine,
+  hideFinancials,
+}: {
+  index: number;
+  form: UseFormReturn<VisitInput, unknown, VisitValues>;
+  expanded: boolean;
+  onToggle: () => void;
+  watchedMachine: VisitInput["machines"] extends (infer M)[] ? M | undefined : never;
+  hideFinancials: boolean;
+}) {
+  const included = watchedMachine?.included ?? true;
+  const clientMachineNumber = watchedMachine?.clientMachineNumber ?? index + 1;
+
+  const split = computeMachineSplit({
+    currentIncome: Number(watchedMachine?.currentIncome ?? 0),
+    previousIncome: Number(watchedMachine?.previousIncome ?? 0),
+    currentExpense: Number(watchedMachine?.currentExpense ?? 0),
+    previousExpense: Number(watchedMachine?.previousExpense ?? 0),
+    percentageSplit: Number(watchedMachine?.percentageSplit ?? 50),
+    negativeAmount: Number(watchedMachine?.negativeAmount ?? 0),
+    feedingNegativeAmount: Number(watchedMachine?.feedingNegativeAmount ?? 0),
+    customerDebtDiscounted: Number(watchedMachine?.customerDebtDiscounted ?? 0),
+    generatedDebtAmount: Number(watchedMachine?.generatedDebtAmount ?? 0),
+  });
+
+  const machineErrors = form.formState.errors.machines?.[index];
+
+  return (
+    <div
+      className={`overflow-hidden rounded-2xl border ${
+        included ? "border-[rgba(245,241,232,0.08)]" : "border-[rgba(245,241,232,0.05)] opacity-60"
+      } bg-[#0b0f0e]/35`}
+    >
+      <div className="flex items-center gap-3 px-4 py-3">
+        <label className="flex items-center gap-2 text-sm font-semibold text-white">
+          <input type="checkbox" {...form.register(`machines.${index}.included`)} />
+          Máquina {clientMachineNumber}
+        </label>
+        {!hideFinancials && included ? (
+          <span
+            className={`ml-auto text-xs font-medium ${
+              split.houseAmount < 0 ? "text-[#f87171]" : "text-[#8cc490]"
+            }`}
+          >
+            {formatCurrency(split.houseAmount)}
+          </span>
+        ) : null}
+        <button
+          type="button"
+          onClick={onToggle}
+          className="shrink-0 text-[#9a958b] transition hover:text-white"
+        >
+          {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+        </button>
+      </div>
+
+      {expanded && included ? (
+        <div className="space-y-4 border-t border-[rgba(245,241,232,0.08)] px-4 py-4">
+          <div className="space-y-1">
+            <PhotoCaptureInput
+              registration={form.register(`machines.${index}.screenPhoto`)}
+              label="Foto da tela da máquina"
+              hint="Obrigatório para salvar o fechamento"
+            />
+            {machineErrors?.screenPhoto ? (
+              <p className="text-sm text-[#d59a8b]">{machineErrors.screenPhoto.message?.toString()}</p>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className={labelClass}>Entrada atual</label>
               <input
-                id="initialAmount"
                 type="number"
                 inputMode="decimal"
                 step="0.01"
                 min="0"
                 className={fieldClass}
-                {...form.register("initialAmount")}
+                {...form.register(`machines.${index}.currentIncome`)}
               />
             </div>
-            <div className="space-y-2">
-              <label className={labelClass} htmlFor="initialAmountMode">
-                Valor inicial é
-              </label>
-              <select id="initialAmountMode" className={selectClass} {...form.register("initialAmountMode")}>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Entrada anterior</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register(`machines.${index}.previousIncome`)}
+              />
+              <p className={hintClass}>Puxa sozinho da última conferência.</p>
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Saída atual</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register(`machines.${index}.currentExpense`)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Saída anterior</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register(`machines.${index}.previousExpense`)}
+              />
+              <p className={hintClass}>Puxa sozinho da última conferência.</p>
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>% do cliente</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="1"
+                min="0"
+                max="100"
+                className={fieldClass}
+                {...form.register(`machines.${index}.percentageSplit`)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Conferências</label>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                step="1"
+                className={fieldClass}
+                {...form.register(`machines.${index}.conferenceCount`)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Negativo</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register(`machines.${index}.negativeAmount`)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Negativo de alimentação</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register(`machines.${index}.feedingNegativeAmount`)}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <label className={labelClass}>Dívida do cliente (saldo)</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register(`machines.${index}.customerDebt`)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Dívida descontada agora</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register(`machines.${index}.customerDebtDiscounted`)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Dívida gerada agora</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register(`machines.${index}.generatedDebtAmount`)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Modo</label>
+              <select className={selectClass} {...form.register(`machines.${index}.debtMode`)}>
                 <option value="NONE">Nenhum</option>
                 <option value="DEBT">Dívida</option>
                 <option value="NEGATIVE">Negativo</option>
               </select>
-              <p className={hintClass}>Decisão do dono: o valor inicial entra como dívida do cliente ou como negativo da máquina.</p>
             </div>
           </div>
-        ) : null}
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="currentIncome">
-              Entrada atual
-            </label>
-            <input
-              id="currentIncome"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("currentIncome")}
-            />
+          <div className="space-y-1.5">
+            <label className={labelClass}>Observações</label>
+            <textarea className={textareaClass} {...form.register(`machines.${index}.notes`)} />
           </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="previousIncome">
-              Entrada anterior
-            </label>
-            <input
-              id="previousIncome"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("previousIncome")}
-            />
-            <p className={hintClass}>Puxa sozinho da última conferência desta máquina.</p>
-          </div>
-          {incomeDifference < 0 ? (
-            <div className="flex items-center gap-2 rounded-xl border border-[#d1a04f]/30 bg-[#3a2b18]/60 px-3 py-2 text-xs text-[#f3dfae] md:col-span-2">
-              <TriangleAlert className="size-3.5 shrink-0" />
-              Entrada atual menor que a anterior — diferença negativa de {formatCurrency(Math.abs(incomeDifference))}.
+
+          {!hideFinancials ? (
+            <div className="rounded-xl border border-[#6f8790]/25 bg-[#27383a]/70 p-3 text-xs leading-5 text-[#d6e1de]/80">
+              Receita líquida {formatCurrency(split.netRevenue)} · Cliente {formatCurrency(split.clientShareFinal)} · Casa{" "}
+              {formatCurrency(split.houseAmount)}
             </div>
           ) : null}
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="currentExpense">
-              Saída atual
-            </label>
-            <input
-              id="currentExpense"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("currentExpense")}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="previousExpense">
-              Saída anterior
-            </label>
-            <input
-              id="previousExpense"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("previousExpense")}
-            />
-            <p className={hintClass}>Puxa sozinho da última conferência desta máquina.</p>
-          </div>
-          {expenseDifference < 0 ? (
-            <div className="flex items-center gap-2 rounded-xl border border-[#d1a04f]/30 bg-[#3a2b18]/60 px-3 py-2 text-xs text-[#f3dfae] md:col-span-2">
-              <TriangleAlert className="size-3.5 shrink-0" />
-              Saída atual menor que a anterior — diferença negativa de {formatCurrency(Math.abs(expenseDifference))}.
-            </div>
-          ) : null}
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="percentageSplit">
-              Percentual do cliente
-            </label>
-            <input
-              id="percentageSplit"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              max="100"
-              className={fieldClass}
-              {...form.register("percentageSplit")}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="conferenceCount">
-              Conferências
-            </label>
-            <input
-              id="conferenceCount"
-              type="number"
-              min="0"
-              className={fieldClass}
-              {...form.register("conferenceCount")}
-            />
-            <p className={hintClass}>Conferência ilimitada — registre quantas forem feitas.</p>
-          </div>
         </div>
+      ) : null}
+    </div>
+  );
+}
 
-        <div className="space-y-2">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
-            Negativo (abastecimento da máquina)
-          </p>
-          {negativeEntries.fields.map((field, index) => (
-            <div key={field.id} className="flex items-center gap-2">
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                className={fieldClass}
-                placeholder={`Negativo ${index + 1}`}
-                {...form.register(`negativeEntries.${index}.amount`)}
-              />
-              {negativeEntries.fields.length > 1 ? (
-                <button
-                  type="button"
-                  onClick={() => negativeEntries.remove(index)}
-                  className="inline-flex shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.03] p-2.5 text-[#9a958b] transition hover:text-white"
-                >
-                  <X className="size-4" />
-                </button>
-              ) : null}
+function SlotVisitForm({
+  hideFinancials,
+  clientName,
+  onAddMoreMachines,
+}: {
+  hideFinancials: boolean;
+  clientName: string;
+  onAddMoreMachines: () => void;
+}) {
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [phone, setPhone] = useState("");
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(0);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [results, setResults] = useState<MachineResult[] | null>(null);
+
+  const form = useForm<VisitInput, unknown, VisitValues>({
+    resolver: zodResolver(visitSchema),
+    defaultValues: {
+      occurredAt: todayStr(),
+      paymentMethod: "PIX",
+      machines: [],
+    },
+  });
+  const { fields, replace } = useFieldArray({ control: form.control, name: "machines" });
+
+  useEffect(() => {
+    setLoading(true);
+    setLoadError(null);
+    setResults(null);
+    getSlotClientMachinesAction(clientName)
+      .then((data) => {
+        setPhone(data.phone);
+        replace(
+          data.machines.map((m) => ({
+            machineId: m.id,
+            clientMachineNumber: m.clientMachineNumber,
+            included: m.active,
+            customerDebt: m.customerDebt,
+            currentIncome: 0,
+            previousIncome: m.previousIncome,
+            currentExpense: 0,
+            previousExpense: m.previousExpense,
+            percentageSplit: 50,
+            conferenceCount: 0,
+            negativeAmount: 0,
+            feedingNegativeAmount: 0,
+            customerDebtDiscounted: 0,
+            generatedDebtAmount: 0,
+            debtMode: "NONE" as const,
+            notes: "",
+          })),
+        );
+        setExpandedIndex(0);
+      })
+      .catch(() => setLoadError("Erro ao carregar as máquinas deste cliente."))
+      .finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientName]);
+
+  const watchedMachines = useWatch({ control: form.control, name: "machines" }) ?? [];
+
+  const onSubmit = form.handleSubmit(async (values) => {
+    setSaving(true);
+    setSaveError(null);
+
+    const included = values.machines.filter((m) => m.included);
+    if (included.length === 0) {
+      setSaveError("Selecione ao menos uma máquina pra fechar.");
+      setSaving(false);
+      return;
+    }
+
+    const outcomes: MachineResult[] = [];
+    for (const m of included) {
+      const split = computeMachineSplit(m);
+      let ok = true;
+      try {
+        const screenPhoto = getFile(m.screenPhoto);
+        const screenPhotoFileId = screenPhoto ? await uploadFile(screenPhoto, "PHOTO") : null;
+        const response = await fetch("/api/modules/h-caca-niquel/records", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            machineId: m.machineId,
+            newClient: false,
+            customerDebt: Number(m.customerDebt),
+            ppValue: 0,
+            initialAmount: 0,
+            initialAmountMode: "NONE",
+            optionalGreedAmount: 0,
+            occurredAt: values.occurredAt,
+            currentIncome: Number(m.currentIncome),
+            previousIncome: Number(m.previousIncome),
+            currentExpense: Number(m.currentExpense),
+            previousExpense: Number(m.previousExpense),
+            percentageSplit: Number(m.percentageSplit),
+            conferenceCount: Number(m.conferenceCount),
+            negativeAmount: Number(m.negativeAmount),
+            feedingNegativeAmount: Number(m.feedingNegativeAmount),
+            customerDebtDiscounted: Number(m.customerDebtDiscounted),
+            generatedDebtAmount: Number(m.generatedDebtAmount),
+            debtMode: m.debtMode,
+            paymentMethod: values.paymentMethod,
+            screenPhotoFileId: screenPhotoFileId ?? undefined,
+            notes: m.notes,
+          }),
+        });
+        ok = response.ok;
+      } catch {
+        ok = false;
+      }
+      outcomes.push({
+        clientMachineNumber: m.clientMachineNumber,
+        ok,
+        clientShareFinal: split.clientShareFinal,
+        houseAmount: split.houseAmount,
+      });
+    }
+
+    setResults(outcomes);
+    if (outcomes.some((o) => !o.ok)) {
+      setSaveError("Uma ou mais máquinas não foram salvas no servidor — confira a conexão.");
+    }
+    setSaving(false);
+  });
+
+  if (loading) {
+    return <p className="text-sm text-slate-400">Carregando máquinas de {clientName}...</p>;
+  }
+  if (loadError) {
+    return <p className="text-sm text-[#d59a8b]">{loadError}</p>;
+  }
+
+  if (results) {
+    const totalCliente = results.reduce((s, r) => s + r.clientShareFinal, 0);
+    const totalCasa = results.reduce((s, r) => s + r.houseAmount, 0);
+    return (
+      <div className="space-y-4">
+        <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">
+          <div className="flex items-center gap-2 text-[#dbe6d4]">
+            <ReceiptText className="size-4" />
+            <p className="font-medium">Visita de {clientName} salva</p>
+          </div>
+          <div className="mt-4 space-y-1.5 text-sm text-[#dbe6d4]/85">
+            {results.map((r) => (
+              <div key={r.clientMachineNumber} className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-1.5">
+                  {r.ok ? (
+                    <CheckCircle2 className="size-3.5 text-[#8aa17c]" />
+                  ) : (
+                    <X className="size-3.5 text-[#f87171]" />
+                  )}
+                  Máquina {r.clientMachineNumber}
+                </span>
+                {hideFinancials ? null : <span>{formatCurrency(r.houseAmount)}</span>}
+              </div>
+            ))}
+          </div>
+          {hideFinancials ? null : (
+            <div className="mt-4 grid grid-cols-2 gap-3 border-t border-[#8aa17c]/20 pt-3 text-sm">
+              <p>
+                Total cliente: <span className="font-semibold text-white">{formatCurrency(totalCliente)}</span>
+              </p>
+              <p>
+                Total casa: <span className="font-semibold text-white">{formatCurrency(totalCasa)}</span>
+              </p>
             </div>
-          ))}
-          <button
-            type="button"
-            onClick={() => negativeEntries.append({ amount: 0 })}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs font-semibold text-[#c9c2b4] transition hover:text-white"
-          >
-            <Plus className="size-3.5" />
-            Adicionar negativo
-          </button>
-          <p className={hintClass}>Pode haver mais de um negativo no mesmo fechamento. Total: {formatCurrency(negativeAmount)}</p>
-        </div>
+          )}
+          {saveError ? <p className="mt-3 text-sm text-[#f0c9ad]">{saveError}</p> : null}
+        </article>
+        <button
+          type="button"
+          onClick={() => setResults(null)}
+          className="text-xs font-semibold text-[#9a958b] underline underline-offset-2 hover:text-white"
+        >
+          Fazer outra visita
+        </button>
+      </div>
+    );
+  }
 
+  return (
+    <div className="space-y-4">
+      <div className="rounded-[18px] border border-[#d1a04f]/30 bg-[#3a2b18]/60 p-4 text-sm text-[#f3dfae] space-y-0.5">
+        <p className="font-semibold text-white">{clientName}</p>
+        {phone ? <p className="text-[#9a958b]">{phone}</p> : null}
+        <p className="mt-1 text-xs text-[#9a958b]">
+          {fields.length} máquina{fields.length === 1 ? "" : "s"}
+        </p>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-4">
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
-            <label className={labelClass} htmlFor="feedingNegativeAmount">
-              Negativo na alimentação (opcional)
+            <label className={labelClass} htmlFor="occurredAt">
+              Data da conferência
             </label>
-            <input
-              id="feedingNegativeAmount"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("feedingNegativeAmount")}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="optionalGreedAmount">
-              Ganância (opcional)
-            </label>
-            <input
-              id="optionalGreedAmount"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("optionalGreedAmount")}
-            />
-            <p className={hintClass}>Valor extra descontado do cliente e somado à casa.</p>
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="customerDebt">
-              Dívida do cliente (saldo)
-            </label>
-            <input
-              id="customerDebt"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("customerDebt")}
-            />
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="customerDebtDiscounted">
-              Dívida descontada agora
-            </label>
-            <input
-              id="customerDebtDiscounted"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("customerDebtDiscounted")}
-            />
-            <p className={hintClass}>Descontado só da parte do cliente, depois da divisão dos 50%.</p>
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="generatedDebtAmount">
-              Dívida gerada agora
-            </label>
-            <input
-              id="generatedDebtAmount"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("generatedDebtAmount")}
-            />
-            <p className={hintClass}>Novo valor que a casa adianta ao cliente neste fechamento.</p>
-          </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="ppValue">
-              P.P. (pagamento pendente)
-            </label>
-            <input
-              id="ppValue"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("ppValue")}
-            />
-            <p className={hintClass}>
-              Abate do saldo de dívida do cliente. Dívida efetiva: {formatCurrency(effectiveCustomerDebt)}
-            </p>
-          </div>
-        </div>
-
-        <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
-          <input type="checkbox" {...form.register("active")} />
-          Máquina ativa
-        </label>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="debtMode">
-              Este fechamento é
-            </label>
-            <select id="debtMode" className={selectClass} {...form.register("debtMode")}>
-              <option value="NONE">{modeLabels.NONE}</option>
-              <option value="DEBT">{modeLabels.DEBT}</option>
-              <option value="NEGATIVE">{modeLabels.NEGATIVE}</option>
-            </select>
+            <input id="occurredAt" type="date" className={fieldClass} {...form.register("occurredAt")} />
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="paymentMethod">
@@ -842,77 +818,116 @@ export function SlotForm({ hideFinancials = false, initialClientName = "", initi
         </div>
 
         <div className="space-y-2">
-          <label className={labelClass} htmlFor="notes">
-            Observações
-          </label>
-          <textarea id="notes" className={textareaClass} {...form.register("notes")} />
+          {fields.map((field, index) => (
+            <MachineFieldset
+              key={field.id}
+              index={index}
+              form={form}
+              expanded={expandedIndex === index}
+              onToggle={() => setExpandedIndex((cur) => (cur === index ? null : index))}
+              watchedMachine={watchedMachines[index]}
+              hideFinancials={hideFinancials}
+            />
+          ))}
         </div>
 
-        {hideFinancials ? null : (
-          <div className="rounded-[24px] border border-[#6f8790]/25 bg-[#27383a]/70 p-4">
-            <div className="flex items-center gap-2 text-[#d6e1de]">
-              <TriangleAlert className="size-4" />
-              <p className="font-medium">Conferência rápida</p>
-            </div>
-            <p className="mt-2 text-sm leading-6 text-[#d6e1de]/80">
-              Diferença entrada {formatCurrency(incomeDifference)} | Diferença saída {formatCurrency(expenseDifference)} |
-              Receita líquida {formatCurrency(netRevenue)} | Negativo total {formatCurrency(totalNegative)}
+        <button
+          type="button"
+          onClick={onAddMoreMachines}
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#f3dfae] underline underline-offset-2 hover:text-white"
+        >
+          <Plus className="size-3.5" />
+          Adicionar mais máquinas para {clientName}
+        </button>
+
+        {Object.keys(form.formState.errors).length > 0 ? (
+          <div className="rounded-2xl border border-[#b46c5d]/35 bg-[#2b1e19]/70 p-3 text-sm text-[#f0c9ad]">
+            <p className="font-medium">Falta corrigir para salvar:</p>
+            <p className="mt-1 text-[13px]">
+              Confira as máquinas marcadas para fechar hoje — alguma foto ou campo está faltando.
             </p>
           </div>
-        )}
+        ) : null}
+
+        {saveError ? <p className="text-sm text-[#d59a8b]">{saveError}</p> : null}
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={saving}
           className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d1a04f] px-4 py-3.5 text-sm font-semibold text-[#0d0a05] shadow-[0_6px_20px_rgba(209,160,79,0.32)] transition hover:bg-[#daa855] disabled:opacity-70"
         >
-          {loading ? <LoaderCircle className="size-4 animate-spin" /> : null}
-          Salvar H
-          <ArrowRight className="size-4" />
+          {saving ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
+          Salvar visita
         </button>
       </form>
-
-      {saveError ? (
-        <div className="rounded-2xl border border-[#9d6b50]/35 bg-[#2b1e19]/70 p-3 text-sm text-[#f0c9ad]">
-          {saveError}
-        </div>
-      ) : null}
-
-      {receipt ? (
-        <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">
-          <div className="flex items-center gap-2 text-[#dbe6d4]">
-            <ReceiptText className="size-4" />
-            <p className="font-medium">{saveError ? "NAO salvo no servidor — confira a conexão" : "Registro do H salvo"}</p>
-          </div>
-          <div className="mt-4 grid gap-3 text-sm text-[#dbe6d4]/85 md:grid-cols-2">
-            <p>{receipt.clientLabel}</p>
-            <p>Data: {formatShortDate(receipt.occurredAt)}</p>
-            <p>Conferências: {receipt.conferenceCount}</p>
-            {hideFinancials ? null : (
-              <>
-                <p>Cliente: {formatCurrency(receipt.clientShareFinal)}</p>
-                <p>Casa: {formatCurrency(receipt.houseAmount)}</p>
-              </>
-            )}
-            <p>Pagamento: {rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}</p>
-          </div>
-          {receipt.notes ? <p className="mt-3 text-sm text-[#dbe6d4]/75">{receipt.notes}</p> : null}
-          <WhatsAppReceiptButton
-            defaultPhone={receipt.phone ?? ""}
-            autoOpen={!!receipt.phone}
-            message={[
-              "*Comprovante H (Caça-Níquel)*",
-              receipt.clientLabel,
-              `Data: ${formatShortDate(receipt.occurredAt)}`,
-              `Entrada: ${formatCurrency(receipt.currentIncome)}`,
-              `Saída: ${formatCurrency(receipt.currentExpense)}`,
-              `*Cliente: ${formatCurrency(receipt.clientShareFinal)}*`,
-              `Casa: ${formatCurrency(receipt.houseAmount)}`,
-              `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
-            ].join("\n")}
-          />
-        </article>
-      ) : null}
     </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// Ponto de entrada: resolve se ja existe cliente (initialClientId, vindo do
+// picker da Visita) e delega pro cadastro ou pra visita em bloco.
+// ──────────────────────────────────────────────────────────────────────────
+
+export function SlotForm({
+  hideFinancials = false,
+  initialClientName = "",
+  initialPhone = "",
+  initialClientId,
+}: {
+  hideFinancials?: boolean;
+  initialClientName?: string;
+  initialPhone?: string;
+  initialClientId?: string;
+} = {}) {
+  const [resolvedClientName, setResolvedClientName] = useState<string | null>(null);
+  const [loading, setLoading] = useState(Boolean(initialClientId));
+  const [addingMoreFor, setAddingMoreFor] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!initialClientId) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    getClientPrefillDataAction("h-caca-niquel", initialClientId)
+      .then((data) => {
+        if (data && data.kind === "slot-machine") setResolvedClientName(data.clientName);
+      })
+      .finally(() => setLoading(false));
+  }, [initialClientId]);
+
+  if (loading) {
+    return <p className="text-sm text-slate-400">Carregando dados do cliente...</p>;
+  }
+
+  if (addingMoreFor) {
+    return (
+      <SlotRegisterForm
+        addingToClientName={addingMoreFor}
+        onRegistered={(clientName) => {
+          setAddingMoreFor(null);
+          setResolvedClientName(clientName);
+        }}
+      />
+    );
+  }
+
+  if (resolvedClientName) {
+    return (
+      <SlotVisitForm
+        hideFinancials={hideFinancials}
+        clientName={resolvedClientName}
+        onAddMoreMachines={() => setAddingMoreFor(resolvedClientName)}
+      />
+    );
+  }
+
+  return (
+    <SlotRegisterForm
+      initialClientName={initialClientName}
+      initialPhone={initialPhone}
+      onRegistered={(clientName) => setResolvedClientName(clientName)}
+    />
   );
 }

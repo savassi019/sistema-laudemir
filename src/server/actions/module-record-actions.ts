@@ -3,10 +3,12 @@
 import { requireSession } from "@/lib/auth";
 import {
   getClientPrefillData,
+  getSlotClientMachines,
   listBxPrizeRecords,
   listModuleClientRecords,
   listModuleRecords,
   moduleSlugs,
+  registerSlotClient,
   type ModuleSlug,
 } from "@/server/services/module-record-service";
 import { getModuleReport } from "@/server/services/module-report-service";
@@ -48,6 +50,16 @@ export async function listModuleRecordsAction(
 export async function listBxPrizeRecordsAction() {
   const session = await requireSession();
   return listBxPrizeRecords(session);
+}
+
+export async function registerSlotClientAction(payload: Record<string, unknown>) {
+  const session = await requireSession();
+  return registerSlotClient(session, payload);
+}
+
+export async function getSlotClientMachinesAction(clientName: string) {
+  const session = await requireSession();
+  return getSlotClientMachines(session, clientName);
 }
 
 export async function getModuleReportAction(slug: string, from?: string, to?: string) {

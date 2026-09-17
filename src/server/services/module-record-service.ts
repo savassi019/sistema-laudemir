@@ -261,6 +261,107 @@ const createSlotSchema = z.object({
   notes: z.string().optional(),
 });
 
+const registerSlotClientSchema = z.object({
+  clientName: z.string().min(1, "Informe o cliente."),
+  phone: z.string().optional(),
+  cpf: z.string().optional(),
+  cep: z.string().optional(),
+  street: z.string().optional(),
+  neighborhood: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  machineCount: z.number().int().min(1).max(999),
+});
+
+/**
+ * Cadastro do H: a quantidade de maquinas do cliente e decidida aqui, nao
+ * uma por uma depois -- cria todas de uma vez, vazias, numeradas 1..N (ou
+ * continuando de onde parou, se o cliente ja tinha maquinas). O fechamento
+ * de cada uma acontece na visita, nao aqui.
+ */
+export async function registerSlotClient(
+  session: SessionData,
+  payload: Record<string, unknown>,
+): Promise<{ clientName: string; created: number }> {
+  const data = registerSlotClientSchema.parse(payload);
+  const existentes = await prisma.slotMachine.count({
+    where: { organizationId: session.organizationId, clientName: data.clientName },
+  });
+
+  await prisma.slotMachine.createMany({
+    data: Array.from({ length: data.machineCount }, (_, i) => ({
+      organizationId: session.organizationId,
+      uniqueMachineNumber: randomUUID(),
+      clientMachineNumber: existentes + i + 1,
+      clientSequenceNumber: "1",
+      clientName: data.clientName,
+      phone: data.phone,
+      cpf: data.cpf,
+      cep: data.cep,
+      street: data.street,
+      neighborhood: data.neighborhood,
+      city: data.city,
+      state: data.state,
+      customerDebt: 0,
+      ppValue: 0,
+      initialAmount: 0,
+      initialAmountMode: "NONE" as const,
+      optionalGreedAmount: 0,
+      active: true,
+    })),
+  });
+
+  return { clientName: data.clientName, created: data.machineCount };
+}
+
+export type SlotClientMachine = {
+  id: string;
+  clientMachineNumber: number;
+  previousIncome: number;
+  previousExpense: number;
+  customerDebt: number;
+  active: boolean;
+};
+
+/**
+ * Todas as maquinas de um cliente do H, prontas pra visita em bloco --
+ * cada uma ja vem com o "anterior" puxado sozinho do ultimo fechamento
+ * dela. Ver [[project_slot_machine_per_client_numbering]].
+ */
+export async function getSlotClientMachines(
+  session: SessionData,
+  clientName: string,
+): Promise<{ clientName: string; phone: string; machines: SlotClientMachine[] }> {
+  const machines = await prisma.slotMachine.findMany({
+    where: { organizationId: session.organizationId, clientName },
+    orderBy: { clientMachineNumber: "asc" },
+  });
+
+  const results = await Promise.all(
+    machines.map(async (m) => {
+      const ultima = await prisma.slotCollection.findFirst({
+        where: { slotMachineId: m.id },
+        orderBy: { occurredAt: "desc" },
+        select: { currentIncome: true, currentExpense: true },
+      });
+      return {
+        id: m.id,
+        clientMachineNumber: m.clientMachineNumber,
+        previousIncome: Number(ultima?.currentIncome ?? 0),
+        previousExpense: Number(ultima?.currentExpense ?? 0),
+        customerDebt: Number(m.customerDebt ?? 0),
+        active: m.active,
+      };
+    }),
+  );
+
+  return {
+    clientName,
+    phone: machines[0]?.phone ?? "",
+    machines: results,
+  };
+}
+
 const createMachineContractSchema = z.object({
   clientCode: z.string(),
   clientName: z.string(),
