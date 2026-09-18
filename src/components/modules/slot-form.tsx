@@ -27,6 +27,14 @@ import {
 } from "@/server/actions/module-record-actions";
 import { PhotoCaptureInput } from "./photo-capture-input";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
+import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
+
+const PAYMENT_METHOD_LABEL: Record<string, string> = {
+  PIX: "PIX",
+  DINHEIRO: "Dinheiro",
+  CARTAO: "Cartão",
+  ABERTO: "Aberto",
+};
 
 function getFile(value: unknown) {
   const file = Array.isArray(value) ? value[0] : (value as FileList | undefined)?.[0];
@@ -623,6 +631,7 @@ function SlotVisitForm({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [results, setResults] = useState<MachineResult[] | null>(null);
+  const [lastSubmission, setLastSubmission] = useState<{ paymentMethod: string; occurredAt: string } | null>(null);
 
   const form = useForm<VisitInput, unknown, VisitValues>({
     resolver: zodResolver(visitSchema),
@@ -726,6 +735,7 @@ function SlotVisitForm({
     }
 
     setResults(outcomes);
+    setLastSubmission({ paymentMethod: values.paymentMethod, occurredAt: values.occurredAt });
     if (outcomes.some((o) => !o.ok)) {
       setSaveError("Uma ou mais máquinas não foram salvas no servidor — confira a conexão.");
     }
@@ -776,6 +786,33 @@ function SlotVisitForm({
           )}
           {saveError ? <p className="mt-3 text-sm text-[#f0c9ad]">{saveError}</p> : null}
         </article>
+        <WhatsAppReceiptButton
+          defaultPhone={phone}
+          autoOpen={!!phone}
+          message={[
+            "*Comprovante H — Caça-níquel*",
+            `Cliente: ${clientName}`,
+            lastSubmission
+              ? `Data: ${new Date(`${lastSubmission.occurredAt}T12:00:00`).toLocaleDateString("pt-BR")}`
+              : "",
+            ...results.map((r) =>
+              hideFinancials
+                ? `Máquina ${r.clientMachineNumber}: ${r.ok ? "Fechada" : "Erro ao salvar"}`
+                : `Máquina ${r.clientMachineNumber}: ${formatCurrency(r.houseAmount)}`,
+            ),
+            ...(hideFinancials
+              ? []
+              : [
+                  `*Total cliente: ${formatCurrency(totalCliente)}*`,
+                  `*Total casa: ${formatCurrency(totalCasa)}*`,
+                ]),
+            lastSubmission
+              ? `Pagamento: ${PAYMENT_METHOD_LABEL[lastSubmission.paymentMethod] ?? lastSubmission.paymentMethod}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n")}
+        />
         <button
           type="button"
           onClick={() => setResults(null)}
