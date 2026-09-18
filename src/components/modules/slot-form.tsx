@@ -239,7 +239,7 @@ function SlotRegisterForm({
                     type="button"
                     onClick={handleCepLookup}
                     disabled={cepLoading}
-                    className="shrink-0 rounded-xl border border-[#d1a04f]/30 bg-[#d1a04f]/10 px-3 text-xs font-semibold text-[#f3dfae] disabled:opacity-60"
+                    className="shrink-0 rounded-xl border border-[#d1a04f]/30 bg-[#d1a04f]/10 px-3 text-xs font-semibold text-[#f3dfae] transition active:scale-95 active:bg-[#d1a04f]/20 disabled:opacity-60"
                   >
                     {cepLoading ? "..." : "Buscar"}
                   </button>
@@ -276,7 +276,7 @@ function SlotRegisterForm({
                     href={mapsLink}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#8aa17c] underline-offset-2 hover:underline"
+                    className="inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-[#8aa17c] underline-offset-2 transition hover:underline active:text-[#a3bb96]"
                   >
                     Ver no mapa
                   </a>
@@ -291,7 +291,7 @@ function SlotRegisterForm({
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d1a04f] px-4 py-3.5 text-sm font-semibold text-[#0d0a05] shadow-[0_6px_20px_rgba(209,160,79,0.32)] transition hover:bg-[#daa855] disabled:opacity-70"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d1a04f] px-4 py-3.5 text-sm font-semibold text-[#0d0a05] shadow-[0_6px_20px_rgba(209,160,79,0.32)] transition hover:bg-[#daa855] active:scale-[0.99] active:bg-[#daa855] disabled:opacity-70"
         >
           {saving ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
           {addingToClientName ? "Adicionar máquinas" : "Cadastrar e ir para a visita"}
@@ -410,14 +410,14 @@ function MachineFieldset({
         included ? "border-[rgba(245,241,232,0.08)]" : "border-[rgba(245,241,232,0.05)] opacity-60"
       } bg-[#0b0f0e]/35`}
     >
-      <div className="flex items-center gap-3 px-4 py-3">
-        <label className="flex items-center gap-2 text-sm font-semibold text-white">
-          <input type="checkbox" {...form.register(`machines.${index}.included`)} />
+      <div className="flex items-center gap-3 pl-4 pr-1">
+        <label className="flex min-h-11 flex-1 items-center gap-2.5 py-3 text-sm font-semibold text-white active:opacity-70">
+          <input type="checkbox" className="size-5 shrink-0 accent-[#d1a04f]" {...form.register(`machines.${index}.included`)} />
           Máquina {clientMachineNumber}
         </label>
         {!hideFinancials && included ? (
           <span
-            className={`ml-auto text-xs font-medium ${
+            className={`shrink-0 text-xs font-medium ${
               split.houseAmount < 0 ? "text-[#f87171]" : "text-[#8cc490]"
             }`}
           >
@@ -427,7 +427,7 @@ function MachineFieldset({
         <button
           type="button"
           onClick={onToggle}
-          className="shrink-0 text-[#9a958b] transition hover:text-white"
+          className="flex size-11 shrink-0 items-center justify-center text-[#9a958b] transition hover:text-white active:scale-95"
         >
           {expanded ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
         </button>
@@ -753,7 +753,7 @@ function SlotVisitForm({
         <button
           type="button"
           onClick={() => setResults(null)}
-          className="text-xs font-semibold text-[#9a958b] underline underline-offset-2 hover:text-white"
+          className="inline-flex min-h-11 items-center text-xs font-semibold text-[#9a958b] underline underline-offset-2 transition hover:text-white active:text-white"
         >
           Fazer outra visita
         </button>
@@ -809,7 +809,7 @@ function SlotVisitForm({
         <button
           type="button"
           onClick={onAddMoreMachines}
-          className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#f3dfae] underline underline-offset-2 hover:text-white"
+          className="inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-[#f3dfae] underline underline-offset-2 transition hover:text-white active:text-white"
         >
           <Plus className="size-3.5" />
           Adicionar mais máquinas para {clientName}
@@ -829,7 +829,7 @@ function SlotVisitForm({
         <button
           type="submit"
           disabled={saving}
-          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d1a04f] px-4 py-3.5 text-sm font-semibold text-[#0d0a05] shadow-[0_6px_20px_rgba(209,160,79,0.32)] transition hover:bg-[#daa855] disabled:opacity-70"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d1a04f] px-4 py-3.5 text-sm font-semibold text-[#0d0a05] shadow-[0_6px_20px_rgba(209,160,79,0.32)] transition hover:bg-[#daa855] active:scale-[0.99] active:bg-[#daa855] disabled:opacity-70"
         >
           {saving ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
           Salvar visita

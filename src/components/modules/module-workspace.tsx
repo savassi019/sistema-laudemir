@@ -379,7 +379,7 @@ export function ModuleWorkspace({
                   <button
                     type="button"
                     onClick={() => setVisitPreset({ name: "", phone: "" })}
-                    className="w-full pt-1 text-center text-xs text-[#9a958b] underline underline-offset-2 transition hover:text-white"
+                    className="min-h-11 w-full pt-1 text-center text-xs text-[#9a958b] underline underline-offset-2 transition hover:text-white active:text-white"
                   >
                     + Novo ponto não cadastrado
                   </button>
@@ -395,7 +395,7 @@ export function ModuleWorkspace({
                     <button
                       type="button"
                       onClick={() => setVisitPreset(null)}
-                      className="ml-auto text-[11px] text-[#9a958b] underline underline-offset-2 transition hover:text-white"
+                      className="ml-auto inline-flex min-h-11 items-center text-[11px] text-[#9a958b] underline underline-offset-2 transition hover:text-white active:text-white"
                     >
                       ← Voltar
                     </button>
@@ -617,7 +617,7 @@ function ClientesSection({
           <button
             type="button"
             onClick={() => setShowRegisterForm((x) => !x)}
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-[#d1a04f] px-3 py-2 text-xs font-semibold text-[#0d0a05] shadow-[0_4px_14px_rgba(209,160,79,0.28)] transition hover:bg-[#daa855]"
+            className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-xl bg-[#d1a04f] px-3 py-2 text-xs font-semibold text-[#0d0a05] shadow-[0_4px_14px_rgba(209,160,79,0.28)] transition hover:bg-[#daa855] active:scale-95 active:bg-[#daa855]"
           >
             <UserPlus className="size-3.5" />
             {showRegisterForm ? "Ocultar" : "Novo"}

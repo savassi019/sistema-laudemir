@@ -126,12 +126,12 @@ export function PhotoCaptureInput({ registration, label, hint, required }: Props
               type="button"
               onClick={handleClear}
               aria-label="Remover foto"
-              className="absolute right-2 top-2 flex size-8 items-center justify-center rounded-xl bg-black/70 text-white backdrop-blur transition hover:bg-black/90"
+              className="absolute right-2 top-2 flex size-11 items-center justify-center rounded-full bg-black/70 text-white backdrop-blur transition hover:bg-black/90 active:scale-95"
             >
               <X className="size-3.5" />
             </button>
           </div>
-          <div className="flex items-center justify-between gap-2 px-3 py-2.5">
+          <div className="flex items-center justify-between gap-2 px-3 py-1.5">
             <div className="flex min-w-0 items-center gap-2">
               <CheckCircle2 className="size-3.5 shrink-0 text-[#8aa17c]" />
               <p className="truncate text-xs text-[#9a958b]">
@@ -144,7 +144,7 @@ export function PhotoCaptureInput({ registration, label, hint, required }: Props
             <button
               type="button"
               onClick={() => inputRef.current?.click()}
-              className="shrink-0 text-xs font-medium text-[#d1a04f] hover:underline"
+              className="inline-flex min-h-11 shrink-0 items-center text-xs font-medium text-[#d1a04f] transition hover:underline active:text-[#e0b563]"
             >
               Trocar
             </button>
