@@ -318,7 +318,6 @@ const visitMachineSchema = z
     currentExpense: z.coerce.number().min(0),
     previousExpense: z.coerce.number().min(0),
     percentageSplit: z.coerce.number().min(0).max(100),
-    conferenceCount: z.coerce.number().min(0),
     negativeAmount: z.coerce.number().min(0),
     feedingNegativeAmount: z.coerce.number().min(0),
     customerDebtDiscounted: z.coerce.number().min(0),
@@ -508,17 +507,6 @@ function MachineFieldset({
               />
             </div>
             <div className="space-y-1.5">
-              <label className={labelClass}>Conferências</label>
-              <input
-                type="number"
-                inputMode="numeric"
-                min="0"
-                step="1"
-                className={fieldClass}
-                {...form.register(`machines.${index}.conferenceCount`)}
-              />
-            </div>
-            <div className="space-y-1.5">
               <label className={labelClass}>Débito da máquina (saldo)</label>
               <input
                 type="number"
@@ -648,7 +636,6 @@ function SlotVisitForm({
             currentExpense: 0,
             previousExpense: m.previousExpense,
             percentageSplit: 50,
-            conferenceCount: 0,
             negativeAmount: m.machineDebt,
             feedingNegativeAmount: 0,
             customerDebtDiscounted: 0,
@@ -701,7 +688,6 @@ function SlotVisitForm({
             currentExpense: Number(m.currentExpense),
             previousExpense: Number(m.previousExpense),
             percentageSplit: Number(m.percentageSplit),
-            conferenceCount: Number(m.conferenceCount),
             negativeAmount: Number(m.negativeAmount),
             feedingNegativeAmount: Number(m.feedingNegativeAmount),
             customerDebtDiscounted: Number(m.customerDebtDiscounted),

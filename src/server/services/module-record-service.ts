@@ -250,7 +250,6 @@ const createSlotSchema = z.object({
   currentExpense: z.number(),
   previousExpense: z.number(),
   percentageSplit: z.number(),
-  conferenceCount: z.number(),
   negativeAmount: z.number().optional(),
   feedingNegativeAmount: z.number().optional(),
   customerDebtDiscounted: z.number().optional(),
@@ -1068,12 +1067,25 @@ async function saveWithPrisma(
             },
       });
 
+      // "Conferencias" = quantos fechamentos essa maquina ja teve HOJE --
+      // automatico, nao e mais digitado pelo funcionario. Se essa e a 2a
+      // vez que fecha a mesma maquina no mesmo dia, vira "2" sozinho.
+      const occurredAtDate = toDate(data.occurredAt);
+      const dayStart = new Date(occurredAtDate);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(occurredAtDate);
+      dayEnd.setHours(23, 59, 59, 999);
+      const conferenceCount =
+        (await prisma.slotCollection.count({
+          where: { slotMachineId: machine.id, occurredAt: { gte: dayStart, lte: dayEnd } },
+        })) + 1;
+
       const record = await prisma.slotCollection.create({
         data: {
           organizationId: session.organizationId,
           createdById: session.userId,
           slotMachineId: machine.id,
-          occurredAt: toDate(data.occurredAt),
+          occurredAt: occurredAtDate,
           currentIncome: data.currentIncome,
           previousIncome: data.previousIncome,
           incomeDifference: data.currentIncome - data.previousIncome,
@@ -1081,7 +1093,7 @@ async function saveWithPrisma(
           previousExpense: data.previousExpense,
           expenseDifference: data.currentExpense - data.previousExpense,
           percentageSplit: data.percentageSplit,
-          conferenceCount: data.conferenceCount,
+          conferenceCount,
           negativeAmount: effectiveNegativeAmount,
           feedingNegativeAmount: data.feedingNegativeAmount,
           customerDebtDiscounted: data.customerDebtDiscounted,
