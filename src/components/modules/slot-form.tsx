@@ -438,8 +438,18 @@ function MachineFieldset({
         </button>
       </div>
 
-      {expanded && included ? (
-        <div className="space-y-4 border-t border-[rgba(245,241,232,0.08)] px-4 py-4">
+      {/* Sempre montado, so escondido via CSS quando fechado/excluido -- se
+          desmontasse (renderizacao condicional), o PhotoCaptureInput perdia
+          o preview e o input de arquivo perdia a foto ja tirada ao trocar
+          de maquina. Reportado pelo usuario: "a foto da anterior sempre
+          some". */}
+      <div
+        className={
+          expanded && included
+            ? "space-y-4 border-t border-[rgba(245,241,232,0.08)] px-4 py-4"
+            : "hidden"
+        }
+      >
           <div className="space-y-1">
             <PhotoCaptureInput
               registration={form.register(`machines.${index}.screenPhoto`)}
@@ -592,8 +602,7 @@ function MachineFieldset({
               {formatCurrency(split.houseAmount)}
             </div>
           ) : null}
-        </div>
-      ) : null}
+      </div>
     </div>
   );
 }
