@@ -48,14 +48,25 @@ export async function listModuleFinancialEntries(
   session: SessionData,
   module: SystemModule,
   slug: ModuleSlug | null = null,
+  range?: { from?: Date; to?: Date },
 ): Promise<ModuleFinancialEntryItem[]> {
+  const dateWhere =
+    range?.from || range?.to
+      ? {
+          createdAt: {
+            ...(range.from ? { gte: range.from } : {}),
+            ...(range.to ? { lte: range.to } : {}),
+          },
+        }
+      : {};
+
   const [entries, records] = await Promise.all([
     prisma.financialEntry.findMany({
-      where: { organizationId: session.organizationId, module },
+      where: { organizationId: session.organizationId, module, ...dateWhere },
       orderBy: { createdAt: "desc" },
-      take: 30,
+      take: 200,
     }),
-    slug ? listModuleRecords(session, slug, 100) : Promise.resolve([]),
+    slug ? listModuleRecords(session, slug, 300, range) : Promise.resolve([]),
   ]);
 
   const avulsos: ModuleFinancialEntryItem[] = entries.map((entry) => ({

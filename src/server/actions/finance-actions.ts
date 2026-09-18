@@ -5,8 +5,10 @@ import { getModuleBySlug } from "@/lib/module-catalog";
 import {
   createFinancialEntry,
   createModuleFinancialEntry,
+  listModuleFinancialEntries,
   updateModuleFinancialEntryStatus,
 } from "@/server/services/finance-service";
+import { moduleSlugs, type ModuleSlug } from "@/server/services/module-record-service";
 import type { FinanceEntryListItem } from "@/types/app";
 
 export async function createFinancialEntryAction(
@@ -28,6 +30,26 @@ export async function createModuleFinancialEntryAction(
   }
 
   return createModuleFinancialEntry(session, moduleItem.module, payload);
+}
+
+export async function listModuleFinancialEntriesAction(
+  slug: string,
+  from?: string,
+  to?: string,
+) {
+  const session = await requireSession();
+  const moduleItem = getModuleBySlug(slug);
+
+  if (!moduleItem) {
+    throw new Error("Modulo nao encontrado.");
+  }
+
+  return listModuleFinancialEntries(
+    session,
+    moduleItem.module,
+    moduleSlugs.includes(slug as ModuleSlug) ? (slug as ModuleSlug) : null,
+    { from: from ? new Date(from) : undefined, to: to ? new Date(to) : undefined },
+  );
 }
 
 export async function updateModuleFinancialEntryStatusAction(

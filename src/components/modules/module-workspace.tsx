@@ -5,7 +5,6 @@ import type { ComponentType } from "react";
 import {
   ArrowLeft,
   Award,
-  BarChart2,
   Gauge,
   ChevronRight,
   ClipboardList,
@@ -35,7 +34,6 @@ import { ModuleAccountsPayable } from "@/components/modules/module-accounts-paya
 import { MarketingAccounts } from "@/components/modules/marketing-accounts";
 import { ModuleFinanceSection } from "@/components/modules/module-finance-section";
 import { ModuleHistoryOverview } from "@/components/modules/module-history-overview";
-import { ModuleReportTab } from "@/components/modules/module-report-tab";
 import { PersonalFinanceForm } from "@/components/modules/personal-finance-form";
 import { PlatformOnlineForm } from "@/components/modules/platform-online-form";
 import { PlushForm } from "@/components/modules/plush-form";
@@ -49,7 +47,7 @@ import type { ModuleClientItem, ModuleRecordItem } from "@/server/services/modul
 import type { ModuleScopeSummary } from "@/server/services/module-scope-service";
 import type { ClientListItem, ClientVisitSummary } from "@/types/app";
 
-type SectionKey = "operacao" | "visita" | "premio" | "rotas" | "calendario" | "clientes" | "financeiro" | "contas-pagar" | "historico" | "relatorio";
+type SectionKey = "operacao" | "visita" | "premio" | "rotas" | "calendario" | "clientes" | "financeiro" | "contas-pagar" | "historico";
 
 type ModuleFormProps = {
   hideFinancials?: boolean;
@@ -89,13 +87,12 @@ const SECTION_CFG: Record<SectionKey, SectionCfg> = {
   rotas:         { label: "Rotas",      description: "Pontos agrupados por rota", icon: Route,  accent: "#a78bfa", accentBg: "bg-[#a78bfa]/15", accentText: "text-[#c4b5fd]" },
   calendario:    { label: "Calendário", description: "Conteúdos e reuniões do mês", icon: CalendarDays, accent: "#60a5fa", accentBg: "bg-[#60a5fa]/15", accentText: "text-[#93c5fd]" },
   clientes:      { label: "Clientes",   description: "Pontos cadastrados",      icon: UserPlus,      accent: "#60a5fa", accentBg: "bg-[#60a5fa]/15", accentText: "text-[#93c5fd]" },
-  financeiro:    { label: "Financeiro", description: "Entradas e saídas",       icon: WalletCards,   accent: "#4ade80", accentBg: "bg-[#4ade80]/15", accentText: "text-[#86efac]" },
+  financeiro:    { label: "Financeiro", description: "Entradas, saídas e relatório", icon: WalletCards,   accent: "#4ade80", accentBg: "bg-[#4ade80]/15", accentText: "text-[#86efac]" },
   "contas-pagar":{ label: "Contas",     description: "A pagar e receber",       icon: Receipt,       accent: "#fb923c", accentBg: "bg-[#fb923c]/15", accentText: "text-[#fdba74]" },
   historico:     { label: "Histórico",  description: "Registros anteriores",    icon: History,       accent: "#c8bef5", accentBg: "bg-[#c8bef5]/12", accentText: "text-[#ddd6fe]" },
-  relatorio:     { label: "Relatório",  description: "Resumo financeiro",       icon: BarChart2,     accent: "#2dd4bf", accentBg: "bg-[#2dd4bf]/15", accentText: "text-[#5eead4]" },
 };
 
-const ALL_SECTIONS: SectionKey[] = ["operacao", "visita", "premio", "rotas", "calendario", "clientes", "financeiro", "contas-pagar", "historico", "relatorio"];
+const ALL_SECTIONS: SectionKey[] = ["operacao", "visita", "premio", "rotas", "calendario", "clientes", "financeiro", "contas-pagar", "historico"];
 
 const slugsWithoutClientConcept = new Set(["mercado-autonomo", "plataforma-online", "financas-pessoais"]);
 // Rotas de campo hoje so existem no Bilhar (RoutePlan/BilliardPoint).
@@ -170,7 +167,6 @@ export function ModuleWorkspace({
     // (cliente + despesas da agencia juntos), entao nao reabre o problema.
     if (k === "financeiro"    && (hideFinancials || hasCalendar)) return false;
     if (k === "contas-pagar"  && hideFinancials)                  return false;
-    if (k === "relatorio"     && hideFinancials)       return false;
     return true;
   });
 
@@ -440,7 +436,7 @@ export function ModuleWorkspace({
         ) : null}
 
         {activeSection === "financeiro" ? (
-          <ModuleFinanceSection slug={slug} initialEntries={financialEntries} />
+          <ModuleFinanceSection slug={slug} moduleTitle={moduleTitle} initialEntries={financialEntries} />
         ) : null}
 
         {activeSection === "contas-pagar" ? (
@@ -457,12 +453,6 @@ export function ModuleWorkspace({
           ) : (
             <ModuleHistoryOverview slug={slug} clients={moduleClients} hideFinancials={hideFinancials} />
           )
-        ) : null}
-
-        {activeSection === "relatorio" ? (
-          <div className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 p-4">
-            <ModuleReportTab slug={slug} moduleTitle={moduleTitle} />
-          </div>
         ) : null}
       </section>
     );

@@ -11,7 +11,6 @@ import {
   registerSlotClient,
   type ModuleSlug,
 } from "@/server/services/module-record-service";
-import { getModuleReport } from "@/server/services/module-report-service";
 
 export async function listModuleClientRecordsAction(
   slug: string,
@@ -60,19 +59,4 @@ export async function registerSlotClientAction(payload: Record<string, unknown>)
 export async function getSlotClientMachinesAction(clientName: string) {
   const session = await requireSession();
   return getSlotClientMachines(session, clientName);
-}
-
-export async function getModuleReportAction(slug: string, from?: string, to?: string) {
-  const session = await requireSession();
-
-  if (!moduleSlugs.includes(slug as ModuleSlug)) {
-    throw new Error("Módulo inválido.");
-  }
-
-  return getModuleReport(
-    session,
-    slug as ModuleSlug,
-    from ? new Date(from) : undefined,
-    to ? new Date(to) : undefined,
-  );
 }
