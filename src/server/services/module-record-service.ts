@@ -320,6 +320,7 @@ export type SlotClientMachine = {
   previousExpense: number;
   customerDebt: number;
   machineDebt: number;
+  optionalGreedAmount: number;
   active: boolean;
 };
 
@@ -351,6 +352,7 @@ export async function getSlotClientMachines(
         previousExpense: Number(ultima?.currentExpense ?? 0),
         customerDebt: Number(m.customerDebt ?? 0),
         machineDebt: Number(m.machineDebt ?? 0),
+        optionalGreedAmount: Number(m.optionalGreedAmount ?? 0),
         active: m.active,
       };
     }),

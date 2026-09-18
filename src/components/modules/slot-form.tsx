@@ -318,6 +318,7 @@ const visitMachineSchema = z
     currentExpense: z.coerce.number().min(0),
     previousExpense: z.coerce.number().min(0),
     percentageSplit: z.coerce.number().min(0).max(100),
+    optionalGreedAmount: z.coerce.number().min(0),
     negativeAmount: z.coerce.number().min(0),
     feedingNegativeAmount: z.coerce.number().min(0),
     customerDebtDiscounted: z.coerce.number().min(0),
@@ -348,6 +349,7 @@ function computeMachineSplit(m: {
   currentExpense: number;
   previousExpense: number;
   percentageSplit: number;
+  optionalGreedAmount: number;
   negativeAmount: number;
   feedingNegativeAmount: number;
   customerDebtDiscounted: number;
@@ -360,8 +362,10 @@ function computeMachineSplit(m: {
   const adjustedTotal = netRevenue - totalNegative;
   const clientShareBase = adjustedTotal * (m.percentageSplit / 100);
   const houseShareBase = adjustedTotal - clientShareBase;
-  const clientShareFinal = clientShareBase - m.customerDebtDiscounted;
-  const houseAmount = houseShareBase - m.generatedDebtAmount;
+  const clientShareAfterGreed = clientShareBase - m.optionalGreedAmount;
+  const houseShareAfterGreed = houseShareBase + m.optionalGreedAmount;
+  const clientShareFinal = clientShareAfterGreed - m.customerDebtDiscounted;
+  const houseAmount = houseShareAfterGreed - m.generatedDebtAmount;
   return { incomeDifference, expenseDifference, netRevenue, clientShareFinal, houseAmount };
 }
 
@@ -396,6 +400,7 @@ function MachineFieldset({
     currentExpense: Number(watchedMachine?.currentExpense ?? 0),
     previousExpense: Number(watchedMachine?.previousExpense ?? 0),
     percentageSplit: Number(watchedMachine?.percentageSplit ?? 50),
+    optionalGreedAmount: Number(watchedMachine?.optionalGreedAmount ?? 0),
     negativeAmount: Number(watchedMachine?.negativeAmount ?? 0),
     feedingNegativeAmount: Number(watchedMachine?.feedingNegativeAmount ?? 0),
     customerDebtDiscounted: Number(watchedMachine?.customerDebtDiscounted ?? 0),
@@ -503,6 +508,17 @@ function MachineFieldset({
                 max="100"
                 className={fieldClass}
                 {...form.register(`machines.${index}.percentageSplit`)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Ganância</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register(`machines.${index}.optionalGreedAmount`)}
               />
             </div>
             <div className="space-y-1.5">
@@ -627,6 +643,7 @@ function SlotVisitForm({
             currentExpense: 0,
             previousExpense: m.previousExpense,
             percentageSplit: 50,
+            optionalGreedAmount: m.optionalGreedAmount,
             negativeAmount: m.machineDebt,
             feedingNegativeAmount: 0,
             customerDebtDiscounted: 0,
@@ -671,7 +688,7 @@ function SlotVisitForm({
             ppValue: 0,
             initialAmount: 0,
             initialAmountMode: "NONE",
-            optionalGreedAmount: 0,
+            optionalGreedAmount: Number(m.optionalGreedAmount),
             occurredAt: values.occurredAt,
             currentIncome: Number(m.currentIncome),
             previousIncome: Number(m.previousIncome),
