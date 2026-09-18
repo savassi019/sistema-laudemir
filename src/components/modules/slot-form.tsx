@@ -322,7 +322,6 @@ const visitMachineSchema = z
     feedingNegativeAmount: z.coerce.number().min(0),
     customerDebtDiscounted: z.coerce.number().min(0),
     generatedDebtAmount: z.coerce.number().min(0),
-    debtMode: z.enum(["NONE", "DEBT", "NEGATIVE"]),
     screenPhoto: z.any().optional(),
     notes: z.string().optional(),
   })
@@ -564,14 +563,6 @@ function MachineFieldset({
                 {...form.register(`machines.${index}.generatedDebtAmount`)}
               />
             </div>
-            <div className="space-y-1.5">
-              <label className={labelClass}>Modo</label>
-              <select className={selectClass} {...form.register(`machines.${index}.debtMode`)}>
-                <option value="NONE">Nenhum</option>
-                <option value="DEBT">Dívida</option>
-                <option value="NEGATIVE">Negativo</option>
-              </select>
-            </div>
           </div>
 
           <div className="space-y-1.5">
@@ -640,7 +631,6 @@ function SlotVisitForm({
             feedingNegativeAmount: 0,
             customerDebtDiscounted: 0,
             generatedDebtAmount: 0,
-            debtMode: "NONE" as const,
             notes: "",
           })),
         );
@@ -692,7 +682,6 @@ function SlotVisitForm({
             feedingNegativeAmount: Number(m.feedingNegativeAmount),
             customerDebtDiscounted: Number(m.customerDebtDiscounted),
             generatedDebtAmount: Number(m.generatedDebtAmount),
-            debtMode: m.debtMode,
             paymentMethod: values.paymentMethod,
             screenPhotoFileId: screenPhotoFileId ?? undefined,
             notes: m.notes,

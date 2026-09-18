@@ -254,7 +254,6 @@ const createSlotSchema = z.object({
   feedingNegativeAmount: z.number().optional(),
   customerDebtDiscounted: z.number().optional(),
   generatedDebtAmount: z.number().optional(),
-  debtMode: z.enum(["NONE", "DEBT", "NEGATIVE"]),
   paymentMethod: z.string().optional(),
   screenPhotoFileId: z.string().nullish(),
   notes: z.string().optional(),
@@ -1098,7 +1097,6 @@ async function saveWithPrisma(
           feedingNegativeAmount: data.feedingNegativeAmount,
           customerDebtDiscounted: data.customerDebtDiscounted,
           generatedDebtAmount: data.generatedDebtAmount,
-          debtMode: data.debtMode,
           paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
           screenPhotoId: data.screenPhotoFileId,
           notes: data.notes,
@@ -1132,7 +1130,6 @@ async function saveWithPrisma(
             : `Máquina ${record.slotMachine.clientMachineNumber}`,
           details: [
             `Conferencias: ${record.conferenceCount}`,
-            `Mode: ${record.debtMode}`,
             `Entrada: ${formatCurrency(Number(record.currentIncome))}`,
             `Cliente: ${formatCurrency(clientShareFinal)}`,
             `Casa: ${formatCurrency(houseAmount)}`,
@@ -1667,7 +1664,6 @@ export async function listModuleRecords(
             summary: `Máquina ${record.slotMachine.clientMachineNumber}`,
             details: [
               `Conferencias: ${record.conferenceCount}`,
-              `Mode: ${record.debtMode}`,
               `Entrada: ${formatCurrency(currentIncome)}`,
               `Cliente: ${formatCurrency(clientShareFinal)}`,
               `Casa: ${formatCurrency(houseAmount)}`,
