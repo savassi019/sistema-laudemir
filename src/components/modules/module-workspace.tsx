@@ -606,6 +606,19 @@ function ClientesSection({
       )
     : moduleClients;
 
+  // No H, um cliente pode ter varias maquinas -- cada uma virava um card
+  // inteiro repetindo o mesmo nome e telefone (reportado como "bagunçado").
+  // Agrupa por nome aqui; em modulos com 1 cliente = 1 registro isso nao
+  // muda nada (cada grupo continua com 1 item so).
+  const groups = Array.from(
+    filtered.reduce((map, item) => {
+      const arr = map.get(item.name) ?? [];
+      arr.push(item);
+      map.set(item.name, arr);
+      return map;
+    }, new Map<string, ModuleClientItem[]>()),
+  ).map(([name, items]) => ({ name, items }));
+
   return (
     <div className="space-y-3">
       <div className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-[#0b0f0e]/35 p-4">
@@ -643,7 +656,7 @@ function ClientesSection({
         </div>
       ) : null}
 
-      {filtered.length === 0 ? (
+      {groups.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-[rgba(245,241,232,0.14)] bg-white/[0.02] px-4 py-10 text-center">
           <Inbox className="mb-3 size-7 text-[#5a544c]" />
           <p className="text-sm text-[#9a958b]">
@@ -652,26 +665,34 @@ function ClientesSection({
         </div>
       ) : (
         <div className="grid gap-2">
-          {filtered.map((item) => (
-            <article key={item.id} className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-white/[0.025] p-3.5">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-white">{item.name}</p>
-                  {item.subtitle ? <p className="mt-0.5 truncate text-xs text-[#9a958b]">{item.subtitle}</p> : null}
+          {groups.map(({ name, items }) => {
+            const first = items[0];
+            const tags = [...new Set(items.flatMap((i) => i.tags))];
+            return (
+              <article key={name} className="rounded-2xl border border-[rgba(245,241,232,0.08)] bg-white/[0.025] p-3.5">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-semibold text-white">{name}</p>
+                    {first.subtitle ? <p className="mt-0.5 truncate text-xs text-[#9a958b]">{first.subtitle}</p> : null}
+                  </div>
+                  {items.length > 1 ? (
+                    <span className="shrink-0 rounded-full border border-[#d1a04f]/25 bg-[#d1a04f]/10 px-2 py-1 text-[11px] font-medium text-[#f3dfae]">
+                      {items.length} máquinas
+                    </span>
+                  ) : first.badge ? (
+                    <span className="shrink-0 rounded-full border border-[#d1a04f]/25 bg-[#d1a04f]/10 px-2 py-1 text-[11px] font-medium text-[#f3dfae]">
+                      {first.badge}
+                    </span>
+                  ) : null}
                 </div>
-                {item.badge ? (
-                  <span className="shrink-0 rounded-full border border-[#d1a04f]/25 bg-[#d1a04f]/10 px-2 py-1 text-[11px] font-medium text-[#f3dfae]">
-                    {item.badge}
-                  </span>
+                {tags.length > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#9a958b]">
+                    {tags.map((tag) => <span key={tag}>{tag}</span>)}
+                  </div>
                 ) : null}
-              </div>
-              {item.tags.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs text-[#9a958b]">
-                  {item.tags.map((tag) => <span key={tag}>{tag}</span>)}
-                </div>
-              ) : null}
-            </article>
-          ))}
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

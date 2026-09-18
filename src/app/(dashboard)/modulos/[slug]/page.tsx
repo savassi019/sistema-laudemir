@@ -78,7 +78,9 @@ export default async function ModuleDetailPage({
     isRecordSlug(item.slug) ? listModuleRecords(session, item.slug, 6) : Promise.resolve([]),
     isField && isRecordSlug(item.slug) ? listModuleVisitTargets(session, item.slug) : Promise.resolve([]),
     isRecordSlug(item.slug) ? listModuleClients(session, item.slug) : Promise.resolve([]),
-    hideFinancials ? Promise.resolve([]) : listModuleFinancialEntries(session, item.module),
+    hideFinancials
+      ? Promise.resolve([])
+      : listModuleFinancialEntries(session, item.module, isRecordSlug(item.slug) ? item.slug : null),
   ]);
   const overdueClients: ClientVisitSummary[] = isField
     ? await getModuleUnvisitedTargets(session, visitTargets, 15)

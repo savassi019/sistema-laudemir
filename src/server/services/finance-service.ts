@@ -5,6 +5,7 @@ import { z } from "zod";
 import { demoFinance } from "@/data/demo";
 import { formatCurrency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { listModuleRecords, type ModuleSlug } from "@/server/services/module-record-service";
 import type { FinanceEntryListItem, FinanceOverview, SessionData } from "@/types/app";
 
 const paymentMethodMap: Record<string, PaymentMethod> = {
@@ -46,14 +47,18 @@ export type ModuleFinancialEntryItem = {
 export async function listModuleFinancialEntries(
   session: SessionData,
   module: SystemModule,
+  slug: ModuleSlug | null = null,
 ): Promise<ModuleFinancialEntryItem[]> {
-  const entries = await prisma.financialEntry.findMany({
-    where: { organizationId: session.organizationId, module },
-    orderBy: { createdAt: "desc" },
-    take: 30,
-  });
+  const [entries, records] = await Promise.all([
+    prisma.financialEntry.findMany({
+      where: { organizationId: session.organizationId, module },
+      orderBy: { createdAt: "desc" },
+      take: 30,
+    }),
+    slug ? listModuleRecords(session, slug, 100) : Promise.resolve([]),
+  ]);
 
-  return entries.map((entry) => ({
+  const avulsos: ModuleFinancialEntryItem[] = entries.map((entry) => ({
     id: entry.id,
     description: entry.description,
     direction: entry.direction,
@@ -62,6 +67,43 @@ export async function listModuleFinancialEntries(
     paymentMethod: entry.paymentMethod,
     createdAt: entry.createdAt.toISOString(),
   }));
+
+  // Operacao real do modulo (fechamento de maquina, visita etc) entra aqui
+  // tambem -- senao "Financeiro" so mostra lancamento avulso digitado a
+  // mao, e o dinheiro de verdade (que ja vive na tabela propria do
+  // modulo) fica invisivel nessa aba. Mesma fonte que o Relatorio usa,
+  // nunca duplica: um registro com entrada E despesa junto vira ate 2
+  // linhas sinteticas aqui, uma pra cada lado.
+  const operacionais: ModuleFinancialEntryItem[] = records.flatMap((r) => {
+    const rows: ModuleFinancialEntryItem[] = [];
+    if ((r.incomeValue ?? 0) > 0) {
+      rows.push({
+        id: `${r.id}-income`,
+        description: r.title,
+        direction: "INCOME",
+        status: "PAID",
+        totalAmount: r.incomeValue!,
+        paymentMethod: null,
+        createdAt: r.createdAt,
+      });
+    }
+    if ((r.expenseValue ?? 0) > 0) {
+      rows.push({
+        id: `${r.id}-expense`,
+        description: r.title,
+        direction: "EXPENSE",
+        status: "PAID",
+        totalAmount: r.expenseValue!,
+        paymentMethod: null,
+        createdAt: r.createdAt,
+      });
+    }
+    return rows;
+  });
+
+  return [...avulsos, ...operacionais].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  );
 }
 
 export async function updateModuleFinancialEntryStatus(
