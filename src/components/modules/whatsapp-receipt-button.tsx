@@ -221,35 +221,66 @@ export function WhatsAppReceiptButton({
   function handleDownloadPDF() {
     const msg = messageRef.current;
     const lines = msg.split("\n");
-    const rows = lines.map((line) => {
+
+    const titleLine = lines[0]?.startsWith("*") && lines[0]?.endsWith("*") ? lines[0].slice(1, -1) : null;
+    const bodyLines = titleLine ? lines.slice(1) : lines;
+
+    const rows = bodyLines.map((line) => {
       const isBold = line.startsWith("*") && line.endsWith("*") && line.length > 2;
       const text = isBold ? line.slice(1, -1) : line;
       const m = text.match(/^([^:]+):\s*(.+)$/);
-      if (isBold) return `<div class="total"><span>${text}</span></div>`;
+      if (isBold) {
+        if (m) return `<div class="total"><span class="total-k">${m[1]}</span><span class="total-v">${m[2]}</span></div>`;
+        return `<div class="total"><span class="total-v">${text}</span></div>`;
+      }
       if (m) return `<div class="row"><span class="k">${m[1]}</span><span class="v">${m[2]}</span></div>`;
       if (text.trim()) return `<div class="note">${text}</div>`;
-      return `<div class="gap"></div>`;
+      return "";
     }).join("");
 
+    const logoUrl = `${window.location.origin}/infinity-logo.png`;
+    const generatedAt = new Date().toLocaleDateString("pt-BR", {
+      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    });
+
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/>
-<title>Comprovante</title>
+<title>${titleLine ?? "Comprovante"}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:system-ui,sans-serif;background:#fff;color:#111;padding:32px 28px;max-width:480px;margin:0 auto}
-.header{border-bottom:3px solid #111;padding-bottom:12px;margin-bottom:20px}
-.header h1{font-size:18px;font-weight:800;letter-spacing:-.3px}
-.header p{font-size:11px;color:#777;margin-top:3px}
-.row{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid #e8e8e8;font-size:13px}
-.k{color:#666}.v{font-weight:600;text-align:right}
-.total{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-top:2px solid #111;border-bottom:2px solid #111;margin:8px 0;font-size:16px;font-weight:800}
-.note{font-size:12px;color:#666;padding:8px 0;font-style:italic}
-.gap{height:8px}
-.footer{margin-top:28px;font-size:10px;color:#aaa;text-align:center;border-top:1px solid #e8e8e8;padding-top:12px}
-@media print{body{padding:0}}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#fff;color:#1a1a1a;padding:40px 36px;max-width:520px;margin:0 auto}
+.header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:18px}
+.header img{height:52px;width:auto;display:block}
+.header .title{text-align:right}
+.eyebrow{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#b8863f}
+.header h1{font-size:19px;font-weight:800;letter-spacing:-.2px;margin-top:3px;color:#1a1a1a}
+.rule{height:3px;background:linear-gradient(90deg,#d1a04f,#f0d98a 55%,transparent);border-radius:2px;margin-bottom:6px}
+.meta{font-size:11px;color:#9a958b;margin-bottom:22px}
+.card{border:1px solid #ececec;border-radius:14px;overflow:hidden}
+.row{display:flex;justify-content:space-between;gap:14px;padding:11px 16px;font-size:13px;border-bottom:1px solid #f0f0f0}
+.row:last-child{border-bottom:none}
+.k{color:#8a857b}.v{font-weight:600;text-align:right;color:#1a1a1a}
+.note{font-size:12px;color:#8a857b;padding:10px 16px;font-style:italic;border-bottom:1px solid #f0f0f0}
+.total{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:14px 16px;background:#fbf6ea;border-top:2px solid #d1a04f}
+.total-k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8a6a2f}
+.total-v{font-size:19px;font-weight:800;color:#8a6a2f}
+.footer{margin-top:26px;padding-top:14px;border-top:1px solid #ececec;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.footer p{font-size:10px;color:#b3ada1}
+@media print{body{padding:18px}}
 </style></head><body>
-<div class="header"><h1>Comprovante</h1><p>Gerado em ${new Date().toLocaleDateString("pt-BR", { day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit" })}</p></div>
-${rows}
-<div class="footer">Infinity ERP · Gerado automaticamente</div>
+<div class="header">
+  <img src="${logoUrl}" alt="Infinity" />
+  <div class="title">
+    <p class="eyebrow">Comprovante</p>
+    <h1>${titleLine ? titleLine.replace(/^comprovante\s*/i, "").trim() || titleLine : ""}</h1>
+  </div>
+</div>
+<div class="rule"></div>
+<p class="meta">Gerado em ${generatedAt}</p>
+<div class="card">${rows}</div>
+<div class="footer">
+  <p>Infinity ERP</p>
+  <p>Comprovante gerado automaticamente</p>
+</div>
 </body></html>`;
 
     const win = window.open("", "_blank");
@@ -257,7 +288,15 @@ ${rows}
     win.document.write(html);
     win.document.close();
     win.focus();
-    setTimeout(() => win.print(), 400);
+    const img = win.document.querySelector("img");
+    const triggerPrint = () => win.print();
+    if (img && !img.complete) {
+      img.addEventListener("load", triggerPrint, { once: true });
+      img.addEventListener("error", triggerPrint, { once: true });
+      setTimeout(triggerPrint, 1200);
+    } else {
+      setTimeout(triggerPrint, 300);
+    }
   }
 
   // ── text send ───────────────────────────────────────────────
