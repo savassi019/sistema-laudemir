@@ -721,8 +721,8 @@ export function BxForm({
               {operatorName || "Carregando..."}
             </div>
             <p className={hintClass}>
-              Quem fez o fechamento, mandou pro agente e entregou ao cliente
-              -- direto do login, é sempre a mesma pessoa.
+              O funcionário responsável pelo fechamento é identificado
+              automaticamente pelo login.
             </p>
           </div>
           <div className="space-y-2">
@@ -755,7 +755,7 @@ export function BxForm({
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className={labelClass} htmlFor="sentToAgentAmount">
-              Valor mandado ao agente
+              Valor entregue ao funcionário
             </label>
             <input
               id="sentToAgentAmount"

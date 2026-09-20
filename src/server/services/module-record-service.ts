@@ -216,7 +216,7 @@ const createBxSchema = z
     state: z.string().optional(),
     // Quem fez a operacao passou a vir do login (session.name), nao mais de
     // um numero digitado -- opcional so pra nao quebrar quem ainda manda.
-    // Agente e quem entregou ao cliente sao sempre a mesma pessoa que fez o
+    // O funcionario responsavel e quem entregou ao cliente sao a mesma pessoa que fez o
     // fechamento -- tambem vem do login, o form nao manda mais esses campos.
     collectNumber: z.string().optional(),
     occurredAt: z.string(),
@@ -935,7 +935,7 @@ async function saveWithPrisma(
           city: data.city,
           state: data.state,
           collectNumber: data.collectNumber,
-          // Agente e quem entregou ao cliente sao sempre quem fez o
+          // O funcionario responsavel e quem entregou ao cliente sao sempre quem fez o
           // fechamento -- ver [[project_bx_operator_from_login]].
           agentName: session.name,
           receiverName: session.name,
@@ -978,8 +978,7 @@ async function saveWithPrisma(
           // aqui e a propria criacao, entao o nome ja esta na sessao.
           summary: `Funcionário: ${session.name}`,
           details: [
-            `Agente: ${record.agentName ?? "-"}`,
-            `Recebeu: ${record.receiverName ?? "-"}`,
+            `Funcionário responsável: ${record.agentName ?? record.receiverName ?? "-"}`,
             `Status: ${rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL)}`,
             data.exceptionClient ? "Cliente excecao" : "Fluxo padrao",
           ],
@@ -1771,8 +1770,7 @@ export async function listModuleRecords(
             title: record.clientName,
             summary: `Funcionário: ${operatorName}`,
             details: [
-              `Agente: ${record.agentName ?? "-"}`,
-              `Recebeu: ${record.receiverName ?? "-"}`,
+              `Funcionário responsável: ${record.agentName ?? record.receiverName ?? "-"}`,
               `Status: ${rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL)}`,
               `Entrada: ${formatCurrency(amounts.incomeAmount)}`,
               `Despesas: ${formatCurrency(amounts.operatingExpenseAmount)}`,
@@ -2375,8 +2373,7 @@ export async function listModuleClientRecords(
           title: record.clientName,
           summary: `Funcionário: ${record.createdById ? (nomePorCriadorBxCliente.get(record.createdById) ?? "-") : "-"}`,
           details: [
-            `Agente: ${record.agentName ?? "-"}`,
-            `Recebeu: ${record.receiverName ?? "-"}`,
+            `Funcionário responsável: ${record.agentName ?? record.receiverName ?? "-"}`,
             `Status: ${rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL)}`,
             `Entrada: ${formatCurrency(amounts.incomeAmount)}`,
             `Despesas: ${formatCurrency(amounts.operatingExpenseAmount)}`,
