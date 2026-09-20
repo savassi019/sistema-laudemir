@@ -872,48 +872,61 @@ export function ModuleFinanceSection({
         {error ? <p className="mt-2 text-xs text-[#f0a08f]">{error}</p> : null}
       </div>
 
-      <div className="grid grid-cols-3 gap-2">
-        <article className="rounded-2xl border border-[#6b9d6f]/25 bg-[#0e1c10]/70 p-3">
-          <div className="flex items-center gap-1.5 text-[#8cc490]"><TrendingUp className="size-3.5" /><p className="text-[10px] font-semibold uppercase tracking-[0.15em]">Entradas</p></div>
-          <p className="mt-2 break-words text-base font-bold text-[#bfe3c2]">{formatCurrency(totals.income)}</p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+        <article className="rounded-2xl border border-white/10 border-l-4 border-l-[#4ade80] bg-[#111513] p-4">
+          <div className="flex items-center gap-2 text-[#d7ded9]"><TrendingUp className="size-4 text-[#4ade80]" /><p className="text-xs font-semibold uppercase tracking-[0.12em]">Entradas</p></div>
+          <p className="mt-2 break-words text-xl font-bold text-white">{formatCurrency(totals.income)}</p>
+          <p className="mt-1 text-[11px] text-[#8f9992]">Valores registrados como entrada</p>
         </article>
-        <article className="rounded-2xl border border-[#b46c5d]/25 bg-[#1a0d0d]/70 p-3">
-          <div className="flex items-center gap-1.5 text-[#d4806f]"><TrendingDown className="size-3.5" /><p className="text-[10px] font-semibold uppercase tracking-[0.15em]">Despesas</p></div>
-          <p className="mt-2 break-words text-base font-bold text-[#f0a08f]">{formatCurrency(totals.expense)}</p>
+        <article className="rounded-2xl border border-white/10 border-l-4 border-l-[#fb7185] bg-[#111513] p-4">
+          <div className="flex items-center gap-2 text-[#d7ded9]"><TrendingDown className="size-4 text-[#fb7185]" /><p className="text-xs font-semibold uppercase tracking-[0.12em]">Despesas</p></div>
+          <p className="mt-2 break-words text-xl font-bold text-white">{formatCurrency(totals.expense)}</p>
+          <p className="mt-1 text-[11px] text-[#8f9992]">Prêmios, gastos e descontos</p>
         </article>
-        <article className={cn("rounded-2xl border p-3", totals.net >= 0 ? "border-[#4a7cbf]/25 bg-[#0d1520]/70" : "border-[#b46c5d]/25 bg-[#1a0d0d]/70")}>
-          <div className={cn("flex items-center gap-1.5", totals.net >= 0 ? "text-[#7aaee8]" : "text-[#d4806f]")}><Wallet className="size-3.5" /><p className="text-[10px] font-semibold uppercase tracking-[0.15em]">Saldo</p></div>
-          <p className={cn("mt-2 break-words text-base font-bold", totals.net >= 0 ? "text-[#b8d4f5]" : "text-[#f0a08f]")}>{formatCurrency(totals.net)}</p>
+        <article className={cn("rounded-2xl border border-white/10 border-l-4 bg-[#111513] p-4", totals.net >= 0 ? "border-l-[#60a5fa]" : "border-l-[#f87171]")}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-[#d7ded9]"><Wallet className={cn("size-4", totals.net >= 0 ? "text-[#60a5fa]" : "text-[#f87171]")} /><p className="text-xs font-semibold uppercase tracking-[0.12em]">Saldo</p></div>
+            <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", totals.net >= 0 ? "bg-[#60a5fa]/12 text-[#93c5fd]" : "bg-[#f87171]/12 text-[#fca5a5]")}>{totals.net >= 0 ? "Positivo" : "Negativo"}</span>
+          </div>
+          <p className={cn("mt-2 break-words text-xl font-bold", totals.net >= 0 ? "text-[#93c5fd]" : "text-[#fca5a5]")}>{formatCurrency(totals.net)}</p>
+          <p className="mt-1 text-[11px] text-[#8f9992]">Entradas menos despesas</p>
         </article>
       </div>
 
       {bxTotals ? (
-        <div className="rounded-2xl border border-[#d1a04f]/20 bg-[#241c0e]/45 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#e0b872]">Detalhamento das despesas do BX</p>
+        <div className="rounded-2xl border border-white/10 bg-[#101412] p-4">
+          <p className="text-sm font-semibold text-white">De onde vieram as despesas</p>
+          <p className="mt-1 text-xs text-[#8f9992]">Separação dos valores registrados no BX</p>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {[
-              ["Prêmios", bxTotals.prize],
-              ["Outras despesas", bxTotals.other],
-              ["Descontos", bxTotals.discount],
-              ["Total gasto", bxTotals.total],
-            ].map(([label, value]) => (
-              <div key={String(label)} className="rounded-xl border border-[#d1a04f]/15 bg-black/10 p-3">
-                <p className="text-[10px] uppercase text-[#9a958b]">{label}</p>
-                <p className="mt-1 text-sm font-bold text-[#f3dfae]">{formatCurrency(Number(value))}</p>
-              </div>
-            ))}
+            <div className="rounded-xl border border-white/10 border-l-4 border-l-[#fbbf24] bg-[#151a17] p-3">
+              <p className="text-xs font-medium text-[#c5cdc7]">Prêmios</p>
+              <p className="mt-1 text-base font-bold text-white">{formatCurrency(bxTotals.prize)}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 border-l-4 border-l-[#fb923c] bg-[#151a17] p-3">
+              <p className="text-xs font-medium text-[#c5cdc7]">Outras despesas</p>
+              <p className="mt-1 text-base font-bold text-white">{formatCurrency(bxTotals.other)}</p>
+            </div>
+            <div className="rounded-xl border border-white/10 border-l-4 border-l-[#a78bfa] bg-[#151a17] p-3">
+              <p className="text-xs font-medium text-[#c5cdc7]">Descontos</p>
+              <p className="mt-1 text-base font-bold text-white">{formatCurrency(bxTotals.discount)}</p>
+            </div>
+            <div className="rounded-xl border border-[#f87171]/30 border-l-4 border-l-[#f87171] bg-[#171313] p-3">
+              <p className="text-xs font-semibold text-[#fca5a5]">Total gasto</p>
+              <p className="mt-1 text-base font-bold text-white">{formatCurrency(bxTotals.total)}</p>
+            </div>
           </div>
         </div>
       ) : null}
 
       {methodTotals.length > 0 ? (
-        <div className="rounded-2xl border border-white/[0.08] bg-[#0b0f0e]/35 p-4">
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#9a958b]">Entradas recebidas por pagamento</p>
+        <div className="rounded-2xl border border-white/10 bg-[#101412] p-4">
+          <p className="text-sm font-semibold text-white">Como o dinheiro entrou</p>
+          <p className="mt-1 text-xs text-[#8f9992]">Somente valores recebidos, separados por pagamento</p>
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {methodTotals.map((item) => (
-              <div key={item.method} className="rounded-xl border border-[#6b9d6f]/15 bg-[#0e1c10]/45 p-3">
-                <p className="text-[10px] text-[#9a958b]">{item.label}</p>
-                <p className="mt-1 text-sm font-bold text-[#bfe3c2]">{formatCurrency(item.amount)}</p>
+              <div key={item.method} className="rounded-xl border border-white/10 border-l-4 border-l-[#4ade80] bg-[#151a17] p-3">
+                <p className="text-xs font-medium text-[#c5cdc7]">{item.label}</p>
+                <p className="mt-1 text-base font-bold text-white">{formatCurrency(item.amount)}</p>
               </div>
             ))}
           </div>
@@ -985,10 +998,10 @@ export function ModuleFinanceSection({
                 const isIncome = entry.direction === "INCOME";
                 const expanded = selectedId === entry.id;
                 return (
-                  <article key={entry.id} className={cn("overflow-hidden rounded-xl border", entry.status === "CANCELLED" ? "border-white/[0.07] bg-white/[0.015] opacity-70" : isIncome ? "border-[#6b9d6f]/20 bg-[#0e1c10]/50" : "border-[#b46c5d]/20 bg-[#1a0d0d]/50")}>
+                  <article key={entry.id} className={cn("overflow-hidden rounded-xl border border-l-4 bg-[#111513]", entry.status === "CANCELLED" ? "border-white/[0.07] border-l-[#6b7280] opacity-70" : isIncome ? "border-white/10 border-l-[#4ade80]" : "border-white/10 border-l-[#fb7185]")}>
                     <button type="button" onClick={() => { setSelectedId(expanded ? null : entry.id); setEditId(null); setPaymentId(null); setActionError(null); }} className="flex min-h-[72px] w-full items-center gap-3 p-3 text-left">
-                      <div className={cn("flex size-9 shrink-0 items-center justify-center rounded-lg", isIncome ? "bg-[#6b9d6f]/15" : "bg-[#b46c5d]/15")}>
-                        {isIncome ? <ArrowDownLeft className="size-4 text-[#8cc490]" /> : <ArrowUpRight className="size-4 text-[#d4806f]" />}
+                      <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.05]">
+                        {isIncome ? <ArrowDownLeft className="size-4 text-[#4ade80]" /> : <ArrowUpRight className="size-4 text-[#fb7185]" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <p className={cn("break-words text-sm font-medium text-white", entry.status === "CANCELLED" && "line-through")}>{entry.description}</p>
@@ -1000,7 +1013,7 @@ export function ModuleFinanceSection({
                         <p className="mt-1 text-xs text-[#9a958b]">{formatShortDate(entry.createdAt)}{entry.operatorName ? ` · ${entry.operatorName}` : ""}</p>
                       </div>
                       <div className="shrink-0 text-right">
-                        <p className={cn("text-sm font-bold", isIncome ? "text-[#bfe3c2]" : "text-[#f0a08f]")}>{isIncome ? "+" : "-"}{formatCurrency(entry.totalAmount)}</p>
+                        <p className="text-sm font-bold text-white">{isIncome ? "+" : "-"}{formatCurrency(entry.totalAmount)}</p>
                         {entry.remainingAmount > 0 ? <p className="mt-1 text-[10px] text-[#f0d98a]">Resta {formatCurrency(entry.remainingAmount)}</p> : null}
                         {expanded ? <ChevronUp className="ml-auto mt-1 size-4 text-[#7e786d]" /> : <ChevronDown className="ml-auto mt-1 size-4 text-[#7e786d]" />}
                       </div>
