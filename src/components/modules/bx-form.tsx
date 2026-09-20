@@ -2,7 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ArrowRight, LoaderCircle, ReceiptText } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
@@ -50,6 +50,17 @@ const schema = z
   .superRefine((data, ctx) => {
     const screenPhoto = data.screenPhoto?.[0] as File | undefined;
     const paperPhoto = data.paperPhoto?.[0] as File | undefined;
+
+    if (
+      (data.receiptStatus === "DELIVERED" || data.receiptStatus === "PRIZE") &&
+      Number(data.deliveredAmount) <= 0
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["deliveredAmount"],
+        message: "Informe o valor do prêmio.",
+      });
+    }
 
     if (!data.exceptionClient) {
       if (!screenPhoto) {
@@ -124,27 +135,37 @@ async function uploadFile(file: File, category: string) {
 type LoadedBxClient = { clientName: string; phone: string; debt: number };
 
 /**
- * Recebido/Nao recebido sao opostos (verde/vermelho). "Dinheiro deixado"
- * e um terceiro tipo de operacao, nao um meio-termo entre os dois -- por
- * isso cor propria (azul), nao uma escala entre as outras duas. "Premio"
- * e um quarto tipo (dourado, cor de destaque do sistema): o cliente ganhou
- * e o valor entregue nao vira divida, diferente de "Dinheiro deixado".
+ * Recebido/Nao recebido sao opostos (verde/vermelho). "Premio"
+ * e o valor liberado pela maquina: uma unica operacao, destacada em dourado,
+ * que nao gera divida para o cliente.
  */
 const RECEIPT_STATUS_COLOR: Record<string, string> = {
   RECEIVED: "border-[#6b9d6f]/45 bg-[#6b9d6f]/10 text-[#bfe3c2]",
   NOT_RECEIVED: "border-[#b46c5d]/45 bg-[#b46c5d]/10 text-[#f0c3b9]",
-  DELIVERED: "border-[#6f8fb4]/45 bg-[#6f8fb4]/10 text-[#bcd4ed]",
+  DELIVERED: "border-[#d1a04f]/45 bg-[#d1a04f]/10 text-[#f3dfae]",
   PRIZE: "border-[#d1a04f]/45 bg-[#d1a04f]/10 text-[#f3dfae]",
 };
 
 const RECEIPT_STATUS_TEXT_COLOR: Record<string, string> = {
   RECEIVED: "text-[#bfe3c2]",
   NOT_RECEIVED: "text-[#f0a08f]",
-  DELIVERED: "text-[#a8c5e3]",
+  DELIVERED: "text-[#f3dfae]",
   PRIZE: "text-[#f3dfae]",
 };
 
-export function BxForm({ hideFinancials = false, initialClientName = "", initialPhone = "", initialClientId }: { hideFinancials?: boolean; initialClientName?: string; initialPhone?: string; initialClientId?: string } = {}) {
+export function BxForm({
+  hideFinancials = false,
+  initialClientName = "",
+  initialPhone = "",
+  initialClientId,
+  startAtRegistration = false,
+}: {
+  hideFinancials?: boolean;
+  initialClientName?: string;
+  initialPhone?: string;
+  initialClientId?: string;
+  startAtRegistration?: boolean;
+} = {}) {
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
@@ -156,6 +177,9 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
   // Quem esta fazendo a operacao vem do login, nao de um numero digitado
   // (era pra isso que "Recolhe" servia antes).
   const [operatorName, setOperatorName] = useState("");
+  const [flowStep, setFlowStep] = useState<"registration" | "operation">(
+    startAtRegistration || !initialClientId ? "registration" : "operation",
+  );
 
   useEffect(() => {
     getCurrentUserNameAction()
@@ -185,7 +209,10 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
     if (!initialClientId) return;
     getClientPrefillDataAction("bx", initialClientId)
       .then((data) => {
-        if (!data || data.kind !== "bx-transaction") return;
+        if (!data || data.kind !== "bx-transaction") {
+          setFlowStep("registration");
+          return;
+        }
         setLoadedClient({ clientName: data.clientName, phone: data.phone, debt: data.debt });
         form.setValue("clientName", data.clientName);
         form.setValue("phone", data.phone);
@@ -204,7 +231,10 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
         form.setValue("state", data.state);
         form.setValue("exceptionClient", data.exceptionClient);
       })
-      .catch(() => setSaveError("Erro ao carregar dados do cliente."))
+      .catch(() => {
+        setSaveError("Erro ao carregar dados do cliente.");
+        setFlowStep("registration");
+      })
       .finally(() => setClientLoading(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialClientId]);
@@ -212,6 +242,22 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
   const receiptStatusWatch = String(
     useWatch({ control: form.control, name: "receiptStatus" }) ?? "NOT_RECEIVED",
   );
+
+  useEffect(() => {
+    // PRIZE era uma opcao separada. Agora e a mesma operacao que DELIVERED;
+    // normaliza rascunhos antigos sem perder os demais dados preenchidos.
+    if (receiptStatusWatch === "PRIZE") {
+      form.setValue("receiptStatus", "DELIVERED", { shouldDirty: true });
+    }
+
+    // Somente "Nao recebido" pode criar divida nova.
+    if (
+      receiptStatusWatch !== "NOT_RECEIVED" &&
+      Number(form.getValues("generatedDebtAmount") ?? 0) !== 0
+    ) {
+      form.setValue("generatedDebtAmount", 0, { shouldDirty: true });
+    }
+  }, [form, receiptStatusWatch]);
 
   const watchedStreet = useWatch({ control: form.control, name: "street" });
   const watchedNeighborhood = useWatch({ control: form.control, name: "neighborhood" });
@@ -223,6 +269,35 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
     city: watchedCity,
     state: watchedState,
   });
+
+  function continueToOperation() {
+    const clientName = String(form.getValues("clientName") ?? "").trim();
+    const cpf = String(form.getValues("cpf") ?? "").trim();
+    let valid = true;
+
+    form.clearErrors(["clientName", "cpf"]);
+
+    if (clientName.length < 2) {
+      form.setError("clientName", { message: "Informe o cliente." });
+      valid = false;
+    }
+
+    if (cpf && !isValidCpf(cpf)) {
+      form.setError("cpf", { message: "CPF inválido." });
+      valid = false;
+    }
+
+    if (!valid) return;
+
+    form.setValue("clientName", clientName, { shouldDirty: true });
+    setLoadedClient({
+      clientName,
+      phone: String(form.getValues("phone") ?? ""),
+      debt: loadedClient?.debt ?? 0,
+    });
+    setSaveError(null);
+    setFlowStep("operation");
+  }
 
   async function handleCepLookup() {
     const cep = String(form.getValues("cep") ?? "");
@@ -242,7 +317,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
     form.setValue("state", address.state, { shouldDirty: true });
   }
 
-  const onSubmit = form.handleSubmit(async (values) => {
+  async function submitValues(values: FormValues) {
     if (submittingRef.current) return;
     submittingRef.current = true;
     setLoading(true);
@@ -250,14 +325,20 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
 
     const screenPhoto = getFile(values.screenPhoto);
     const paperPhoto = getFile(values.paperPhoto);
+    const receiptStatus = values.receiptStatus === "PRIZE" ? "DELIVERED" : values.receiptStatus;
+    const prizeExpenseAmount =
+      receiptStatus === "DELIVERED" ? Number(values.deliveredAmount) : 0;
     const netAmount =
       Number(values.incomeAmount) -
       Number(values.expenseAmount) -
+      prizeExpenseAmount -
       Number(values.discountAmount);
     const clientDebt = loadedClient?.debt ?? 0;
+    const generatedDebtAmount =
+      receiptStatus === "NOT_RECEIVED" ? Number(values.generatedDebtAmount) : 0;
     const remainingDebt =
       Math.max(clientDebt - Number(values.discountAmount), 0) +
-      Number(values.generatedDebtAmount);
+      generatedDebtAmount;
 
     const [screenPhotoFileId, paperPhotoFileId] = await Promise.all([
       screenPhoto ? uploadFile(screenPhoto, "PROOF") : Promise.resolve(null),
@@ -284,9 +365,9 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           expenseAmount: Number(values.expenseAmount),
           discountAmount: Number(values.discountAmount),
           customerDebt: clientDebt,
-          generatedDebtAmount: Number(values.generatedDebtAmount),
+          generatedDebtAmount,
           paymentMethod: values.paymentMethod,
-          receiptStatus: values.receiptStatus,
+          receiptStatus,
           exceptionClient: values.exceptionClient,
           notes: values.notes,
           screenPhotoFileId,
@@ -313,11 +394,11 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
       expenseAmount: Number(values.expenseAmount),
       discountAmount: Number(values.discountAmount),
       clientDebt,
-      generatedDebtAmount: Number(values.generatedDebtAmount),
+      generatedDebtAmount,
       remainingDebt,
       netAmount,
       paymentMethod: values.paymentMethod,
-      receiptStatus: values.receiptStatus,
+      receiptStatus,
       exceptionClient: values.exceptionClient,
       screenPhotoName: screenPhoto?.name,
       paperPhotoName: paperPhoto?.name,
@@ -327,16 +408,170 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
     setLoading(false);
 
     submittingRef.current = false;
-  });
+  }
+
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    void form.handleSubmit(submitValues)(event);
+  }
+
+  if (clientLoading) {
+    return (
+      <div className="flex min-h-28 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.02] px-4 text-sm text-[#9a958b]">
+        <LoaderCircle className="mr-2 size-4 animate-spin" />
+        Carregando dados do cliente...
+      </div>
+    );
+  }
+
+  if (flowStep === "registration" || !loadedClient) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-[24px] border border-[#6f8fb4]/30 bg-[#172331]/72 p-4 text-sm leading-6 text-[#bcd4ed]">
+          <p className="font-medium">Cadastro do cliente</p>
+          <p>Preencha os dados abaixo. A operação só abre depois de você continuar.</p>
+        </div>
+
+        <form
+          className="space-y-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            continueToOperation();
+          }}
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2 md:col-span-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
+                Dados do cliente
+              </p>
+              <label className={labelClass} htmlFor="clientName">
+                Cliente
+              </label>
+              <input id="clientName" className={fieldClass} {...form.register("clientName")} />
+              {form.formState.errors.clientName ? (
+                <p className="text-sm text-[#d59a8b]">
+                  {form.formState.errors.clientName.message}
+                </p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="phone">
+                Telefone
+              </label>
+              <input
+                id="phone"
+                className={fieldClass}
+                inputMode="tel"
+                maxLength={15}
+                {...withMask(form.register("phone"), maskPhone)}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="cpf">
+                CPF
+              </label>
+              <input
+                id="cpf"
+                className={fieldClass}
+                inputMode="numeric"
+                maxLength={14}
+                {...withMask(form.register("cpf"), maskCpf)}
+              />
+              {form.formState.errors.cpf ? (
+                <p className="text-sm text-[#d59a8b]">{form.formState.errors.cpf.message}</p>
+              ) : null}
+            </div>
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="cep">
+                CEP
+              </label>
+              <div className="flex gap-2">
+                <input
+                  id="cep"
+                  className={fieldClass}
+                  inputMode="numeric"
+                  placeholder="00000-000"
+                  maxLength={9}
+                  {...withMask(form.register("cep"), maskCep)}
+                  onBlur={handleCepLookup}
+                />
+                <button
+                  type="button"
+                  onClick={handleCepLookup}
+                  disabled={cepLoading}
+                  className="min-h-11 shrink-0 rounded-xl border border-[#d1a04f]/30 bg-[#d1a04f]/10 px-3 text-xs font-semibold text-[#f3dfae] disabled:opacity-60"
+                >
+                  {cepLoading ? "..." : "Buscar"}
+                </button>
+              </div>
+              {cepError ? <p className="text-sm text-[#d59a8b]">{cepError}</p> : null}
+            </div>
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="street">
+                Rua
+              </label>
+              <input id="street" className={fieldClass} {...form.register("street")} />
+            </div>
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="neighborhood">
+                Bairro
+              </label>
+              <input
+                id="neighborhood"
+                className={fieldClass}
+                {...form.register("neighborhood")}
+              />
+            </div>
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="city">
+                Cidade
+              </label>
+              <input id="city" className={fieldClass} {...form.register("city")} />
+            </div>
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="state">
+                Estado
+              </label>
+              <input id="state" className={fieldClass} maxLength={2} {...form.register("state")} />
+            </div>
+            {mapsLink ? (
+              <div className="md:col-span-2">
+                <a
+                  href={mapsLink}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex min-h-11 items-center gap-1.5 text-xs font-semibold text-[#8aa17c] underline-offset-2 active:underline"
+                >
+                  Ver no mapa
+                </a>
+              </div>
+            ) : null}
+          </div>
+
+          <label className="flex min-h-11 items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
+            <input type="checkbox" {...form.register("exceptionClient")} />
+            Cliente exceção
+          </label>
+
+          <button
+            type="submit"
+            className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl bg-[#d1a04f] px-4 py-3.5 text-sm font-semibold text-[#0d0a05] shadow-[0_6px_20px_rgba(209,160,79,0.32)] transition active:scale-[0.99]"
+          >
+            Continuar para operação
+            <ArrowRight className="size-4" />
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5">
       <div className="rounded-[24px] border border-[#d1a04f]/28 bg-[#3a2b18]/72 p-4 text-sm leading-6 text-[#f3dfae]">
         <p className="font-medium">Regra do BX</p>
         <p>
-          Recebido fica verde. Não recebido fica vermelho. Dinheiro deixado
-          fica azul. Prêmio fica dourado. Cliente exceção pode trabalhar com
-          1 foto apenas.
+          Recebido fica verde. Não recebido fica vermelho. Prêmio fica dourado
+          e não gera dívida para o cliente.
+          Cliente exceção pode trabalhar com 1 foto apenas.
         </p>
       </div>
 
@@ -367,6 +602,15 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
             <p className={loadedClient.debt > 0 ? "text-[#f0c3b9]" : "text-[#9a958b]"}>
               Dívida: {formatCurrency(loadedClient.debt)}
             </p>
+            {!initialClientId ? (
+              <button
+                type="button"
+                onClick={() => setFlowStep("registration")}
+                className="mt-2 inline-flex min-h-11 items-center text-xs font-semibold text-[#bfe3c2] underline underline-offset-2 active:text-white"
+              >
+                Editar cadastro
+              </button>
+            ) : null}
           </div>
         ) : (
           <div className="grid gap-4 md:grid-cols-2">
@@ -503,8 +747,7 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
             >
               <option value="RECEIVED">Recebido</option>
               <option value="NOT_RECEIVED">Não recebido</option>
-              <option value="DELIVERED">Dinheiro deixado</option>
-              <option value="PRIZE">Prêmio</option>
+              <option value="DELIVERED">Prêmio</option>
             </select>
           </div>
         </div>
@@ -526,7 +769,9 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="deliveredAmount">
-              Valor entregue ao cliente
+              {receiptStatusWatch === "DELIVERED"
+                ? "Valor do prêmio"
+                : "Valor entregue ao cliente"}
             </label>
             <input
               id="deliveredAmount"
@@ -537,10 +782,17 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
               className={fieldClass}
               {...form.register("deliveredAmount")}
             />
+            {form.formState.errors.deliveredAmount ? (
+              <p className="text-sm text-[#d59a8b]">
+                {form.formState.errors.deliveredAmount.message}
+              </p>
+            ) : null}
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="expenseAmount">
-              Despesas e gastos
+              {receiptStatusWatch === "DELIVERED"
+                ? "Outras despesas e gastos (sem o prêmio)"
+                : "Despesas e gastos"}
             </label>
             <input
               id="expenseAmount"
@@ -570,24 +822,25 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
               sobrar continua pra próxima operação dele.
             </p>
           </div>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="generatedDebtAmount">
-              Ficou devendo
-            </label>
-            <input
-              id="generatedDebtAmount"
-              type="number"
-              inputMode="decimal"
-              step="0.01"
-              min="0"
-              className={fieldClass}
-              {...form.register("generatedDebtAmount")}
-            />
-            <p className={hintClass}>
-              Só preencher se ficar &quot;Não recebido&quot;: quanto o cliente
-              fica devendo a partir desta operação.
-            </p>
-          </div>
+          {receiptStatusWatch === "NOT_RECEIVED" ? (
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="generatedDebtAmount">
+                Ficou devendo
+              </label>
+              <input
+                id="generatedDebtAmount"
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register("generatedDebtAmount")}
+              />
+              <p className={hintClass}>
+                Quanto o cliente fica devendo a partir desta operação.
+              </p>
+            </div>
+          ) : null}
           <div className="space-y-2">
             <label className={labelClass} htmlFor="paymentMethod">
               Forma de pagamento
@@ -665,6 +918,11 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
           <div className="mt-4 grid gap-3 text-sm text-[#dbe6d4]/85 md:grid-cols-2">
             <p>Cliente: {receipt.clientName}</p>
             <p>Funcionário: {receipt.operatorName}</p>
+            {receipt.receiptStatus === "DELIVERED" ? (
+              <p className="font-semibold text-[#f3dfae]">
+                Prêmio: {formatCurrency(receipt.deliveredAmount)}
+              </p>
+            ) : null}
             {hideFinancials ? null : (
               <p className="font-semibold text-[#dbe6d4]">
                 Despesas e gastos: {formatCurrency(receipt.expenseAmount)}
@@ -693,6 +951,9 @@ export function BxForm({ hideFinancials = false, initialClientName = "", initial
               "*Comprovante BX*",
               `Cliente: ${receipt.clientName}`,
               `Atendido por: ${receipt.operatorName}`,
+              ...(receipt.receiptStatus === "DELIVERED"
+                ? [`Prêmio da máquina: ${formatCurrency(receipt.deliveredAmount)}`]
+                : []),
               `Despesas e gastos: ${formatCurrency(receipt.expenseAmount)}`,
               `Desconto: ${formatCurrency(receipt.discountAmount)}`,
               `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,

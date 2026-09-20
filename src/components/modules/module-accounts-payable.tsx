@@ -1,12 +1,13 @@
 "use client";
 
-import { Check, CheckCircle2, ChevronDown, Clock, Inbox, Minus, Plus, X } from "lucide-react";
+import { Check, CheckCircle2, Clock, Inbox, Minus, Plus, X } from "lucide-react";
 import { useMemo, useRef, useState, useTransition } from "react";
 
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import {
   createModuleFinancialEntryAction,
+  registerModuleFinancialPaymentAction,
   updateModuleFinancialEntryStatusAction,
 } from "@/server/actions/finance-actions";
 import type { ModuleFinancialEntryItem } from "@/server/services/finance-service";
@@ -41,6 +42,7 @@ export function ModuleAccountsPayable({
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [partialId, setPartialId] = useState<string | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const pending = useMemo(
@@ -49,11 +51,11 @@ export function ModuleAccountsPayable({
   );
 
   const totalPending = useMemo(
-    () => pending.filter((e) => e.direction === "INCOME").reduce((s, e) => s + e.totalAmount, 0),
+    () => pending.filter((e) => e.direction === "INCOME").reduce((s, e) => s + e.remainingAmount, 0),
     [pending],
   );
   const totalPayable = useMemo(
-    () => pending.filter((e) => e.direction === "EXPENSE").reduce((s, e) => s + e.totalAmount, 0),
+    () => pending.filter((e) => e.direction === "EXPENSE").reduce((s, e) => s + e.remainingAmount, 0),
     [pending],
   );
 
@@ -64,6 +66,25 @@ export function ModuleAccountsPayable({
         setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
       } catch {
         // silently ignore — optimistic update reverted on reload
+      }
+    });
+  }
+
+  function registerPartial(event: React.FormEvent<HTMLFormElement>, entry: ModuleFinancialEntryItem) {
+    event.preventDefault();
+    setError(null);
+    const data = new FormData(event.currentTarget);
+    startTransition(async () => {
+      try {
+        const updated = await registerModuleFinancialPaymentAction(slug, entry.id, {
+          amount: Number(data.get("amount") ?? 0),
+          paymentMethod: String(data.get("paymentMethod") ?? ""),
+          notes: String(data.get("notes") ?? "").trim() || undefined,
+        });
+        setEntries((current) => current.map((item) => (item.id === entry.id ? updated : item)));
+        setPartialId(null);
+      } catch (caught) {
+        setError(caught instanceof Error ? caught.message : "Não foi possível registrar o pagamento parcial.");
       }
     });
   }
@@ -268,28 +289,61 @@ export function ModuleAccountsPayable({
                         Pago
                       </button>
                     ) : null}
-                    {entry.status === "PENDING" ? (
+                    {entry.status === "PENDING" || entry.status === "PARTIAL" ? (
                       <button
                         type="button"
-                        onClick={() => markStatus(entry.id, "PARTIAL")}
+                        onClick={() => setPartialId(partialId === entry.id ? null : entry.id)}
                         disabled={isPending}
                         className="flex flex-1 items-center justify-center gap-1.5 rounded-xl border border-[#c9a84c]/35 bg-[#c9a84c]/10 py-2 text-xs font-semibold text-[#f0d98a] transition hover:bg-[#c9a84c]/18 disabled:opacity-50"
                       >
                         <Minus className="size-3.5" />
-                        Parcial
-                      </button>
-                    ) : null}
-                    {entry.status === "PARTIAL" ? (
-                      <button
-                        type="button"
-                        onClick={() => markStatus(entry.id, "PENDING")}
-                        disabled={isPending}
-                        className="flex items-center justify-center gap-1.5 rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.03] px-3 py-2 text-xs font-semibold text-[#9a958b] transition hover:text-white disabled:opacity-50"
-                      >
-                        <ChevronDown className="size-3.5" />
+                        {entry.status === "PARTIAL" ? "Novo pagamento" : "Parcial"}
                       </button>
                     ) : null}
                   </div>
+
+                  {partialId === entry.id ? (
+                    <form
+                      onSubmit={(event) => registerPartial(event, entry)}
+                      className="mt-3 space-y-3 rounded-xl border border-[#c9a84c]/20 bg-[#1a1408]/45 p-3"
+                    >
+                      <p className="text-xs font-semibold text-white">Registrar pagamento parcial</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <label className="space-y-1.5">
+                          <span className={labelClass}>Valor pago</span>
+                          <input
+                            name="amount"
+                            type="number"
+                            inputMode="decimal"
+                            step="0.01"
+                            min="0.01"
+                            max={entry.remainingAmount}
+                            required
+                            className={fieldClass}
+                          />
+                        </label>
+                        <label className="space-y-1.5">
+                          <span className={labelClass}>Forma de pagamento</span>
+                          <select name="paymentMethod" required className={selectClass} defaultValue="PIX">
+                            <option value="PIX">PIX</option>
+                            <option value="DINHEIRO">Dinheiro</option>
+                            <option value="CARTAO">Cartão</option>
+                            <option value="BANK_TRANSFER">Transferência</option>
+                            <option value="OTHER">Outro</option>
+                          </select>
+                        </label>
+                      </div>
+                      <input name="notes" className={fieldClass} placeholder="Observação (opcional)" />
+                      {error ? <p className="text-xs text-[#f0c9ad]">{error}</p> : null}
+                      <button
+                        type="submit"
+                        disabled={isPending}
+                        className="min-h-11 w-full rounded-xl bg-[#c9a84c] px-4 text-sm font-semibold text-[#0d0a05] disabled:opacity-50"
+                      >
+                        {isPending ? "Salvando..." : "Confirmar parcial"}
+                      </button>
+                    </form>
+                  ) : null}
                 </div>
               );
             })}

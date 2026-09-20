@@ -164,9 +164,9 @@ enum MarketingContentKind {
 enum BxReceiptStatus {
   RECEIVED
   NOT_RECEIVED
-  /// A operacao foi deixar dinheiro com o cliente, nao receber dele.
+  /// Premio liberado pela maquina. Este e o codigo canonico atual.
   DELIVERED
-  /// Cliente ganhou um premio: valor entregue, mas nao vira divida (diferente de DELIVERED).
+  /// Valor legado, mantido para ler registros antigos. Equivale a DELIVERED.
   PRIZE
 }
 

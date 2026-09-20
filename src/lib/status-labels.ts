@@ -43,7 +43,7 @@ export const PAYMENT_METHOD_LABEL: Record<string, string> = {
 export const RECEIPT_STATUS_LABEL: Record<string, string> = {
   RECEIVED: "Recebido",
   NOT_RECEIVED: "Não recebido",
-  DELIVERED: "Dinheiro deixado",
+  DELIVERED: "Prêmio",
   PRIZE: "Prêmio",
 };
 

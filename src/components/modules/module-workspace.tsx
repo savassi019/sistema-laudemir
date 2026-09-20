@@ -83,7 +83,7 @@ type SectionCfg = {
 const SECTION_CFG: Record<SectionKey, SectionCfg> = {
   operacao:      { label: "Operação",   description: "Registrar fechamento",    icon: ClipboardList, accent: "#d1a04f", accentBg: "bg-[#d1a04f]/15", accentText: "text-[#f3dfae]" },
   visita:        { label: "Visita",     description: "Fechar ponto e registrar visita", icon: MapPin, accent: "#a78bfa", accentBg: "bg-[#a78bfa]/15", accentText: "text-[#c4b5fd]" },
-  premio:        { label: "Prêmio",     description: "Pagamento direto ao cliente", icon: Award, accent: "#b46c5d", accentBg: "bg-[#b46c5d]/15", accentText: "text-[#f0a08f]" },
+  premio:        { label: "Prêmio",     description: "Dinheiro liberado pela máquina", icon: Award, accent: "#b46c5d", accentBg: "bg-[#b46c5d]/15", accentText: "text-[#f0a08f]" },
   rotas:         { label: "Rotas",      description: "Pontos agrupados por rota", icon: Route,  accent: "#a78bfa", accentBg: "bg-[#a78bfa]/15", accentText: "text-[#c4b5fd]" },
   calendario:    { label: "Calendário", description: "Conteúdos e reuniões do mês", icon: CalendarDays, accent: "#60a5fa", accentBg: "bg-[#60a5fa]/15", accentText: "text-[#93c5fd]" },
   clientes:      { label: "Clientes",   description: "Pontos cadastrados",      icon: UserPlus,      accent: "#60a5fa", accentBg: "bg-[#60a5fa]/15", accentText: "text-[#93c5fd]" },
@@ -99,8 +99,7 @@ const slugsWithoutClientConcept = new Set(["mercado-autonomo", "plataforma-onlin
 const slugsWithRoutes = new Set(["bilhar-pebolim"]);
 // Agenda de conteudo/reuniao hoje so existe no Marketing (MarketingContent).
 const slugsWithCalendar = new Set(["marketing"]);
-// "Premio pago direto ao cliente" e um fluxo de dinheiro proprio do BX --
-// funcionario as vezes paga o cliente sozinho, fora da operacao normal.
+// O premio e registrado no proprio fechamento do BX.
 const slugsWithPremio = new Set(["bx"]);
 const slugsWithVisitTracking = new Set([
   "bilhar-pebolim", "maquinas-de-pelucia", "bx", "h-caca-niquel", "carreta-kids", "locacao",
@@ -144,6 +143,22 @@ export function ModuleWorkspace({
   const [rotaVisita, setRotaVisita] = useState<number | null>(null);
 
   const Form = formMap[slug];
+
+  function resetVisitFlow() {
+    setVisitPreset(null);
+    setClientSearch("");
+    setRotaVisita(null);
+  }
+
+  function openSection(key: SectionKey) {
+    if (key === "visita") resetVisitFlow();
+    setActiveSection(key);
+  }
+
+  function closeActiveSection() {
+    if (activeSection === "visita") resetVisitFlow();
+    setActiveSection(null);
+  }
 
   const visibleSections = ALL_SECTIONS.filter((k) => {
     if (k === "operacao"      && hasVisitTracking)    return false; // Visita absorve o fechamento
@@ -228,7 +243,7 @@ export function ModuleWorkspace({
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={() => setActiveSection(null)}
+              onClick={closeActiveSection}
               /* Voltar e usado o tempo todo no celular; 32px era alvo pequeno demais. */
               className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-[rgba(245,241,232,0.1)] bg-white/[0.03] text-[#9a958b] transition hover:text-white active:scale-95"
             >
@@ -497,7 +512,7 @@ export function ModuleWorkspace({
       {hasVisitTracking && overdueClients.length > 0 ? (
         <button
           type="button"
-          onClick={() => setActiveSection("visita")}
+          onClick={() => openSection("visita")}
           className="flex w-full items-center gap-3 rounded-2xl border border-[#f87171]/25 bg-[#1a0f0f]/70 px-4 py-3 text-left transition hover:bg-[#1a0f0f]/90 active:scale-[0.99]"
         >
           <span className="flex size-2 shrink-0">
@@ -532,7 +547,7 @@ export function ModuleWorkspace({
             <button
               key={key}
               type="button"
-              onClick={() => setActiveSection(key)}
+              onClick={() => openSection(key)}
               className={cn(
                 "flex w-full items-center gap-4 px-4 py-4 text-left transition-colors hover:bg-white/[0.03] active:scale-[0.99]",
                 !isLast && "border-b border-[rgba(245,241,232,0.06)]",

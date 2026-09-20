@@ -1,5 +1,4 @@
 import type {
-  BxReceiptStatus,
   ContractStatus,
   FinancialDirection,
   FinancialStatus,
@@ -59,8 +58,19 @@ export type ModuleRecordItem = {
   amountValue?: number;
   incomeValue?: number;
   expenseValue?: number;
+  operatorName?: string;
+  paymentMethod?: string | null;
+  financialBreakdown?: ModuleFinancialBreakdownItem[];
   badge?: string;
   createdAt: string;
+};
+
+export type ModuleFinancialBreakdownItem = {
+  direction: "INCOME" | "EXPENSE";
+  category: string;
+  categoryLabel: string;
+  amount: number;
+  status?: "PENDING" | "PAID";
 };
 
 export type DateRange = { from?: Date; to?: Date };
@@ -194,35 +204,48 @@ const createBilliardSchema = z.object({
   notes: z.string().optional(),
 });
 
-const createBxSchema = z.object({
-  clientName: z.string(),
-  phone: z.string().optional(),
-  cpf: z.string().optional(),
-  cep: z.string().optional(),
-  street: z.string().optional(),
-  neighborhood: z.string().optional(),
-  city: z.string().optional(),
-  state: z.string().optional(),
-  // Quem fez a operacao passou a vir do login (session.name), nao mais de
-  // um numero digitado -- opcional so pra nao quebrar quem ainda manda.
-  // Agente e quem entregou ao cliente sao sempre a mesma pessoa que fez o
-  // fechamento -- tambem vem do login, o form nao manda mais esses campos.
-  collectNumber: z.string().optional(),
-  occurredAt: z.string(),
-  sentToAgentAmount: z.number(),
-  deliveredAmount: z.number(),
-  incomeAmount: z.number(),
-  expenseAmount: z.number(),
-  discountAmount: z.number(),
-  customerDebt: z.number().optional(),
-  generatedDebtAmount: z.number().optional(),
-  paymentMethod: z.string().optional(),
-  receiptStatus: z.string(),
-  exceptionClient: z.boolean(),
-  notes: z.string().optional(),
-  screenPhotoFileId: z.string().nullish(),
-  paperPhotoFileId: z.string().nullish(),
-});
+const createBxSchema = z
+  .object({
+    clientName: z.string(),
+    phone: z.string().optional(),
+    cpf: z.string().optional(),
+    cep: z.string().optional(),
+    street: z.string().optional(),
+    neighborhood: z.string().optional(),
+    city: z.string().optional(),
+    state: z.string().optional(),
+    // Quem fez a operacao passou a vir do login (session.name), nao mais de
+    // um numero digitado -- opcional so pra nao quebrar quem ainda manda.
+    // Agente e quem entregou ao cliente sao sempre a mesma pessoa que fez o
+    // fechamento -- tambem vem do login, o form nao manda mais esses campos.
+    collectNumber: z.string().optional(),
+    occurredAt: z.string(),
+    sentToAgentAmount: z.number(),
+    deliveredAmount: z.number(),
+    incomeAmount: z.number(),
+    expenseAmount: z.number(),
+    discountAmount: z.number(),
+    customerDebt: z.number().optional(),
+    generatedDebtAmount: z.number().optional(),
+    paymentMethod: z.string().optional(),
+    receiptStatus: z.enum(["RECEIVED", "NOT_RECEIVED", "DELIVERED", "PRIZE"]),
+    exceptionClient: z.boolean(),
+    notes: z.string().optional(),
+    screenPhotoFileId: z.string().nullish(),
+    paperPhotoFileId: z.string().nullish(),
+  })
+  .superRefine((data, ctx) => {
+    if (
+      (data.receiptStatus === "DELIVERED" || data.receiptStatus === "PRIZE") &&
+      data.deliveredAmount <= 0
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["deliveredAmount"],
+        message: "Informe o valor do premio.",
+      });
+    }
+  });
 
 const createSlotSchema = z.object({
   // Presente so quando volta numa maquina ja existente (veio do
@@ -894,6 +917,11 @@ async function saveWithPrisma(
     }
     case "bx": {
       const data = createBxSchema.parse(payload);
+      // DELIVERED fica como codigo canonico do premio; PRIZE continua aceito para
+      // compatibilidade com formularios/rascunhos antigos.
+      const receiptStatus = data.receiptStatus === "PRIZE" ? "DELIVERED" : data.receiptStatus;
+      const prizeExpenseAmount = receiptStatus === "DELIVERED" ? data.deliveredAmount : 0;
+      const totalExpenseAmount = data.expenseAmount + prizeExpenseAmount;
       const record = await prisma.bxTransaction.create({
         data: {
           organizationId: session.organizationId,
@@ -916,13 +944,14 @@ async function saveWithPrisma(
           deliveredAmount: data.deliveredAmount,
           incomeAmount: data.incomeAmount,
           expenseAmount: data.expenseAmount,
-          totalAmount: data.incomeAmount - data.expenseAmount - data.discountAmount,
+          totalAmount: data.incomeAmount - totalExpenseAmount - data.discountAmount,
           discountAmount: data.discountAmount,
           customerDebt: data.customerDebt ?? 0,
-          generatedDebtAmount: data.generatedDebtAmount ?? 0,
+          generatedDebtAmount:
+            receiptStatus === "NOT_RECEIVED" ? (data.generatedDebtAmount ?? 0) : 0,
           paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
           exceptionClient: data.exceptionClient,
-          receiptStatus: data.receiptStatus as BxReceiptStatus,
+          receiptStatus,
           screenPhotoId: data.screenPhotoFileId,
           paperPhotoId: data.paperPhotoFileId,
           notes: data.notes,
@@ -936,7 +965,7 @@ async function saveWithPrisma(
         visitType: "BX",
         occurredAt: record.occurredAt,
         incomeAmount: Number(record.incomeAmount),
-        expenseAmount: Number(record.expenseAmount),
+        expenseAmount: totalExpenseAmount,
         clientName: record.clientName ?? null,
         clientPhone: record.phone ?? null,
       }).catch((e) => console.error("[module-record-service] logFieldVisit bx falhou:", e));
@@ -1441,6 +1470,32 @@ async function resolveCreatorNames(ids: (string | null | undefined)[]): Promise<
   return new Map(usuarios.map((u) => [u.id, u.name]));
 }
 
+function getBxFinancialAmounts(record: {
+  receiptStatus: string;
+  incomeAmount: unknown;
+  expenseAmount: unknown;
+  deliveredAmount: unknown;
+  discountAmount: unknown;
+}) {
+  const incomeAmount = Number(record.incomeAmount ?? 0);
+  const operatingExpenseAmount = Number(record.expenseAmount ?? 0);
+  const prizeExpenseAmount =
+    record.receiptStatus === "DELIVERED" || record.receiptStatus === "PRIZE"
+      ? Number(record.deliveredAmount ?? 0)
+      : 0;
+  const expenseAmount = operatingExpenseAmount + prizeExpenseAmount;
+  const discountAmount = Number(record.discountAmount ?? 0);
+
+  return {
+    incomeAmount,
+    operatingExpenseAmount,
+    prizeExpenseAmount,
+    expenseAmount,
+    discountAmount,
+    netAmount: incomeAmount - expenseAmount - discountAmount,
+  };
+}
+
 /**
  * Saldo devedor atual de um cliente do BX: pega a ultima operacao dele
  * (por clientName, BX nao tem cadastro de cliente compartilhado) e calcula
@@ -1451,19 +1506,29 @@ async function resolveBxClientDebt(organizationId: string, clientName: string): 
   const anterior = await prisma.bxTransaction.findFirst({
     where: { organizationId, clientName },
     orderBy: { createdAt: "desc" },
-    select: { customerDebt: true, discountAmount: true, generatedDebtAmount: true },
+    select: {
+      customerDebt: true,
+      discountAmount: true,
+      generatedDebtAmount: true,
+      receiptStatus: true,
+    },
   });
   if (!anterior) return 0;
   const saldoRestante = Math.max(
     Number(anterior.customerDebt ?? 0) - Number(anterior.discountAmount ?? 0),
     0,
   );
-  return saldoRestante + Number(anterior.generatedDebtAmount ?? 0);
+  const dividaGerada =
+    anterior.receiptStatus === "NOT_RECEIVED"
+      ? Number(anterior.generatedDebtAmount ?? 0)
+      : 0;
+  return saldoRestante + dividaGerada;
 }
 
 export type BxPrizeItem = {
   id: string;
   clientName: string;
+  location: string;
   amount: number;
   paymentMethod: string | null;
   occurredAt: string;
@@ -1471,29 +1536,52 @@ export type BxPrizeItem = {
 };
 
 /**
- * Lista as operacoes do BX marcadas como "Premio" (receiptStatus PRIZE) --
- * a aba Premio mostra o que ja foi registrado no fechamento normal, nao um
- * lancamento avulso separado. Ver [[project_bx_prize_tab]].
+ * Lista premios da maquina. Os dois status internos entram
+ * porque agora representam a mesma operacao; novos registros usam DELIVERED.
+ * A aba Premio mostra o fechamento normal, nao um lancamento separado.
  */
-export async function listBxPrizeRecords(
-  session: SessionData,
-  take = 50,
-): Promise<BxPrizeItem[]> {
+export async function listBxPrizeRecords(session: SessionData): Promise<BxPrizeItem[]> {
   const records = await prisma.bxTransaction.findMany({
-    where: { organizationId: session.organizationId, receiptStatus: "PRIZE" },
+    where: {
+      organizationId: session.organizationId,
+      receiptStatus: { in: ["DELIVERED", "PRIZE"] },
+    },
+    select: {
+      id: true,
+      clientName: true,
+      street: true,
+      neighborhood: true,
+      city: true,
+      deliveredAmount: true,
+      expenseAmount: true,
+      totalAmount: true,
+      paymentMethod: true,
+      occurredAt: true,
+      createdById: true,
+    },
     orderBy: { occurredAt: "desc" },
-    take,
   });
   const nomes = await resolveCreatorNames(records.map((r) => r.createdById));
 
-  return records.map((r) => ({
-    id: r.id,
-    clientName: r.clientName,
-    amount: Number(r.deliveredAmount ?? r.expenseAmount ?? r.totalAmount ?? 0),
-    paymentMethod: r.paymentMethod,
-    occurredAt: r.occurredAt.toISOString(),
-    operatorName: r.createdById ? (nomes.get(r.createdById) ?? "-") : "-",
-  }));
+  return records.map((r) => {
+    const deliveredAmount = Number(r.deliveredAmount ?? 0);
+    const expenseAmount = Number(r.expenseAmount ?? 0);
+    const amount =
+      deliveredAmount > 0
+        ? deliveredAmount
+        : expenseAmount > 0
+          ? expenseAmount
+          : Math.abs(Number(r.totalAmount ?? 0));
+    return {
+      id: r.id,
+      clientName: r.clientName,
+      location: [r.street, r.neighborhood, r.city].filter(Boolean).join(", "),
+      amount: session.role === "STAFF" ? 0 : amount,
+      paymentMethod: r.paymentMethod,
+      occurredAt: r.occurredAt.toISOString(),
+      operatorName: r.createdById ? (nomes.get(r.createdById) ?? "-") : "-",
+    };
+  });
 }
 
 function buildDateWhere(range?: DateRange, campo: string = "createdAt") {
@@ -1617,26 +1705,96 @@ export async function listModuleRecords(
           take,
         });
         const nomePorCriador = await resolveCreatorNames(records.map((r) => r.createdById));
+        const debtClientsSeen = new Set<string>();
 
-        return records.map((record) => ({
-          id: record.id,
-          title: record.clientName,
-          summary: `Funcionário: ${record.createdById ? (nomePorCriador.get(record.createdById) ?? "-") : "-"}`,
-          details: [
-            `Agente: ${record.agentName ?? "-"}`,
-            `Recebeu: ${record.receiverName ?? "-"}`,
-            `Status: ${rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL)}`,
-            `Entrada: ${formatCurrency(Number(record.incomeAmount ?? 0))}`,
-            `Saida: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
-            `Pagamento: ${record.paymentMethod ? rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL) : "Não informado"}`,
-          ],
-          amount: formatCurrency(Number(record.totalAmount)),
-          amountValue: Number(record.totalAmount),
-          incomeValue: Number(record.incomeAmount ?? 0),
-          expenseValue: Number(record.expenseAmount ?? 0),
-          badge: rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL),
-          createdAt: record.createdAt.toISOString(),
-        }));
+        return records.map((record) => {
+          const amounts = getBxFinancialAmounts(record);
+          const operatorName = record.createdById
+            ? (nomePorCriador.get(record.createdById) ?? "-")
+            : "-";
+          const financialBreakdown: ModuleFinancialBreakdownItem[] = [];
+
+          if (amounts.incomeAmount > 0) {
+            financialBreakdown.push({
+              direction: "INCOME",
+              category: "OPERATION_INCOME",
+              categoryLabel: "Entrada da operação",
+              amount: amounts.incomeAmount,
+            });
+          }
+          if (amounts.operatingExpenseAmount > 0) {
+            financialBreakdown.push({
+              direction: "EXPENSE",
+              category: "OPERATING_EXPENSE",
+              categoryLabel: "Outras despesas",
+              amount: amounts.operatingExpenseAmount,
+            });
+          }
+          if (amounts.prizeExpenseAmount > 0) {
+            financialBreakdown.push({
+              direction: "EXPENSE",
+              category: "PRIZE",
+              categoryLabel: "Prêmio",
+              amount: amounts.prizeExpenseAmount,
+            });
+          }
+          if (amounts.discountAmount > 0) {
+            financialBreakdown.push({
+              direction: "EXPENSE",
+              category: "DISCOUNT",
+              categoryLabel: "Desconto",
+              amount: amounts.discountAmount,
+            });
+          }
+          const debtKey = record.clientName.trim().toLocaleLowerCase("pt-BR");
+          const isLatestClientRecord = !debtClientsSeen.has(debtKey);
+          debtClientsSeen.add(debtKey);
+          const generatedDebtAmount = record.receiptStatus === "NOT_RECEIVED"
+            ? Number(record.generatedDebtAmount ?? 0)
+            : 0;
+          const currentDebtAmount = isLatestClientRecord
+            ? Math.max(Number(record.customerDebt ?? 0) - amounts.discountAmount, 0) +
+              generatedDebtAmount
+            : 0;
+          if (currentDebtAmount > 0) {
+            financialBreakdown.push({
+              direction: "INCOME",
+              category: "DEBT_RECEIVABLE",
+              categoryLabel: "Saldo devedor a receber",
+              amount: currentDebtAmount,
+              status: "PENDING",
+            });
+          }
+
+          return {
+            id: record.id,
+            title: record.clientName,
+            summary: `Funcionário: ${operatorName}`,
+            details: [
+              `Agente: ${record.agentName ?? "-"}`,
+              `Recebeu: ${record.receiverName ?? "-"}`,
+              `Status: ${rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL)}`,
+              `Entrada: ${formatCurrency(amounts.incomeAmount)}`,
+              `Despesas: ${formatCurrency(amounts.operatingExpenseAmount)}`,
+              ...(amounts.prizeExpenseAmount > 0
+                ? [`Prêmio da máquina: ${formatCurrency(amounts.prizeExpenseAmount)}`]
+                : []),
+              ...(currentDebtAmount > 0
+                ? [`Saldo devedor atual: ${formatCurrency(currentDebtAmount)}`]
+                : []),
+              `Pagamento: ${record.paymentMethod ? rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL) : "Não informado"}`,
+            ],
+            amount: formatCurrency(amounts.netAmount),
+            amountValue: amounts.netAmount,
+            incomeValue: amounts.incomeAmount,
+            expenseValue: amounts.expenseAmount + amounts.discountAmount,
+            operatorName,
+            paymentMethod: record.paymentMethod,
+            financialBreakdown,
+            badge: rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL),
+            createdAt: record.createdAt.toISOString(),
+          };
+        });
       }
       case "h-caca-niquel": {
         const records = await prisma.slotCollection.findMany({
@@ -2001,14 +2159,17 @@ export async function listModuleClients(
 
         return dedupeByKey(records, (r) => r.clientName)
           .slice(0, take)
-          .map((record) => ({
-            id: record.id,
-            name: record.clientName,
-            subtitle: `Funcionário: ${record.createdById ? (nomePorCriadorBx.get(record.createdById) ?? "-") : "-"}`,
-            tags: [record.phone, record.cpf].filter(Boolean) as string[],
-            badge: formatCurrency(Number(record.totalAmount)),
-            phone: record.phone ?? undefined,
-          }));
+          .map((record) => {
+            const amounts = getBxFinancialAmounts(record);
+            return {
+              id: record.id,
+              name: record.clientName,
+              subtitle: `Funcionário: ${record.createdById ? (nomePorCriadorBx.get(record.createdById) ?? "-") : "-"}`,
+              tags: [record.phone, record.cpf].filter(Boolean) as string[],
+              badge: formatCurrency(amounts.netAmount),
+              phone: record.phone ?? undefined,
+            };
+          });
       }
       case "carreta-kids": {
         const records = await prisma.carretaKidsRecord.findMany({
@@ -2207,25 +2368,31 @@ export async function listModuleClientRecords(
         take: 30,
       });
       const nomePorCriadorBxCliente = await resolveCreatorNames(records.map((r) => r.createdById));
-      return records.map((record) => ({
-        id: record.id,
-        title: record.clientName,
-        summary: `Funcionário: ${record.createdById ? (nomePorCriadorBxCliente.get(record.createdById) ?? "-") : "-"}`,
-        details: [
-          `Agente: ${record.agentName ?? "-"}`,
-          `Recebeu: ${record.receiverName ?? "-"}`,
-          `Status: ${rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL)}`,
-          `Entrada: ${formatCurrency(Number(record.incomeAmount ?? 0))}`,
-          `Saida: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
-          `Pagamento: ${record.paymentMethod ? rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL) : "Não informado"}`,
-        ],
-        amount: formatCurrency(Number(record.totalAmount)),
-        amountValue: Number(record.totalAmount),
-        incomeValue: Number(record.incomeAmount ?? 0),
-        expenseValue: Number(record.expenseAmount ?? 0),
-        badge: rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL),
-        createdAt: record.createdAt.toISOString(),
-      }));
+      return records.map((record) => {
+        const amounts = getBxFinancialAmounts(record);
+        return {
+          id: record.id,
+          title: record.clientName,
+          summary: `Funcionário: ${record.createdById ? (nomePorCriadorBxCliente.get(record.createdById) ?? "-") : "-"}`,
+          details: [
+            `Agente: ${record.agentName ?? "-"}`,
+            `Recebeu: ${record.receiverName ?? "-"}`,
+            `Status: ${rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL)}`,
+            `Entrada: ${formatCurrency(amounts.incomeAmount)}`,
+            `Despesas: ${formatCurrency(amounts.operatingExpenseAmount)}`,
+            ...(amounts.prizeExpenseAmount > 0
+              ? [`Prêmio da máquina: ${formatCurrency(amounts.prizeExpenseAmount)}`]
+              : []),
+            `Pagamento: ${record.paymentMethod ? rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL) : "Não informado"}`,
+          ],
+          amount: formatCurrency(amounts.netAmount),
+          amountValue: amounts.netAmount,
+          incomeValue: amounts.incomeAmount,
+          expenseValue: amounts.expenseAmount,
+          badge: rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL),
+          createdAt: record.createdAt.toISOString(),
+        };
+      });
     }
 
     case "carreta-kids": {
