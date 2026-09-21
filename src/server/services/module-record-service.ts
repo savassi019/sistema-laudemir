@@ -11,6 +11,7 @@ import { z } from "zod";
 
 import { formatCurrency, formatMachineCounter, formatShortDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import { calculateSlotCustomerDebt } from "@/lib/slot-finance";
 import {
   CONTRACT_STATUS_LABEL,
   DIRECTION_LABEL,
@@ -306,10 +307,12 @@ const createSlotVisitSchema = z
     clientName: z.string().min(1, "Cliente nao informado."),
     occurredAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data invalida."),
     paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
-    // O saldo pertence ao fechamento do cliente, nao a cada maquina. Os
-    // campos sao opcionais apenas para reconhecermos abas antigas e
-    // devolvermos uma mensagem pedindo atualizacao, sem gravar nada.
+    // O saldo pertence ao fechamento do cliente, nao a cada maquina. O saldo
+    // anterior e opcional apenas para reconhecermos abas antigas e devolvermos
+    // uma mensagem pedindo atualizacao, sem gravar nada.
     previousCustomerDebt: slotMoneySchema.optional(),
+    // Campo legado aceito por compatibilidade. O servidor sempre recalcula o
+    // desconto automaticamente e ignora qualquer valor enviado pelo navegador.
     customerDebtDiscounted: slotMoneySchema.optional(),
     machines: z.array(slotVisitMachineSchema).min(1).max(200),
   })
@@ -867,39 +870,29 @@ export async function saveSlotVisit(
   payload: Record<string, unknown>,
 ): Promise<SlotVisitSaveResult> {
   const data = createSlotVisitSchema.parse(payload);
-  if (
-    data.previousCustomerDebt === undefined ||
-    data.customerDebtDiscounted === undefined
-  ) {
+  if (data.previousCustomerDebt === undefined) {
     throw new SlotVisitConflictError(
       "Esta tela de visita esta desatualizada. Atualize a pagina e abra o fechamento novamente.",
     );
   }
   const submittedPreviousCustomerDebt = data.previousCustomerDebt;
-  const customerDebtDiscounted = data.customerDebtDiscounted;
-  // A divida nova e sempre o valor absoluto da parte do cliente quando o
-  // fechamento inteiro termina negativo. O servidor recalcula para nao
-  // confiar em valores derivados enviados pelo navegador.
-  const generatedDebtAmount = roundMoney(
-    Math.max(
-      -data.machines.reduce(
-        (sum, machine) =>
-          sum +
-          computeSlotSplit({
-            currentIncome: machine.currentIncome,
-            previousIncome: machine.previousIncome,
-            currentExpense: machine.currentExpense,
-            previousExpense: machine.previousExpense,
-            percentageSplit: machine.percentageSplit,
-            optionalGreedAmount: machine.optionalGreedAmount,
-            previousMachineDebt: machine.previousMachineDebt,
-            finalMachineDebt: machine.finalMachineDebt,
-            feedingNegativeAmount: 0,
-            customerDebtDiscounted: 0,
-            generatedDebtAmount: 0,
-          }).clientShareFinal,
-        0,
-      ),
+  const clientShareBeforeDebt = roundMoney(
+    data.machines.reduce(
+      (sum, machine) =>
+        sum +
+        computeSlotSplit({
+          currentIncome: machine.currentIncome,
+          previousIncome: machine.previousIncome,
+          currentExpense: machine.currentExpense,
+          previousExpense: machine.previousExpense,
+          percentageSplit: machine.percentageSplit,
+          optionalGreedAmount: machine.optionalGreedAmount,
+          previousMachineDebt: machine.previousMachineDebt,
+          finalMachineDebt: machine.finalMachineDebt,
+          feedingNegativeAmount: 0,
+          customerDebtDiscounted: 0,
+          generatedDebtAmount: 0,
+        }).clientShareFinal,
       0,
     ),
   );
@@ -1002,13 +995,16 @@ export async function saveSlotVisit(
           "A divida deste cliente mudou enquanto a visita estava aberta. Atualize a pagina e confira o fechamento novamente.",
         );
       }
-      const debtAvailable = roundMoney(currentCustomerDebt + generatedDebtAmount);
-      if (customerDebtDiscounted > debtAvailable) {
-        throw new SlotVisitConflictError(
-          "A divida descontada supera o saldo disponivel do cliente.",
-        );
-      }
-      const finalCustomerDebt = roundMoney(debtAvailable - customerDebtDiscounted);
+      // Se a parte do cliente ficar negativa, o valor vira divida nova. Se
+      // ficar positiva, ela abate automaticamente a divida antiga.
+      const {
+        generatedDebtAmount,
+        customerDebtDiscounted,
+        finalCustomerDebt,
+      } = calculateSlotCustomerDebt({
+        clientShareBeforeDebt,
+        previousCustomerDebt: currentCustomerDebt,
+      });
       const debtCarrierMachineId = data.machines[0]!.machineId;
 
       const photoIds = data.machines.map((machine) => machine.screenPhotoFileId);

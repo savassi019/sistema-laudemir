@@ -18,6 +18,7 @@ import { fetchAddressByCep } from "@/lib/cep";
 import { formatCurrency, formatMachineCounter } from "@/lib/format";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
+import { calculateSlotCustomerDebt } from "@/lib/slot-finance";
 import { isValidCpf } from "@/lib/validators";
 import {
   getClientPrefillDataAction,
@@ -364,16 +365,6 @@ const visitSchema = z
     previousCustomerDebt: z.coerce.number().min(0),
     customerDebtDiscounted: z.coerce.number().min(0),
     machines: z.array(visitMachineSchema).min(1),
-  })
-  .superRefine((data, ctx) => {
-    const generatedDebtAmount = calculateAutomaticGeneratedDebt(data.machines);
-    if (data.customerDebtDiscounted > data.previousCustomerDebt + generatedDebtAmount) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["customerDebtDiscounted"],
-        message: "O desconto supera o saldo da dívida.",
-      });
-    }
   });
 
 type VisitInput = z.input<typeof visitSchema>;
@@ -411,11 +402,22 @@ function computeMachineSplit(m: {
   };
 }
 
-function calculateAutomaticGeneratedDebt(machines: VisitMachineValues[]) {
-  const clientTotal = machines
-    .filter((machine) => machine.included)
-    .reduce((sum, machine) => sum + computeMachineSplit(machine).clientShareFinal, 0);
-  return Math.round(Math.max(-clientTotal, 0) * 100) / 100;
+function calculateClientTotalBeforeDebt(machines: VisitMachineValues[]) {
+  return Math.round(
+    machines
+      .filter((machine) => machine.included)
+      .reduce((sum, machine) => sum + computeMachineSplit(machine).clientShareFinal, 0) * 100,
+  ) / 100;
+}
+
+function calculateAutomaticCustomerDebt(
+  machines: VisitMachineValues[],
+  previousCustomerDebt: number,
+) {
+  return calculateSlotCustomerDebt({
+    clientShareBeforeDebt: calculateClientTotalBeforeDebt(machines),
+    previousCustomerDebt,
+  });
 }
 
 type MachineResult = {
@@ -699,15 +701,9 @@ function SlotVisitForm({
   const watchedPreviousCustomerDebt = Number(
     useWatch({ control: form.control, name: "previousCustomerDebt" }) ?? 0,
   );
-  const watchedDiscountedDebt = Number(
-    useWatch({ control: form.control, name: "customerDebtDiscounted" }) ?? 0,
-  );
-  const automaticGeneratedDebt = calculateAutomaticGeneratedDebt(
+  const automaticCustomerDebt = calculateAutomaticCustomerDebt(
     watchedMachines as VisitMachineValues[],
-  );
-  const finalCustomerDebt = Math.max(
-    watchedPreviousCustomerDebt + automaticGeneratedDebt - watchedDiscountedDebt,
-    0,
+    watchedPreviousCustomerDebt,
   );
 
   const onSubmit = form.handleSubmit((values) => {
@@ -717,9 +713,14 @@ function SlotVisitForm({
       setSaveError("Selecione ao menos uma máquina pra fechar.");
       return;
     }
+    const customerDebt = calculateAutomaticCustomerDebt(
+      values.machines,
+      values.previousCustomerDebt,
+    );
     setReviewValues({
       ...values,
-      generatedDebtAmount: calculateAutomaticGeneratedDebt(values.machines),
+      customerDebtDiscounted: customerDebt.customerDebtDiscounted,
+      generatedDebtAmount: customerDebt.generatedDebtAmount,
     });
   });
 
@@ -837,35 +838,33 @@ function SlotVisitForm({
             </div>
           )}
           {saveError ? <p className="mt-3 text-sm text-[#f0c9ad]">{saveError}</p> : null}
+          <div className="mt-5 border-t border-[#8aa17c]/20 pt-4">
+            <WhatsAppReceiptButton
+              defaultPhone={phone}
+              autoOpen={!!phone}
+              title="Enviar comprovante do fechamento pelo WhatsApp"
+              message={[
+                "*Comprovante H — Caça-níquel*",
+                `Cliente: ${clientName}`,
+                lastSubmission
+                  ? `Data: ${new Date(`${lastSubmission.occurredAt}T12:00:00`).toLocaleDateString("pt-BR")}`
+                  : "",
+                `Máquinas fechadas: ${results.map((result) => result.clientMachineNumber).join(", ")}`,
+                ...(hideFinancials
+                  ? []
+                  : [
+                      `*Repasse ao cliente: ${formatCurrency(totalCliente)}*`,
+                      `*Saldo final da dívida: ${formatCurrency(savedFinalCustomerDebt)}*`,
+                    ]),
+                lastSubmission
+                  ? `Pagamento: ${PAYMENT_METHOD_LABEL[lastSubmission.paymentMethod] ?? lastSubmission.paymentMethod}`
+                  : "",
+              ]
+                .filter(Boolean)
+                .join("\n")}
+            />
+          </div>
         </article>
-        <WhatsAppReceiptButton
-          defaultPhone={phone}
-          autoOpen={!!phone}
-          message={[
-            "*Comprovante H — Caça-níquel*",
-            `Cliente: ${clientName}`,
-            lastSubmission
-              ? `Data: ${new Date(`${lastSubmission.occurredAt}T12:00:00`).toLocaleDateString("pt-BR")}`
-              : "",
-            ...results.map((r) =>
-              hideFinancials
-                ? `Máquina ${r.clientMachineNumber}: Fechada`
-                : `Máquina ${r.clientMachineNumber}: ${formatCurrency(r.houseAmount ?? 0)}`,
-            ),
-            ...(hideFinancials
-              ? []
-              : [
-                  `*Total cliente: ${formatCurrency(totalCliente)}*`,
-                  `*Total Infinity: ${formatCurrency(totalCasa)}*`,
-                  `*Saldo final da dívida: ${formatCurrency(savedFinalCustomerDebt)}*`,
-                ]),
-            lastSubmission
-              ? `Pagamento: ${PAYMENT_METHOD_LABEL[lastSubmission.paymentMethod] ?? lastSubmission.paymentMethod}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join("\n")}
-        />
         <button
           type="button"
           onClick={() => {
@@ -1002,12 +1001,14 @@ function SlotVisitForm({
                 </p>
               </div>
             ) : null}
-            <div className="rounded-xl border border-white/10 bg-black/10 p-3">
-              <p className="text-[#9a958b]">Descontada agora</p>
-              <p className="mt-1 font-semibold text-white">
-                {formatCurrency(reviewValues.customerDebtDiscounted)}
-              </p>
-            </div>
+            {!hideFinancials ? (
+              <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+                <p className="text-[#9a958b]">Descontada automaticamente</p>
+                <p className="mt-1 font-semibold text-white">
+                  {formatCurrency(reviewValues.customerDebtDiscounted)}
+                </p>
+              </div>
+            ) : null}
             {!hideFinancials ? (
               <div className="rounded-xl border border-white/10 bg-black/10 p-3">
                 <p className="text-[#9a958b]">Saldo final</p>
@@ -1128,32 +1129,26 @@ function SlotVisitForm({
               <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.025] p-3">
                 <p className={labelClass}>Dívida gerada automaticamente</p>
                 <p className="text-base font-semibold text-white">
-                  {formatCurrency(automaticGeneratedDebt)}
+                  {formatCurrency(automaticCustomerDebt.generatedDebtAmount)}
                 </p>
                 <p className={hintClass}>Parte do cliente que ficou negativa neste fechamento.</p>
               </div>
             ) : null}
-            <div className="space-y-1.5">
-              <label className={labelClass}>Dívida descontada agora</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                className={fieldClass}
-                {...form.register("customerDebtDiscounted")}
-              />
-              {form.formState.errors.customerDebtDiscounted ? (
-                <p className="text-xs text-[#d59a8b]">
-                  {form.formState.errors.customerDebtDiscounted.message?.toString()}
+            <input type="hidden" {...form.register("customerDebtDiscounted")} />
+            {!hideFinancials ? (
+              <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.025] p-3">
+                <p className={labelClass}>Dívida descontada automaticamente</p>
+                <p className="text-base font-semibold text-white">
+                  {formatCurrency(automaticCustomerDebt.customerDebtDiscounted)}
                 </p>
-              ) : null}
-            </div>
+                <p className={hintClass}>Usa a parte positiva do cliente para abater a dívida.</p>
+              </div>
+            ) : null}
             {!hideFinancials ? (
               <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.025] p-3">
                 <p className={labelClass}>Saldo final da dívida</p>
                 <p className="text-base font-semibold text-white">
-                  {formatCurrency(finalCustomerDebt)}
+                  {formatCurrency(automaticCustomerDebt.finalCustomerDebt)}
                 </p>
                 <p className={hintClass}>Anterior + gerada − descontada.</p>
               </div>
