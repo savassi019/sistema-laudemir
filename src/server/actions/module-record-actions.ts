@@ -52,11 +52,11 @@ export async function listBxPrizeRecordsAction() {
 }
 
 export async function registerSlotClientAction(payload: Record<string, unknown>) {
-  const session = await requireSession();
+  const session = await requireSession("SLOT_H");
   return registerSlotClient(session, payload);
 }
 
 export async function getSlotClientMachinesAction(clientName: string) {
-  const session = await requireSession();
+  const session = await requireSession("SLOT_H");
   return getSlotClientMachines(session, clientName);
 }

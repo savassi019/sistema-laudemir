@@ -9,9 +9,8 @@ import {
   LoaderCircle,
   Plus,
   ReceiptText,
-  X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFieldArray, useForm, useWatch, type UseFormReturn } from "react-hook-form";
 import { z } from "zod";
 
@@ -46,13 +45,17 @@ async function uploadFile(file: File, category: string) {
   formData.append("file", file);
   formData.append("category", category);
   const response = await fetch("/api/upload", { method: "POST", body: formData });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    const result = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(result?.error ?? "Nao foi possivel enviar a foto.");
+  }
   const result = (await response.json()) as { id: string };
   return result.id;
 }
 
 function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  const today = new Date();
+  return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -320,14 +323,15 @@ const visitMachineSchema = z
     machineId: z.string(),
     clientMachineNumber: z.number(),
     included: z.boolean(),
-    customerDebt: z.coerce.number().min(0),
+    previousCustomerDebt: z.coerce.number().min(0),
     currentIncome: z.coerce.number().min(0),
     previousIncome: z.coerce.number().min(0),
     currentExpense: z.coerce.number().min(0),
     previousExpense: z.coerce.number().min(0),
     percentageSplit: z.coerce.number().min(0).max(100),
     optionalGreedAmount: z.coerce.number().min(0),
-    negativeAmount: z.coerce.number().min(0),
+    previousMachineDebt: z.coerce.number().min(0),
+    finalMachineDebt: z.coerce.number().min(0),
     feedingNegativeAmount: z.coerce.number().min(0),
     customerDebtDiscounted: z.coerce.number().min(0),
     generatedDebtAmount: z.coerce.number().min(0),
@@ -336,6 +340,27 @@ const visitMachineSchema = z
   })
   .superRefine((data, ctx) => {
     if (!data.included) return;
+    if (data.currentIncome < data.previousIncome) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["currentIncome"],
+        message: "A entrada atual nao pode ser menor que a anterior.",
+      });
+    }
+    if (data.currentExpense < data.previousExpense) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["currentExpense"],
+        message: "A saida atual nao pode ser menor que a anterior.",
+      });
+    }
+    if (data.customerDebtDiscounted > data.previousCustomerDebt + data.generatedDebtAmount) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["customerDebtDiscounted"],
+        message: "O desconto supera o saldo da divida.",
+      });
+    }
     const photo = (data.screenPhoto as FileList | undefined)?.[0];
     if (!photo) {
       ctx.addIssue({ code: "custom", path: ["screenPhoto"], message: "Tire uma foto da tela antes de salvar." });
@@ -358,30 +383,49 @@ function computeMachineSplit(m: {
   previousExpense: number;
   percentageSplit: number;
   optionalGreedAmount: number;
-  negativeAmount: number;
+  previousMachineDebt: number;
+  finalMachineDebt: number;
   feedingNegativeAmount: number;
+  previousCustomerDebt: number;
   customerDebtDiscounted: number;
   generatedDebtAmount: number;
 }) {
   const incomeDifference = m.currentIncome - m.previousIncome;
   const expenseDifference = m.currentExpense - m.previousExpense;
   const netRevenue = incomeDifference - expenseDifference;
-  const totalNegative = m.negativeAmount + m.feedingNegativeAmount;
+  const machineDebtChange = m.finalMachineDebt - m.previousMachineDebt;
+  const totalNegative = machineDebtChange + m.feedingNegativeAmount;
   const adjustedTotal = netRevenue - totalNegative;
   const clientShareBase = adjustedTotal * (m.percentageSplit / 100);
   const houseShareBase = adjustedTotal - clientShareBase;
   const clientShareAfterGreed = clientShareBase - m.optionalGreedAmount;
   const houseShareAfterGreed = houseShareBase + m.optionalGreedAmount;
   const clientShareFinal = clientShareAfterGreed - m.customerDebtDiscounted;
-  const houseAmount = houseShareAfterGreed - m.generatedDebtAmount;
-  return { incomeDifference, expenseDifference, netRevenue, clientShareFinal, houseAmount };
+  const houseAmount = houseShareAfterGreed + m.customerDebtDiscounted - m.generatedDebtAmount;
+  const finalCustomerDebt = Math.max(
+    m.previousCustomerDebt + m.generatedDebtAmount - m.customerDebtDiscounted,
+    0,
+  );
+  return {
+    incomeDifference,
+    expenseDifference,
+    netRevenue,
+    machineDebtChange,
+    clientShareFinal,
+    houseAmount,
+    finalCustomerDebt,
+  };
 }
 
 type MachineResult = {
+  recordId: string;
   clientMachineNumber: number;
-  ok: boolean;
-  clientShareFinal: number;
-  houseAmount: number;
+  clientShareFinal?: number;
+  houseAmount?: number;
+  previousMachineDebt?: number;
+  finalMachineDebt?: number;
+  previousCustomerDebt?: number;
+  finalCustomerDebt?: number;
 };
 
 function MachineFieldset({
@@ -409,8 +453,10 @@ function MachineFieldset({
     previousExpense: Number(watchedMachine?.previousExpense ?? 0),
     percentageSplit: Number(watchedMachine?.percentageSplit ?? 50),
     optionalGreedAmount: Number(watchedMachine?.optionalGreedAmount ?? 0),
-    negativeAmount: Number(watchedMachine?.negativeAmount ?? 0),
+    previousMachineDebt: Number(watchedMachine?.previousMachineDebt ?? 0),
+    finalMachineDebt: Number(watchedMachine?.finalMachineDebt ?? 0),
     feedingNegativeAmount: Number(watchedMachine?.feedingNegativeAmount ?? 0),
+    previousCustomerDebt: Number(watchedMachine?.previousCustomerDebt ?? 0),
     customerDebtDiscounted: Number(watchedMachine?.customerDebtDiscounted ?? 0),
     generatedDebtAmount: Number(watchedMachine?.generatedDebtAmount ?? 0),
   });
@@ -480,6 +526,9 @@ function MachineFieldset({
                 className={fieldClass}
                 {...form.register(`machines.${index}.currentIncome`)}
               />
+              {machineErrors?.currentIncome ? (
+                <p className="text-xs text-[#d59a8b]">{machineErrors.currentIncome.message?.toString()}</p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <label className={labelClass}>Entrada anterior</label>
@@ -503,6 +552,9 @@ function MachineFieldset({
                 className={fieldClass}
                 {...form.register(`machines.${index}.currentExpense`)}
               />
+              {machineErrors?.currentExpense ? (
+                <p className="text-xs text-[#d59a8b]">{machineErrors.currentExpense.message?.toString()}</p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <label className={labelClass}>Saída anterior</label>
@@ -540,15 +592,29 @@ function MachineFieldset({
               />
             </div>
             <div className="space-y-1.5">
-              <label className={labelClass}>Débito da máquina (saldo)</label>
+              <label className={labelClass}>Saldo anterior da máquina</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                readOnly
+                className={`${fieldClass} opacity-70`}
+                {...form.register(`machines.${index}.previousMachineDebt`)}
+              />
+              <p className={hintClass}>Somente leitura; não será descontado novamente.</p>
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Saldo final da máquina</label>
               <input
                 type="number"
                 inputMode="decimal"
                 step="0.01"
                 min="0"
                 className={fieldClass}
-                {...form.register(`machines.${index}.negativeAmount`)}
+                {...form.register(`machines.${index}.finalMachineDebt`)}
               />
+              <p className={hintClass}>Se não mudou, mantenha o mesmo valor.</p>
             </div>
             <div className="space-y-1.5">
               <label className={labelClass}>Negativo de alimentação</label>
@@ -565,14 +631,15 @@ function MachineFieldset({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label className={labelClass}>Dívida do cliente (saldo)</label>
+              <label className={labelClass}>Dívida anterior do cliente</label>
               <input
                 type="number"
                 inputMode="decimal"
                 step="0.01"
                 min="0"
-                className={fieldClass}
-                {...form.register(`machines.${index}.customerDebt`)}
+                readOnly
+                className={`${fieldClass} opacity-70`}
+                {...form.register(`machines.${index}.previousCustomerDebt`)}
               />
             </div>
             <div className="space-y-1.5">
@@ -585,6 +652,9 @@ function MachineFieldset({
                 className={fieldClass}
                 {...form.register(`machines.${index}.customerDebtDiscounted`)}
               />
+              {machineErrors?.customerDebtDiscounted ? (
+                <p className="text-xs text-[#d59a8b]">{machineErrors.customerDebtDiscounted.message?.toString()}</p>
+              ) : null}
             </div>
             <div className="space-y-1.5">
               <label className={labelClass}>Dívida gerada agora</label>
@@ -597,6 +667,13 @@ function MachineFieldset({
                 {...form.register(`machines.${index}.generatedDebtAmount`)}
               />
             </div>
+            {!hideFinancials ? (
+              <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.025] p-3">
+                <p className={labelClass}>Saldo final da dívida</p>
+                <p className="text-base font-semibold text-white">{formatCurrency(split.finalCustomerDebt)}</p>
+                <p className={hintClass}>Anterior + gerada − descontada.</p>
+              </div>
+            ) : null}
           </div>
 
           <div className="space-y-1.5">
@@ -606,7 +683,8 @@ function MachineFieldset({
 
           {!hideFinancials ? (
             <div className="rounded-xl border border-[#6f8790]/25 bg-[#27383a]/70 p-3 text-xs leading-5 text-[#d6e1de]/80">
-              Receita líquida {formatCurrency(split.netRevenue)} · Cliente {formatCurrency(split.clientShareFinal)} · Casa{" "}
+              Receita líquida {formatCurrency(split.netRevenue)} · Movimento do débito da máquina{" "}
+              {formatCurrency(split.machineDebtChange)} · Cliente {formatCurrency(split.clientShareFinal)} · Infinity{" "}
               {formatCurrency(split.houseAmount)}
             </div>
           ) : null}
@@ -630,8 +708,13 @@ function SlotVisitForm({
   const [expandedIndex, setExpandedIndex] = useState<number | null>(0);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [reloadVersion, setReloadVersion] = useState(0);
+  const [reviewValues, setReviewValues] = useState<VisitValues | null>(null);
   const [results, setResults] = useState<MachineResult[] | null>(null);
   const [lastSubmission, setLastSubmission] = useState<{ paymentMethod: string; occurredAt: string } | null>(null);
+  const savingRef = useRef(false);
+  const visitKeyRef = useRef<string | null>(null);
+  const uploadedPhotosRef = useRef(new Map<string, { file: File; id: string }>());
 
   const form = useForm<VisitInput, unknown, VisitValues>({
     resolver: zodResolver(visitSchema),
@@ -644,25 +727,25 @@ function SlotVisitForm({
   const { fields, replace } = useFieldArray({ control: form.control, name: "machines" });
 
   useEffect(() => {
-    setLoading(true);
-    setLoadError(null);
-    setResults(null);
+    let cancelled = false;
     getSlotClientMachinesAction(clientName)
       .then((data) => {
+        if (cancelled) return;
         setPhone(data.phone);
         replace(
           data.machines.map((m) => ({
             machineId: m.id,
             clientMachineNumber: m.clientMachineNumber,
             included: m.active,
-            customerDebt: m.customerDebt,
+            previousCustomerDebt: m.customerDebt,
             currentIncome: 0,
             previousIncome: m.previousIncome,
             currentExpense: 0,
             previousExpense: m.previousExpense,
-            percentageSplit: 50,
+            percentageSplit: m.percentageSplit,
             optionalGreedAmount: m.optionalGreedAmount,
-            negativeAmount: m.machineDebt,
+            previousMachineDebt: m.machineDebt,
+            finalMachineDebt: m.machineDebt,
             feedingNegativeAmount: 0,
             customerDebtDiscounted: 0,
             generatedDebtAmount: 0,
@@ -671,76 +754,99 @@ function SlotVisitForm({
         );
         setExpandedIndex(0);
       })
-      .catch(() => setLoadError("Erro ao carregar as máquinas deste cliente."))
-      .finally(() => setLoading(false));
+      .catch(() => {
+        if (!cancelled) setLoadError("Erro ao carregar as máquinas deste cliente.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientName]);
+  }, [clientName, reloadVersion]);
 
   const watchedMachines = useWatch({ control: form.control, name: "machines" }) ?? [];
 
-  const onSubmit = form.handleSubmit(async (values) => {
-    setSaving(true);
+  const onSubmit = form.handleSubmit((values) => {
     setSaveError(null);
-
     const included = values.machines.filter((m) => m.included);
     if (included.length === 0) {
       setSaveError("Selecione ao menos uma máquina pra fechar.");
-      setSaving(false);
       return;
     }
-
-    const outcomes: MachineResult[] = [];
-    for (const m of included) {
-      const split = computeMachineSplit(m);
-      let ok = true;
-      try {
-        const screenPhoto = getFile(m.screenPhoto);
-        const screenPhotoFileId = screenPhoto ? await uploadFile(screenPhoto, "PHOTO") : null;
-        const response = await fetch("/api/modules/h-caca-niquel/records", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            machineId: m.machineId,
-            newClient: false,
-            customerDebt: Number(m.customerDebt),
-            ppValue: 0,
-            initialAmount: 0,
-            initialAmountMode: "NONE",
-            optionalGreedAmount: Number(m.optionalGreedAmount),
-            occurredAt: values.occurredAt,
-            currentIncome: Number(m.currentIncome),
-            previousIncome: Number(m.previousIncome),
-            currentExpense: Number(m.currentExpense),
-            previousExpense: Number(m.previousExpense),
-            percentageSplit: Number(m.percentageSplit),
-            negativeAmount: Number(m.negativeAmount),
-            feedingNegativeAmount: Number(m.feedingNegativeAmount),
-            customerDebtDiscounted: Number(m.customerDebtDiscounted),
-            generatedDebtAmount: Number(m.generatedDebtAmount),
-            paymentMethod: values.paymentMethod,
-            screenPhotoFileId: screenPhotoFileId ?? undefined,
-            notes: m.notes,
-          }),
-        });
-        ok = response.ok;
-      } catch {
-        ok = false;
-      }
-      outcomes.push({
-        clientMachineNumber: m.clientMachineNumber,
-        ok,
-        clientShareFinal: split.clientShareFinal,
-        houseAmount: split.houseAmount,
-      });
-    }
-
-    setResults(outcomes);
-    setLastSubmission({ paymentMethod: values.paymentMethod, occurredAt: values.occurredAt });
-    if (outcomes.some((o) => !o.ok)) {
-      setSaveError("Uma ou mais máquinas não foram salvas no servidor — confira a conexão.");
-    }
-    setSaving(false);
+    setReviewValues(values);
   });
+
+  async function confirmSave() {
+    if (!reviewValues || savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
+    setSaveError(null);
+    const included = reviewValues.machines.filter((machine) => machine.included);
+    try {
+      const uploadedMachines = await Promise.all(
+        included.map(async (machine) => {
+          const screenPhoto = getFile(machine.screenPhoto);
+          if (!screenPhoto) throw new Error(`Falta a foto da máquina ${machine.clientMachineNumber}.`);
+          const cached = uploadedPhotosRef.current.get(machine.machineId);
+          let screenPhotoFileId = cached?.file === screenPhoto ? cached.id : null;
+          if (!screenPhotoFileId) {
+            screenPhotoFileId = await uploadFile(screenPhoto, "PHOTO");
+            uploadedPhotosRef.current.set(machine.machineId, { file: screenPhoto, id: screenPhotoFileId });
+          }
+          return {
+            machineId: machine.machineId,
+            previousIncome: Number(machine.previousIncome),
+            currentIncome: Number(machine.currentIncome),
+            previousExpense: Number(machine.previousExpense),
+            currentExpense: Number(machine.currentExpense),
+            percentageSplit: Number(machine.percentageSplit),
+            optionalGreedAmount: Number(machine.optionalGreedAmount),
+            previousMachineDebt: Number(machine.previousMachineDebt),
+            finalMachineDebt: Number(machine.finalMachineDebt),
+            feedingNegativeAmount: Number(machine.feedingNegativeAmount),
+            previousCustomerDebt: Number(machine.previousCustomerDebt),
+            customerDebtDiscounted: Number(machine.customerDebtDiscounted),
+            generatedDebtAmount: Number(machine.generatedDebtAmount),
+            screenPhotoFileId,
+            notes: machine.notes,
+          };
+        }),
+      );
+
+      visitKeyRef.current ??= globalThis.crypto.randomUUID();
+      const response = await fetch("/api/modules/h-caca-niquel/visits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          visitKey: visitKeyRef.current,
+          clientName,
+          occurredAt: reviewValues.occurredAt,
+          paymentMethod: reviewValues.paymentMethod,
+          machines: uploadedMachines,
+        }),
+      });
+      const responseBody = (await response.json().catch(() => null)) as
+        | { error?: string; results?: MachineResult[] }
+        | null;
+      if (!response.ok || !responseBody?.results) {
+        throw new Error(responseBody?.error ?? "Não foi possível salvar a visita.");
+      }
+
+      setResults(responseBody.results);
+      setLastSubmission({
+        paymentMethod: reviewValues.paymentMethod,
+        occurredAt: reviewValues.occurredAt,
+      });
+      setReviewValues(null);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Não foi possível salvar a visita.");
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
+    }
+  }
 
   if (loading) {
     return <p className="text-sm text-slate-400">Carregando máquinas de {clientName}...</p>;
@@ -750,8 +856,8 @@ function SlotVisitForm({
   }
 
   if (results) {
-    const totalCliente = results.reduce((s, r) => s + r.clientShareFinal, 0);
-    const totalCasa = results.reduce((s, r) => s + r.houseAmount, 0);
+    const totalCliente = results.reduce((s, r) => s + (r.clientShareFinal ?? 0), 0);
+    const totalCasa = results.reduce((s, r) => s + (r.houseAmount ?? 0), 0);
     return (
       <div className="space-y-4">
         <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">
@@ -763,14 +869,10 @@ function SlotVisitForm({
             {results.map((r) => (
               <div key={r.clientMachineNumber} className="flex items-center justify-between gap-2">
                 <span className="flex items-center gap-1.5">
-                  {r.ok ? (
-                    <CheckCircle2 className="size-3.5 text-[#8aa17c]" />
-                  ) : (
-                    <X className="size-3.5 text-[#f87171]" />
-                  )}
+                  <CheckCircle2 className="size-3.5 text-[#8aa17c]" />
                   Máquina {r.clientMachineNumber}
                 </span>
-                {hideFinancials ? null : <span>{formatCurrency(r.houseAmount)}</span>}
+                {hideFinancials ? null : <span>{formatCurrency(r.houseAmount ?? 0)}</span>}
               </div>
             ))}
           </div>
@@ -780,7 +882,7 @@ function SlotVisitForm({
                 Total cliente: <span className="font-semibold text-white">{formatCurrency(totalCliente)}</span>
               </p>
               <p>
-                Total casa: <span className="font-semibold text-white">{formatCurrency(totalCasa)}</span>
+                Total Infinity: <span className="font-semibold text-white">{formatCurrency(totalCasa)}</span>
               </p>
             </div>
           )}
@@ -797,14 +899,14 @@ function SlotVisitForm({
               : "",
             ...results.map((r) =>
               hideFinancials
-                ? `Máquina ${r.clientMachineNumber}: ${r.ok ? "Fechada" : "Erro ao salvar"}`
-                : `Máquina ${r.clientMachineNumber}: ${formatCurrency(r.houseAmount)}`,
+                ? `Máquina ${r.clientMachineNumber}: Fechada`
+                : `Máquina ${r.clientMachineNumber}: ${formatCurrency(r.houseAmount ?? 0)}`,
             ),
             ...(hideFinancials
               ? []
               : [
                   `*Total cliente: ${formatCurrency(totalCliente)}*`,
-                  `*Total casa: ${formatCurrency(totalCasa)}*`,
+                  `*Total Infinity: ${formatCurrency(totalCasa)}*`,
                 ]),
             lastSubmission
               ? `Pagamento: ${PAYMENT_METHOD_LABEL[lastSubmission.paymentMethod] ?? lastSubmission.paymentMethod}`
@@ -815,11 +917,161 @@ function SlotVisitForm({
         />
         <button
           type="button"
-          onClick={() => setResults(null)}
+          onClick={() => {
+            setLoading(true);
+            setLoadError(null);
+            setResults(null);
+            setReviewValues(null);
+            setLastSubmission(null);
+            setSaveError(null);
+            visitKeyRef.current = null;
+            uploadedPhotosRef.current.clear();
+            setReloadVersion((current) => current + 1);
+          }}
           className="inline-flex min-h-11 items-center text-xs font-semibold text-[#9a958b] underline underline-offset-2 transition hover:text-white active:text-white"
         >
           Fazer outra visita
         </button>
+      </div>
+    );
+  }
+
+  if (reviewValues) {
+    const reviewMachines = reviewValues.machines.filter((machine) => machine.included);
+    const reviewed = reviewMachines.map((machine) => ({
+      machine,
+      split: computeMachineSplit(machine),
+    }));
+    const totalClient = reviewed.reduce((sum, item) => sum + item.split.clientShareFinal, 0);
+    const totalInfinity = reviewed.reduce((sum, item) => sum + item.split.houseAmount, 0);
+
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-[#d1a04f]/30 bg-[#3a2b18]/55 p-4">
+          <div className="flex items-center gap-2">
+            <ReceiptText className="size-4 text-[#f3dfae]" />
+            <p className="text-sm font-semibold text-white">Revisar antes de salvar</p>
+          </div>
+          <p className="mt-1 text-xs leading-5 text-[#c9c2b4]">
+            Confira os números. A visita inteira será salva de uma vez; nada foi registrado ainda.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+              <p className="text-[#9a958b]">Data</p>
+              <p className="mt-1 font-semibold text-white">
+                {new Date(`${reviewValues.occurredAt}T12:00:00`).toLocaleDateString("pt-BR")}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+              <p className="text-[#9a958b]">Pagamento</p>
+              <p className="mt-1 font-semibold text-white">
+                {PAYMENT_METHOD_LABEL[reviewValues.paymentMethod] ?? reviewValues.paymentMethod}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          {reviewed.map(({ machine, split }) => (
+            <article
+              key={machine.machineId}
+              className="rounded-2xl border border-white/10 bg-[#0b0f0e]/55 p-4"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm font-semibold text-white">Máquina {machine.clientMachineNumber}</p>
+                <span className="text-xs text-[#8aa17c]">Foto pronta</span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-xs">
+                <div>
+                  <p className="text-[#7e786d]">Entrada anterior → atual</p>
+                  <p className="mt-0.5 text-[#c9c2b4]">
+                    {formatCurrency(machine.previousIncome)} → {formatCurrency(machine.currentIncome)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[#7e786d]">Saída anterior → atual</p>
+                  <p className="mt-0.5 text-[#c9c2b4]">
+                    {formatCurrency(machine.previousExpense)} → {formatCurrency(machine.currentExpense)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[#7e786d]">Débito da máquina</p>
+                  <p className="mt-0.5 text-[#c9c2b4]">
+                    {formatCurrency(machine.previousMachineDebt)} → {formatCurrency(machine.finalMachineDebt)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[#7e786d]">Dívida gerada / descontada</p>
+                  <p className="mt-0.5 text-[#c9c2b4]">
+                    {formatCurrency(machine.generatedDebtAmount)} / {formatCurrency(machine.customerDebtDiscounted)}
+                  </p>
+                </div>
+              </div>
+              {!hideFinancials ? (
+                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/10 pt-3 text-xs sm:grid-cols-4">
+                  <div>
+                    <p className="text-[#7e786d]">Líquido</p>
+                    <p className="mt-0.5 font-semibold text-white">{formatCurrency(split.netRevenue)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#7e786d]">Cliente</p>
+                    <p className="mt-0.5 font-semibold text-white">{formatCurrency(split.clientShareFinal)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#7e786d]">Infinity</p>
+                    <p className="mt-0.5 font-semibold text-white">{formatCurrency(split.houseAmount)}</p>
+                  </div>
+                  <div>
+                    <p className="text-[#7e786d]">Dívida final</p>
+                    <p className="mt-0.5 font-semibold text-white">{formatCurrency(split.finalCustomerDebt)}</p>
+                  </div>
+                </div>
+              ) : null}
+            </article>
+          ))}
+        </div>
+
+        {!hideFinancials ? (
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-[#6f8790]/25 bg-[#172123]/70 p-4 text-sm">
+            <div>
+              <p className="text-xs text-[#9a958b]">Total do cliente</p>
+              <p className="mt-1 font-semibold text-white">{formatCurrency(totalClient)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-[#9a958b]">Total da Infinity</p>
+              <p className="mt-1 font-semibold text-white">{formatCurrency(totalInfinity)}</p>
+            </div>
+          </div>
+        ) : null}
+
+        {saveError ? (
+          <p className="rounded-xl border border-[#b46c5d]/30 bg-[#2b1e19]/70 p-3 text-sm text-[#f0c9ad]">
+            {saveError}
+          </p>
+        ) : null}
+
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => {
+              setReviewValues(null);
+              setSaveError(null);
+            }}
+            className="min-h-12 rounded-2xl border border-white/10 px-4 text-sm font-semibold text-[#c9c2b4] active:bg-white/[0.05] disabled:opacity-50"
+          >
+            Voltar e corrigir
+          </button>
+          <button
+            type="button"
+            disabled={saving}
+            onClick={confirmSave}
+            className="inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-[#d1a04f] px-4 text-sm font-semibold text-[#0d0a05] active:scale-[0.99] disabled:opacity-60"
+          >
+            {saving ? <LoaderCircle className="size-4 animate-spin" /> : <CheckCircle2 className="size-4" />}
+            {saving ? "Salvando tudo..." : "Confirmar e salvar"}
+          </button>
+        </div>
       </div>
     );
   }
@@ -894,8 +1146,8 @@ function SlotVisitForm({
           disabled={saving}
           className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d1a04f] px-4 py-3.5 text-sm font-semibold text-[#0d0a05] shadow-[0_6px_20px_rgba(209,160,79,0.32)] transition hover:bg-[#daa855] active:scale-[0.99] active:bg-[#daa855] disabled:opacity-70"
         >
-          {saving ? <LoaderCircle className="size-4 animate-spin" /> : <ArrowRight className="size-4" />}
-          Salvar visita
+          <ArrowRight className="size-4" />
+          Revisar visita
         </button>
       </form>
     </div>
@@ -923,16 +1175,20 @@ export function SlotForm({
   const [addingMoreFor, setAddingMoreFor] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!initialClientId) {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
+    if (!initialClientId) return;
+    let cancelled = false;
     getClientPrefillDataAction("h-caca-niquel", initialClientId)
       .then((data) => {
-        if (data && data.kind === "slot-machine") setResolvedClientName(data.clientName);
+        if (!cancelled && data && data.kind === "slot-machine") {
+          setResolvedClientName(data.clientName);
+        }
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [initialClientId]);
 
   if (loading) {
@@ -954,6 +1210,7 @@ export function SlotForm({
   if (resolvedClientName) {
     return (
       <SlotVisitForm
+        key={resolvedClientName}
         hideFinancials={hideFinancials}
         clientName={resolvedClientName}
         onAddMoreMachines={() => setAddingMoreFor(resolvedClientName)}

@@ -1,9 +1,10 @@
-import type {
-  ContractStatus,
-  FinancialDirection,
-  FinancialStatus,
-  PaymentMethod,
-  PersonalEntryType,
+import {
+  Prisma,
+  type ContractStatus,
+  type FinancialDirection,
+  type FinancialStatus,
+  type PaymentMethod,
+  type PersonalEntryType,
 } from "@prisma/client";
 import { randomUUID } from "crypto";
 import { z } from "zod";
@@ -61,6 +62,7 @@ export type ModuleRecordItem = {
   operatorName?: string;
   paymentMethod?: string | null;
   financialBreakdown?: ModuleFinancialBreakdownItem[];
+  attachments?: { id: string; label: string }[];
   badge?: string;
   createdAt: string;
 };
@@ -282,6 +284,68 @@ const createSlotSchema = z.object({
   notes: z.string().optional(),
 });
 
+const slotMoneySchema = z.number().finite().min(0).max(999_999_999_999.99);
+
+const slotVisitMachineSchema = z.object({
+  machineId: z.string().min(1),
+  previousIncome: slotMoneySchema,
+  currentIncome: slotMoneySchema,
+  previousExpense: slotMoneySchema,
+  currentExpense: slotMoneySchema,
+  percentageSplit: z.number().finite().min(0).max(100),
+  optionalGreedAmount: slotMoneySchema,
+  previousMachineDebt: slotMoneySchema,
+  finalMachineDebt: slotMoneySchema,
+  feedingNegativeAmount: slotMoneySchema,
+  previousCustomerDebt: slotMoneySchema,
+  customerDebtDiscounted: slotMoneySchema,
+  generatedDebtAmount: slotMoneySchema,
+  screenPhotoFileId: z.string().min(1, "A foto da tela e obrigatoria."),
+  notes: z.string().max(2_000).optional(),
+});
+
+const createSlotVisitSchema = z
+  .object({
+    visitKey: z.string().uuid("Identificador da visita invalido."),
+    clientName: z.string().min(1, "Cliente nao informado."),
+    occurredAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data invalida."),
+    paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
+    machines: z.array(slotVisitMachineSchema).min(1).max(200),
+  })
+  .superRefine((data, ctx) => {
+    const ids = new Set<string>();
+    data.machines.forEach((machine, index) => {
+      if (ids.has(machine.machineId)) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["machines", index, "machineId"],
+          message: "A mesma maquina foi enviada duas vezes.",
+        });
+      }
+      ids.add(machine.machineId);
+    });
+  });
+
+export class SlotVisitConflictError extends Error {}
+
+export type SlotVisitMachineResult = {
+  recordId: string;
+  clientMachineNumber: number;
+  clientShareFinal?: number;
+  houseAmount?: number;
+  previousMachineDebt?: number;
+  finalMachineDebt?: number;
+  previousCustomerDebt?: number;
+  finalCustomerDebt?: number;
+};
+
+export type SlotVisitSaveResult = {
+  visitKey: string;
+  duplicate: boolean;
+  clientName: string;
+  results: SlotVisitMachineResult[];
+};
+
 const registerSlotClientSchema = z.object({
   clientName: z.string().min(1, "Informe o cliente."),
   phone: z.string().optional(),
@@ -341,6 +405,7 @@ export type SlotClientMachine = {
   clientMachineNumber: number;
   previousIncome: number;
   previousExpense: number;
+  percentageSplit: number;
   customerDebt: number;
   machineDebt: number;
   optionalGreedAmount: number;
@@ -365,14 +430,15 @@ export async function getSlotClientMachines(
     machines.map(async (m) => {
       const ultima = await prisma.slotCollection.findFirst({
         where: { slotMachineId: m.id },
-        orderBy: { occurredAt: "desc" },
-        select: { currentIncome: true, currentExpense: true },
+        orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+        select: { currentIncome: true, currentExpense: true, percentageSplit: true },
       });
       return {
         id: m.id,
         clientMachineNumber: m.clientMachineNumber,
         previousIncome: Number(ultima?.currentIncome ?? 0),
         previousExpense: Number(ultima?.currentExpense ?? 0),
+        percentageSplit: Number(ultima?.percentageSplit ?? 50),
         customerDebt: Number(m.customerDebt ?? 0),
         machineDebt: Number(m.machineDebt ?? 0),
         optionalGreedAmount: Number(m.optionalGreedAmount ?? 0),
@@ -477,7 +543,7 @@ const createPersonalFinanceSchema = z.object({
 });
 
 function toDate(value: string) {
-  return new Date(value.includes("T") ? value : `${value}T12:00:00`);
+  return new Date(value.includes("T") ? value : `${value}T12:00:00Z`);
 }
 
 async function logFieldVisitForModuleRecord(params: {
@@ -573,6 +639,9 @@ type SlotSplitInput = {
   currentExpense: number;
   previousExpense: number;
   percentageSplit: number;
+  previousMachineDebt?: number;
+  finalMachineDebt?: number;
+  /** Registros antigos guardavam o saldo final neste campo. */
   negativeAmount?: number;
   feedingNegativeAmount?: number;
   optionalGreedAmount?: number;
@@ -584,7 +653,11 @@ function computeSlotSplit(data: SlotSplitInput) {
   const incomeDifference = data.currentIncome - data.previousIncome;
   const expenseDifference = data.currentExpense - data.previousExpense;
   const netRevenue = incomeDifference - expenseDifference;
-  const totalNegative = (data.negativeAmount ?? 0) + (data.feedingNegativeAmount ?? 0);
+  const finalMachineDebt = data.finalMachineDebt ?? data.negativeAmount ?? 0;
+  const machineDebtChange = finalMachineDebt - (data.previousMachineDebt ?? 0);
+  // O saldo anterior nao pode ser descontado de novo a cada visita. Somente
+  // a variacao do saldo pertence a esta conferencia.
+  const totalNegative = machineDebtChange + (data.feedingNegativeAmount ?? 0);
   const adjustedTotal = netRevenue - totalNegative;
   const clientShareBase = adjustedTotal * (data.percentageSplit / 100);
   const houseShareBase = adjustedTotal - clientShareBase;
@@ -592,9 +665,454 @@ function computeSlotSplit(data: SlotSplitInput) {
   const clientShareAfterGreed = clientShareBase - greed;
   const houseShareAfterGreed = houseShareBase + greed;
   const clientShareFinal = clientShareAfterGreed - (data.customerDebtDiscounted ?? 0);
-  const houseAmount = houseShareAfterGreed - (data.generatedDebtAmount ?? 0);
+  // Divida descontada sai do repasse do cliente e entra na Infinity. Antes o
+  // valor era tirado do cliente, mas nao era somado a lugar nenhum.
+  const houseAmount =
+    houseShareAfterGreed +
+    (data.customerDebtDiscounted ?? 0) -
+    (data.generatedDebtAmount ?? 0);
 
-  return { incomeDifference, expenseDifference, netRevenue, adjustedTotal, clientShareFinal, houseAmount };
+  return {
+    incomeDifference,
+    expenseDifference,
+    netRevenue,
+    machineDebtChange,
+    adjustedTotal,
+    clientShareFinal,
+    houseAmount,
+  };
+}
+
+type SlotCollectionWithMachine = Prisma.SlotCollectionGetPayload<{
+  include: { slotMachine: true };
+}>;
+
+function roundMoney(value: number) {
+  return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function sameMoney(left: number, right: number) {
+  return Math.round(left * 100) === Math.round(right * 100);
+}
+
+function mapSlotVisitMachineResult(
+  session: SessionData,
+  record: SlotCollectionWithMachine,
+): SlotVisitMachineResult {
+  const previousMachineDebt = Number(record.previousMachineDebt ?? 0);
+  const finalMachineDebt = Number(record.negativeAmount ?? 0);
+  const previousCustomerDebt = Number(record.previousCustomerDebt ?? 0);
+  const finalCustomerDebt = Number(
+    record.finalCustomerDebt ??
+      Math.max(
+        previousCustomerDebt +
+          Number(record.generatedDebtAmount ?? 0) -
+          Number(record.customerDebtDiscounted ?? 0),
+        0,
+      ),
+  );
+  const split = computeSlotSplit({
+    currentIncome: Number(record.currentIncome),
+    previousIncome: Number(record.previousIncome),
+    currentExpense: Number(record.currentExpense),
+    previousExpense: Number(record.previousExpense),
+    percentageSplit: Number(record.percentageSplit),
+    previousMachineDebt,
+    finalMachineDebt,
+    feedingNegativeAmount: Number(record.feedingNegativeAmount ?? 0),
+    optionalGreedAmount: Number(record.optionalGreedAmount ?? 0),
+    customerDebtDiscounted: Number(record.customerDebtDiscounted ?? 0),
+    generatedDebtAmount: Number(record.generatedDebtAmount ?? 0),
+  });
+  const financials =
+    session.role === "STAFF"
+      ? {}
+      : {
+          clientShareFinal: split.clientShareFinal,
+          houseAmount: split.houseAmount,
+          previousMachineDebt,
+          finalMachineDebt,
+          previousCustomerDebt,
+          finalCustomerDebt,
+        };
+
+  return {
+    recordId: record.id,
+    clientMachineNumber: record.slotMachine.clientMachineNumber,
+    ...financials,
+  };
+}
+
+function mapSlotCollectionRecord(
+  session: SessionData,
+  record: SlotCollectionWithMachine,
+  operatorName: string,
+): ModuleRecordItem {
+  const previousMachineDebt = Number(record.previousMachineDebt ?? 0);
+  const finalMachineDebt = Number(record.negativeAmount ?? 0);
+  const previousCustomerDebt = Number(record.previousCustomerDebt ?? 0);
+  const generatedDebt = Number(record.generatedDebtAmount ?? 0);
+  const discountedDebt = Number(record.customerDebtDiscounted ?? 0);
+  const finalCustomerDebt = Number(
+    record.finalCustomerDebt ??
+      Math.max(previousCustomerDebt + generatedDebt - discountedDebt, 0),
+  );
+  const currentIncome = Number(record.currentIncome);
+  const previousIncome = Number(record.previousIncome);
+  const currentExpense = Number(record.currentExpense);
+  const previousExpense = Number(record.previousExpense);
+  const split = computeSlotSplit({
+    currentIncome,
+    previousIncome,
+    currentExpense,
+    previousExpense,
+    percentageSplit: Number(record.percentageSplit ?? 0),
+    optionalGreedAmount: Number(record.optionalGreedAmount ?? 0),
+    previousMachineDebt,
+    finalMachineDebt,
+    feedingNegativeAmount: Number(record.feedingNegativeAmount ?? 0),
+    customerDebtDiscounted: discountedDebt,
+    generatedDebtAmount: generatedDebt,
+  });
+  const paymentLabel = record.paymentMethod
+    ? rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL)
+    : "Não informado";
+  const commonDetails = [
+    `Conferência: ${record.conferenceCount}`,
+    `Funcionário: ${operatorName}`,
+    `Pagamento: ${paymentLabel}`,
+    record.screenPhotoId ? "Foto da tela: anexada" : "Foto da tela: não anexada",
+  ];
+  const financialDetails = [
+    `Leitura da entrada: ${formatCurrency(previousIncome)} → ${formatCurrency(currentIncome)}`,
+    `Movimento da entrada: ${formatCurrency(split.incomeDifference)}`,
+    `Leitura da saída: ${formatCurrency(previousExpense)} → ${formatCurrency(currentExpense)}`,
+    `Movimento da saída: ${formatCurrency(split.expenseDifference)}`,
+    `Débito da máquina: ${formatCurrency(previousMachineDebt)} → ${formatCurrency(finalMachineDebt)}`,
+    `Movimento do débito: ${formatCurrency(split.machineDebtChange)}`,
+    `Negativo de alimentação: ${formatCurrency(Number(record.feedingNegativeAmount ?? 0))}`,
+    `Dívida do cliente: ${formatCurrency(previousCustomerDebt)} → ${formatCurrency(finalCustomerDebt)}`,
+    `Dívida gerada: ${formatCurrency(generatedDebt)}`,
+    `Dívida descontada: ${formatCurrency(discountedDebt)}`,
+    `Repasse do cliente: ${formatCurrency(split.clientShareFinal)}`,
+    `Resultado da Infinity: ${formatCurrency(split.houseAmount)}`,
+  ];
+  const financialBreakdown: ModuleFinancialBreakdownItem[] =
+    split.houseAmount >= 0
+      ? [
+          {
+            direction: "INCOME",
+            category: "SLOT_INFINITY_RESULT",
+            categoryLabel: "Resultado da Infinity",
+            amount: split.houseAmount,
+            status: record.paymentMethod === "OTHER" ? "PENDING" : "PAID",
+          },
+        ]
+      : [
+          {
+            direction: "EXPENSE",
+            category: "SLOT_NEGATIVE_RESULT",
+            categoryLabel: "Resultado negativo da máquina",
+            amount: Math.abs(split.houseAmount),
+            status: "PAID",
+          },
+        ];
+  const financialData =
+    session.role === "STAFF"
+      ? {}
+      : {
+          amount: formatCurrency(split.houseAmount),
+          amountValue: split.houseAmount,
+          incomeValue: Math.max(split.houseAmount, 0),
+          expenseValue: Math.max(-split.houseAmount, 0),
+          financialBreakdown,
+        };
+
+  return {
+    id: record.id,
+    title: record.slotMachine.clientName || `Máquina ${record.slotMachine.clientMachineNumber}`,
+    summary: `Máquina ${record.slotMachine.clientMachineNumber}`,
+    details:
+      session.role === "STAFF" ? commonDetails : [...commonDetails, ...financialDetails],
+    operatorName,
+    paymentMethod: record.paymentMethod,
+    attachments: record.screenPhotoId
+      ? [{ id: record.screenPhotoId, label: "Foto da tela da máquina" }]
+      : [],
+    badge: `Máquina ${record.slotMachine.clientMachineNumber}`,
+    createdAt: record.occurredAt.toISOString(),
+    ...financialData,
+  };
+}
+
+/**
+ * Fecha todas as maquinas selecionadas em uma unica transacao. A visitKey e
+ * persistida em cada coleta: se o celular repetir a requisicao, devolvemos o
+ * mesmo resultado sem criar outro fechamento.
+ */
+export async function saveSlotVisit(
+  session: SessionData,
+  payload: Record<string, unknown>,
+): Promise<SlotVisitSaveResult> {
+  const data = createSlotVisitSchema.parse(payload);
+  const machineIds = data.machines.map((machine) => machine.machineId);
+  const sortedMachineIds = [...machineIds].sort();
+
+  return prisma.$transaction(
+    async (tx) => {
+      const visitLockKey = `slot-visit-key:${session.organizationId}:${data.visitKey}`;
+      await tx.$queryRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${visitLockKey}))::text AS "lock"`,
+      );
+      // Serializa qualquer fechamento que envolva a mesma maquina. Assim duas
+      // abas/celulares nao conseguem usar a mesma leitura anterior ao mesmo tempo.
+      for (const machineId of sortedMachineIds) {
+        const lockKey = `slot-visit:${session.organizationId}:${machineId}`;
+        await tx.$queryRaw(
+          Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${lockKey}))::text AS "lock"`,
+        );
+      }
+
+      const alreadySaved = await tx.slotCollection.findMany({
+        where: {
+          organizationId: session.organizationId,
+          visitKey: data.visitKey,
+        },
+        include: { slotMachine: true },
+      });
+      if (alreadySaved.length > 0) {
+        const savedIds = new Set(alreadySaved.map((record) => record.slotMachineId));
+        const sameVisit =
+          alreadySaved.length === machineIds.length &&
+          machineIds.every((machineId) => savedIds.has(machineId));
+        if (!sameVisit) {
+          throw new SlotVisitConflictError(
+            "Este identificador de visita ja foi usado em outro fechamento.",
+          );
+        }
+        const byMachine = new Map(
+          alreadySaved.map((record) => [record.slotMachineId, record]),
+        );
+        return {
+          visitKey: data.visitKey,
+          duplicate: true,
+          clientName: alreadySaved[0]?.slotMachine.clientName ?? data.clientName,
+          results: machineIds.map((machineId) =>
+            mapSlotVisitMachineResult(session, byMachine.get(machineId)!),
+          ),
+        };
+      }
+
+      const machines = await tx.slotMachine.findMany({
+        where: {
+          organizationId: session.organizationId,
+          id: { in: machineIds },
+        },
+      });
+      if (machines.length !== machineIds.length) {
+        throw new SlotVisitConflictError(
+          "Uma ou mais maquinas nao existem ou nao pertencem a esta empresa.",
+        );
+      }
+
+      const machineById = new Map(machines.map((machine) => [machine.id, machine]));
+      for (const machine of machines) {
+        if ((machine.clientName ?? "") !== data.clientName) {
+          throw new SlotVisitConflictError(
+            "As maquinas selecionadas nao pertencem ao mesmo cliente.",
+          );
+        }
+        if (!machine.active) {
+          throw new SlotVisitConflictError(
+            `A maquina ${machine.clientMachineNumber} esta inativa e nao pode ser fechada.`,
+          );
+        }
+      }
+
+      const photoIds = data.machines.map((machine) => machine.screenPhotoFileId);
+      if (new Set(photoIds).size !== photoIds.length) {
+        throw new SlotVisitConflictError("Cada maquina precisa ter sua propria foto da tela.");
+      }
+      const photos = await tx.fileAsset.findMany({
+        where: {
+          organizationId: session.organizationId,
+          id: { in: photoIds },
+          category: "PHOTO",
+          uploadedById: session.userId,
+          entityId: null,
+        },
+        select: { id: true },
+      });
+      if (photos.length !== photoIds.length) {
+        throw new SlotVisitConflictError(
+          "Uma das fotos nao foi encontrada. Tire as fotos novamente e tente salvar.",
+        );
+      }
+
+      const occurredAt = toDate(data.occurredAt);
+      const dayStart = new Date(occurredAt);
+      dayStart.setHours(0, 0, 0, 0);
+      const dayEnd = new Date(occurredAt);
+      dayEnd.setHours(23, 59, 59, 999);
+      const persisted: SlotCollectionWithMachine[] = [];
+
+      for (const input of data.machines) {
+        const machine = machineById.get(input.machineId)!;
+        const latest = await tx.slotCollection.findFirst({
+          where: { slotMachineId: machine.id },
+          orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+          select: { currentIncome: true, currentExpense: true },
+        });
+        const expectedPreviousIncome = Number(latest?.currentIncome ?? 0);
+        const expectedPreviousExpense = Number(latest?.currentExpense ?? 0);
+        const previousMachineDebt = Number(machine.machineDebt ?? 0);
+        const previousCustomerDebt = Number(machine.customerDebt ?? 0);
+
+        if (
+          !sameMoney(input.previousIncome, expectedPreviousIncome) ||
+          !sameMoney(input.previousExpense, expectedPreviousExpense) ||
+          !sameMoney(input.previousMachineDebt, previousMachineDebt) ||
+          !sameMoney(input.previousCustomerDebt, previousCustomerDebt)
+        ) {
+          throw new SlotVisitConflictError(
+            `A maquina ${machine.clientMachineNumber} recebeu outro fechamento enquanto esta tela estava aberta. Volte e abra a visita novamente.`,
+          );
+        }
+        if (input.currentIncome < expectedPreviousIncome) {
+          throw new SlotVisitConflictError(
+            `Na maquina ${machine.clientMachineNumber}, a entrada atual nao pode ser menor que a anterior.`,
+          );
+        }
+        if (input.currentExpense < expectedPreviousExpense) {
+          throw new SlotVisitConflictError(
+            `Na maquina ${machine.clientMachineNumber}, a saida atual nao pode ser menor que a anterior.`,
+          );
+        }
+
+        const debtAvailable = roundMoney(
+          previousCustomerDebt + input.generatedDebtAmount,
+        );
+        if (input.customerDebtDiscounted > debtAvailable) {
+          throw new SlotVisitConflictError(
+            `Na maquina ${machine.clientMachineNumber}, a divida descontada supera o saldo disponivel.`,
+          );
+        }
+        const finalCustomerDebt = roundMoney(
+          debtAvailable - input.customerDebtDiscounted,
+        );
+        const finalMachineDebt = roundMoney(input.finalMachineDebt);
+
+        const conferenceCount =
+          (await tx.slotCollection.count({
+            where: {
+              slotMachineId: machine.id,
+              occurredAt: { gte: dayStart, lte: dayEnd },
+            },
+          })) + 1;
+
+        await tx.slotMachine.update({
+          where: { id: machine.id },
+          data: {
+            customerDebt: finalCustomerDebt,
+            machineDebt: finalMachineDebt,
+            optionalGreedAmount: input.optionalGreedAmount,
+          },
+        });
+
+        const record = await tx.slotCollection.create({
+          data: {
+            organizationId: session.organizationId,
+            createdById: session.userId,
+            slotMachineId: machine.id,
+            visitKey: data.visitKey,
+            occurredAt,
+            currentIncome: input.currentIncome,
+            previousIncome: expectedPreviousIncome,
+            incomeDifference: roundMoney(input.currentIncome - expectedPreviousIncome),
+            currentExpense: input.currentExpense,
+            previousExpense: expectedPreviousExpense,
+            expenseDifference: roundMoney(input.currentExpense - expectedPreviousExpense),
+            percentageSplit: input.percentageSplit,
+            optionalGreedAmount: input.optionalGreedAmount,
+            conferenceCount,
+            previousMachineDebt,
+            negativeAmount: finalMachineDebt,
+            feedingNegativeAmount: input.feedingNegativeAmount,
+            previousCustomerDebt,
+            customerDebtDiscounted: input.customerDebtDiscounted,
+            generatedDebtAmount: input.generatedDebtAmount,
+            finalCustomerDebt,
+            paymentMethod: mapPaymentMethod(data.paymentMethod),
+            screenPhotoId: input.screenPhotoFileId,
+            notes: input.notes,
+          },
+          include: { slotMachine: true },
+        });
+
+        const split = computeSlotSplit({
+          currentIncome: input.currentIncome,
+          previousIncome: expectedPreviousIncome,
+          currentExpense: input.currentExpense,
+          previousExpense: expectedPreviousExpense,
+          percentageSplit: input.percentageSplit,
+          previousMachineDebt,
+          finalMachineDebt,
+          feedingNegativeAmount: input.feedingNegativeAmount,
+          optionalGreedAmount: input.optionalGreedAmount,
+          customerDebtDiscounted: input.customerDebtDiscounted,
+          generatedDebtAmount: input.generatedDebtAmount,
+        });
+
+        await tx.fieldVisit.create({
+          data: {
+            organizationId: session.organizationId,
+            targetId: machine.id,
+            createdById: session.userId,
+            visitType: "SLOT_H",
+            occurredAt,
+            checkedItems: [],
+            incomeAmount: Math.max(split.houseAmount, 0),
+            expenseAmount: split.houseAmount < 0 ? Math.abs(split.houseAmount) : 0,
+            clientName: machine.clientName ?? undefined,
+            clientPhone: machine.phone ?? undefined,
+          },
+        });
+        await tx.fileAsset.updateMany({
+          where: {
+            id: input.screenPhotoFileId,
+            organizationId: session.organizationId,
+          },
+          data: { entityType: "SLOT_COLLECTION", entityId: record.id },
+        });
+        persisted.push(record);
+      }
+
+      await tx.auditLog.create({
+        data: {
+          organizationId: session.organizationId,
+          userId: session.userId,
+          module: "SLOT_H",
+          action: "SLOT_VISIT_CREATED",
+          entityType: "SLOT_COLLECTION",
+          entityId: data.visitKey,
+          newData: {
+            clientName: data.clientName,
+            occurredAt: data.occurredAt,
+            machineIds,
+            collectionIds: persisted.map((record) => record.id),
+          },
+        },
+      });
+
+      return {
+        visitKey: data.visitKey,
+        duplicate: false,
+        clientName: data.clientName,
+        results: persisted.map((record) => mapSlotVisitMachineResult(session, record)),
+      };
+    },
+    { maxWait: 5_000, timeout: 30_000 },
+  );
 }
 
 
@@ -1026,12 +1544,21 @@ async function saveWithPrisma(
           : 0
         : data.customerDebt ?? 0;
       // P.P (pagamento pendente) abate do saldo permanente da divida, separado do desconto pos-split (customerDebtDiscounted).
-      const customerDebt = Math.max(baseDebt - (data.ppValue ?? 0), 0);
+      const previousCustomerDebt = Math.max(baseDebt - (data.ppValue ?? 0), 0);
+      const customerDebt = Math.max(
+        previousCustomerDebt +
+          (data.generatedDebtAmount ?? 0) -
+          (data.customerDebtDiscounted ?? 0),
+        0,
+      );
 
       // Valor inicial em modo "Negativo" entra no negativo deste fechamento, igual um negativo manual.
       const initialNegativeBonus =
         resetDebtForNewClient && data.initialAmountMode === "NEGATIVE" ? data.initialAmount ?? 0 : 0;
       const effectiveNegativeAmount = (data.negativeAmount ?? 0) + initialNegativeBonus;
+      const previousMachineDebt = resetDebtForNewClient
+        ? 0
+        : Number(existingMachine?.machineDebt ?? 0);
       // "Negativo" agora e um saldo lembrado (igual a divida do cliente): o
       // valor enviado pelo funcionario JA E o novo saldo da maquina, nao um
       // lancamento avulso que se perde no fim do fechamento.
@@ -1122,11 +1649,15 @@ async function saveWithPrisma(
           previousExpense: data.previousExpense,
           expenseDifference: data.currentExpense - data.previousExpense,
           percentageSplit: data.percentageSplit,
+          optionalGreedAmount: data.optionalGreedAmount,
           conferenceCount,
+          previousMachineDebt,
           negativeAmount: effectiveNegativeAmount,
           feedingNegativeAmount: data.feedingNegativeAmount,
+          previousCustomerDebt,
           customerDebtDiscounted: data.customerDebtDiscounted,
           generatedDebtAmount: data.generatedDebtAmount,
+          finalCustomerDebt: customerDebt,
           paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
           screenPhotoId: data.screenPhotoFileId,
           notes: data.notes,
@@ -1136,7 +1667,8 @@ async function saveWithPrisma(
 
       const { houseAmount, clientShareFinal } = computeSlotSplit({
         ...data,
-        negativeAmount: effectiveNegativeAmount,
+        previousMachineDebt,
+        finalMachineDebt: effectiveNegativeAmount,
       });
 
       await logFieldVisitForModuleRecord({
@@ -1145,8 +1677,8 @@ async function saveWithPrisma(
         targetId: record.slotMachineId,
         visitType: "SLOT_H",
         occurredAt: record.occurredAt,
-        incomeAmount: Number(record.incomeDifference),
-        expenseAmount: Number(record.expenseDifference),
+        incomeAmount: Math.max(houseAmount, 0),
+        expenseAmount: Math.max(-houseAmount, 0),
         clientName: record.slotMachine.clientName ?? null,
         clientPhone: record.slotMachine.phone ?? null,
       }).catch((e) => console.error("[module-record-service] logFieldVisit h-caca-niquel falhou:", e));
@@ -1796,45 +2328,22 @@ export async function listModuleRecords(
       }
       case "h-caca-niquel": {
         const records = await prisma.slotCollection.findMany({
-          where: { organizationId: session.organizationId, ...buildDateWhere(range) },
-          orderBy: { createdAt: "desc" },
+          where: {
+            organizationId: session.organizationId,
+            ...buildDateWhere(range, "occurredAt"),
+          },
+          orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
           take,
           include: { slotMachine: true },
         });
-
-        return records.map((record) => {
-          const currentIncome = Number(record.currentIncome);
-          const { houseAmount, clientShareFinal } = computeSlotSplit({
-            currentIncome,
-            previousIncome: Number(record.previousIncome),
-            currentExpense: Number(record.currentExpense),
-            previousExpense: Number(record.previousExpense),
-            percentageSplit: Number(record.percentageSplit ?? 0),
-            negativeAmount: Number(record.negativeAmount ?? 0),
-            feedingNegativeAmount: Number(record.feedingNegativeAmount ?? 0),
-            customerDebtDiscounted: Number(record.customerDebtDiscounted ?? 0),
-            generatedDebtAmount: Number(record.generatedDebtAmount ?? 0),
-          });
-
-          return {
-            id: record.id,
-            title: record.slotMachine.clientName || `Máquina ${record.slotMachine.clientMachineNumber}`,
-            summary: `Máquina ${record.slotMachine.clientMachineNumber}`,
-            details: [
-              `Conferencias: ${record.conferenceCount}`,
-              `Entrada: ${formatCurrency(currentIncome)}`,
-              `Cliente: ${formatCurrency(clientShareFinal)}`,
-              `Casa: ${formatCurrency(houseAmount)}`,
-              `Pagamento: ${record.paymentMethod ? rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL) : "Não informado"}`,
-            ],
-            amount: formatCurrency(houseAmount),
-            amountValue: houseAmount,
-            incomeValue: clientShareFinal + houseAmount,
-            expenseValue: Number(record.negativeAmount ?? 0) + Number(record.feedingNegativeAmount ?? 0),
-            badge: record.slotMachine.active ? "Ativa" : "Inativa",
-            createdAt: record.createdAt.toISOString(),
-          };
-        });
+        const creatorNames = await resolveCreatorNames(records.map((record) => record.createdById));
+        return records.map((record) =>
+          mapSlotCollectionRecord(
+            session,
+            record,
+            record.createdById ? (creatorNames.get(record.createdById) ?? "-") : "-",
+          ),
+        );
       }
       case "credito-financeiro": {
         const records = await prisma.machineContract.findMany({
@@ -2205,22 +2714,27 @@ export async function listModuleClients(
       case "h-caca-niquel": {
         const machines = await prisma.slotMachine.findMany({
           where: { organizationId: session.organizationId },
-          // Agrupado por cliente e ordenado pelo numero da maquina --
-          // senao as maquinas do mesmo cliente ficam espalhadas pela lista
-          // (misturadas com as de outros clientes), dificultando saber
-          // qual delas escolher. Ver [[project_slot_machine_per_client_numbering]].
           orderBy: [{ clientName: "asc" }, { clientMachineNumber: "asc" }],
-          take,
+          take: Math.max(take * 20, 500),
         });
+        const grouped = new Map<string, typeof machines>();
+        for (const machine of machines) {
+          const key = machine.clientName?.trim() || machine.id;
+          grouped.set(key, [...(grouped.get(key) ?? []), machine]);
+        }
 
-        return machines.map((machine) => ({
-          id: machine.id,
-          name: machine.clientName
-            ? `${machine.clientName} — Máquina ${machine.clientMachineNumber}`
-            : `Máquina ${machine.clientMachineNumber}`,
-          tags: [machine.phone, machine.cpf].filter(Boolean) as string[],
-          badge: machine.active ? "Ativa" : "Inativa",
-        }));
+        return [...grouped.values()].slice(0, take).map((clientMachines) => {
+          const first = clientMachines[0]!;
+          const activeCount = clientMachines.filter((machine) => machine.active).length;
+          return {
+            id: first.id,
+            name: first.clientName || `Máquina ${first.clientMachineNumber}`,
+            subtitle: `${clientMachines.length} máquina${clientMachines.length === 1 ? "" : "s"} · ${activeCount} ativa${activeCount === 1 ? "" : "s"}`,
+            tags: [first.phone, first.cpf].filter(Boolean) as string[],
+            badge: activeCount > 0 ? "Ativo" : "Inativo",
+            phone: first.phone ?? undefined,
+          };
+        });
       }
       case "credito-financeiro": {
         const records = await prisma.machineContract.findMany({
@@ -2320,43 +2834,24 @@ export async function listModuleClientRecords(
 
     case "h-caca-niquel": {
       const records = await prisma.slotCollection.findMany({
-        where: { organizationId: org, slotMachineId: clientId },
-        orderBy: { createdAt: "desc" },
-        take: 30,
+        where: {
+          organizationId: org,
+          slotMachine: clientName
+            ? { clientName }
+            : { id: clientId },
+        },
+        orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+        take: 100,
         include: { slotMachine: true },
       });
-      return records.map((record) => {
-        const currentIncome = Number(record.currentIncome);
-        const { houseAmount, clientShareFinal } = computeSlotSplit({
-          currentIncome,
-          previousIncome: Number(record.previousIncome),
-          currentExpense: Number(record.currentExpense),
-          previousExpense: Number(record.previousExpense),
-          percentageSplit: Number(record.percentageSplit ?? 0),
-          negativeAmount: Number(record.negativeAmount ?? 0),
-          feedingNegativeAmount: Number(record.feedingNegativeAmount ?? 0),
-          customerDebtDiscounted: Number(record.customerDebtDiscounted ?? 0),
-          generatedDebtAmount: Number(record.generatedDebtAmount ?? 0),
-        });
-        return {
-          id: record.id,
-          title: record.slotMachine.clientName || `Máquina ${record.slotMachine.clientMachineNumber}`,
-          summary: `Máquina ${record.slotMachine.clientMachineNumber}`,
-          details: [
-            `Conferencias: ${record.conferenceCount}`,
-            `Entrada: ${formatCurrency(currentIncome)}`,
-            `Cliente: ${formatCurrency(clientShareFinal)}`,
-            `Casa: ${formatCurrency(houseAmount)}`,
-            `Pagamento: ${record.paymentMethod ? rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL) : "Não informado"}`,
-          ],
-          amount: formatCurrency(houseAmount),
-          amountValue: houseAmount,
-          incomeValue: clientShareFinal + houseAmount,
-          expenseValue: Number(record.negativeAmount ?? 0) + Number(record.feedingNegativeAmount ?? 0),
-          badge: formatShortDate(record.createdAt),
-          createdAt: record.createdAt.toISOString(),
-        };
-      });
+      const creatorNames = await resolveCreatorNames(records.map((record) => record.createdById));
+      return records.map((record) =>
+        mapSlotCollectionRecord(
+          session,
+          record,
+          record.createdById ? (creatorNames.get(record.createdById) ?? "-") : "-",
+        ),
+      );
     }
 
     case "bx": {
@@ -2526,22 +3021,26 @@ export async function listModuleVisitTargets(
       orderBy: [{ clientName: "asc" }, { clientMachineNumber: "asc" }],
       take: 500,
     });
-    const porCliente = new Map<string, (typeof machines)[number]>();
+    const porCliente = new Map<string, typeof machines>();
     for (const m of machines) {
       const chave = m.clientName || m.id;
-      if (!porCliente.has(chave)) porCliente.set(chave, m);
+      porCliente.set(chave, [...(porCliente.get(chave) ?? []), m]);
     }
-    return [...porCliente.values()].map((m) => ({
+    return [...porCliente.values()].map((clientMachines) => {
+      const m = clientMachines.find((machine) => machine.active) ?? clientMachines[0]!;
+      const hasActiveMachine = clientMachines.some((machine) => machine.active);
+      return {
       id: m.id,
       code: m.id.slice(0, 8),
       name: m.clientName || `Máquina ${m.clientMachineNumber}`,
       phone: m.phone ?? "",
       city: "",
-      status: m.active ? ("ativo" as const) : ("inativo" as const),
+      status: hasActiveMachine ? ("ativo" as const) : ("inativo" as const),
       balance: 0,
       updatedAt: new Date().toISOString(),
       routeNumber: undefined,
-    }));
+    };
+    });
   }
 
   const items = await listModuleClients(session, slug, 200);
@@ -2587,7 +3086,7 @@ export async function getClientPrefillData(
       // nao precisa lembrar/digitar de novo.
       const ultimaColeta = await prisma.slotCollection.findFirst({
         where: { slotMachineId: m.id },
-        orderBy: { occurredAt: "desc" },
+        orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
         select: { currentIncome: true, currentExpense: true },
       });
       return { kind: "slot-machine", clientName: m.clientName ?? "", phone: m.phone ?? "", cpf: m.cpf ?? "", cep: m.cep ?? "", street: m.street ?? "", neighborhood: m.neighborhood ?? "", city: m.city ?? "", state: m.state ?? "", clientMachineNumber: m.clientMachineNumber, customerDebt: Number(m.customerDebt ?? 0), ppValue: Number(m.ppValue ?? 0), initialAmount: Number(m.initialAmount ?? 0), initialAmountMode: m.initialAmountMode, optionalGreedAmount: Number(m.optionalGreedAmount ?? 0), active: m.active, previousIncome: Number(ultimaColeta?.currentIncome ?? 0), previousExpense: Number(ultimaColeta?.currentExpense ?? 0) };

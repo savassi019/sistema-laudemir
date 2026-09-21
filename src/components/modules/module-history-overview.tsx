@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Inbox, LoaderCircle, Search, WalletCards, CalendarDays } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronUp, Inbox, LoaderCircle, Paperclip, Search, WalletCards } from "lucide-react";
 import { useState } from "react";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
@@ -253,6 +253,23 @@ function RecordCard({
       {record.details.length > 0 ? (
         <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-0.5 text-xs text-[#9a958b] sm:grid-cols-3">
           {record.details.map((d) => <span key={d}>{d}</span>)}
+        </div>
+      ) : null}
+
+      {record.attachments && record.attachments.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-2 border-t border-white/[0.07] pt-2">
+          {record.attachments.map((attachment) => (
+            <a
+              key={attachment.id}
+              href={`/api/files/${attachment.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-xs font-medium text-[#c9c2b4] active:bg-white/[0.05]"
+            >
+              <Paperclip className="size-3.5" />
+              {attachment.label}
+            </a>
+          ))}
         </div>
       ) : null}
     </div>

@@ -1027,6 +1027,9 @@ model SlotCollection {
   organization           Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   slotMachineId          String
   slotMachine            SlotMachine    @relation(fields: [slotMachineId], references: [id], onDelete: Cascade)
+  /// Identificador unico da visita no aparelho. Todas as maquinas salvas no
+  /// mesmo fechamento compartilham esta chave; evita duplicacao em reenvio.
+  visitKey               String?
   occurredAt             DateTime
   currentIncome          Decimal        @db.Decimal(14, 2)
   previousIncome         Decimal        @db.Decimal(14, 2)
@@ -1035,11 +1038,17 @@ model SlotCollection {
   previousExpense        Decimal        @db.Decimal(14, 2)
   expenseDifference      Decimal        @db.Decimal(14, 2)
   percentageSplit        Decimal        @default(50) @db.Decimal(5, 2)
+  optionalGreedAmount    Decimal?       @db.Decimal(14, 2)
   conferenceCount        Int            @default(0)
+  /// Saldo da maquina antes desta conferencia. Registros antigos ficam nulos
+  /// e continuam usando a regra historica anterior.
+  previousMachineDebt    Decimal?       @db.Decimal(14, 2)
   negativeAmount         Decimal?       @db.Decimal(14, 2)
   feedingNegativeAmount  Decimal?       @db.Decimal(14, 2)
+  previousCustomerDebt   Decimal?       @db.Decimal(14, 2)
   customerDebtDiscounted Decimal?       @db.Decimal(14, 2)
   generatedDebtAmount    Decimal?       @db.Decimal(14, 2)
+  finalCustomerDebt      Decimal?       @db.Decimal(14, 2)
   debtMode               SlotDebtMode   @default(NONE)
   paymentMethod          PaymentMethod?
   screenPhotoId          String?
@@ -1048,6 +1057,7 @@ model SlotCollection {
   createdAt              DateTime       @default(now())
 
   @@index([organizationId, occurredAt])
+  @@index([organizationId, visitKey])
 }
 
 model PushSubscription {
