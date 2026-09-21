@@ -1234,7 +1234,7 @@ ${rows}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <label className={labelClass} htmlFor="slotPreviousIncome">
-                Entrada anterior (fichas)
+                Entrada anterior
               </label>
               <input
                 id="slotPreviousIncome"
@@ -1251,7 +1251,7 @@ ${rows}
             </div>
             <div className="space-y-2">
               <label className={labelClass} htmlFor="slotCurrentIncome">
-                Entrada atual (fichas)
+                Entrada atual
               </label>
               <input
                 id="slotCurrentIncome"
@@ -1268,7 +1268,7 @@ ${rows}
             </div>
             <div className="space-y-2">
               <label className={labelClass} htmlFor="slotPreviousExpense">
-                Saída anterior (fichas)
+                Saída anterior
               </label>
               <input
                 id="slotPreviousExpense"
@@ -1285,7 +1285,7 @@ ${rows}
             </div>
             <div className="space-y-2">
               <label className={labelClass} htmlFor="slotCurrentExpense">
-                Saída atual (fichas)
+                Saída atual
               </label>
               <input
                 id="slotCurrentExpense"
@@ -1337,7 +1337,7 @@ ${rows}
 
           <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-sm sm:grid-cols-4">
             <div>
-              <p className="text-[11px] text-[#9a958b]">Saldo de fichas</p>
+              <p className="text-[11px] text-[#9a958b]">Saldo</p>
               <p className="font-semibold text-white">{formatMachineCounter(slotTotals.netRevenue)}</p>
             </div>
             <div>

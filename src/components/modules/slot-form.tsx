@@ -514,7 +514,7 @@ function MachineFieldset({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label className={labelClass}>Entrada atual (fichas)</label>
+              <label className={labelClass}>Entrada atual</label>
               <input
                 type="number"
                 inputMode="decimal"
@@ -533,14 +533,14 @@ function MachineFieldset({
             </div>
             <div className="space-y-1.5">
               <input type="hidden" {...form.register(`machines.${index}.previousIncome`)} />
-              <label className={labelClass}>Entrada anterior (fichas)</label>
+              <label className={labelClass}>Entrada anterior</label>
               <div className="flex min-h-12 items-center rounded-2xl border border-[rgba(245,241,232,0.1)] bg-white/[0.025] px-4 py-3 text-base font-semibold text-white">
                 {formatMachineCounter(Number(watchedMachine?.previousIncome ?? 0))}
               </div>
               <p className={hintClass}>Puxa sozinho da última conferência.</p>
             </div>
             <div className="space-y-1.5">
-              <label className={labelClass}>Saída atual (fichas)</label>
+              <label className={labelClass}>Saída atual</label>
               <input
                 type="number"
                 inputMode="decimal"
@@ -559,7 +559,7 @@ function MachineFieldset({
             </div>
             <div className="space-y-1.5">
               <input type="hidden" {...form.register(`machines.${index}.previousExpense`)} />
-              <label className={labelClass}>Saída anterior (fichas)</label>
+              <label className={labelClass}>Saída anterior</label>
               <div className="flex min-h-12 items-center rounded-2xl border border-[rgba(245,241,232,0.1)] bg-white/[0.025] px-4 py-3 text-base font-semibold text-white">
                 {formatMachineCounter(Number(watchedMachine?.previousExpense ?? 0))}
               </div>
@@ -612,7 +612,7 @@ function MachineFieldset({
 
           {!hideFinancials ? (
             <div className="rounded-xl border border-[#6f8790]/25 bg-[#27383a]/70 p-3 text-xs leading-5 text-[#d6e1de]/80">
-              Saldo de fichas {formatMachineCounter(split.netRevenue)} · Variação do negativo da máquina{" "}
+              Saldo {formatMachineCounter(split.netRevenue)} · Variação do negativo da máquina{" "}
               {formatCurrency(split.machineDebtChange)} · Cliente {formatCurrency(split.clientShareFinal)} · Infinity{" "}
               {formatCurrency(split.houseAmount)}
             </div>
@@ -966,7 +966,7 @@ function SlotVisitForm({
               {!hideFinancials ? (
                 <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/10 pt-3 text-xs">
                   <div>
-                    <p className="text-[#7e786d]">Saldo de fichas</p>
+                    <p className="text-[#7e786d]">Saldo</p>
                     <p className="mt-0.5 font-semibold text-white">{formatMachineCounter(split.netRevenue)}</p>
                   </div>
                   <div>

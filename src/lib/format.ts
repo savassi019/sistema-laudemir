@@ -10,11 +10,10 @@ export function formatCurrency(value: number) {
 
 export function formatMachineCounter(value: number) {
   const safeValue = Number.isFinite(value) ? value : 0;
-  const formatted = new Intl.NumberFormat("pt-BR", {
+  return new Intl.NumberFormat("pt-BR", {
     minimumFractionDigits: 0,
     maximumFractionDigits: 2,
   }).format(safeValue);
-  return `${formatted} fichas`;
 }
 
 function toLocalDate(value: string | Date) {
