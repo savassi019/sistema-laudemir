@@ -13,145 +13,345 @@ type Props = {
   pdfButtonLabel?: string;
 };
 
-/* ──────────────────────────────────────────────────────────────
-   Canvas receipt generator — no external dependencies
-   ────────────────────────────────────────────────────────────── */
-async function generateReceiptImage(message: string, documentLabel: string): Promise<Blob> {
-  const W     = 640;
-  const SCALE = 2;          // retina
-  const PAD   = 44;
-  const LINE  = 44;
+type ReceiptLine = {
+  text: string;
+  isBold: boolean;
+  key?: string;
+  value?: string;
+};
 
-  const rawLines = message.split("\n").filter((l) => l.trim());
+type ReceiptDocument = {
+  title: string;
+  identifier?: ReceiptLine;
+  status?: ReceiptLine;
+  information: ReceiptLine[];
+  totals: ReceiptLine[];
+};
 
-  type Parsed = { text: string; isBold: boolean; key?: string; val?: string };
-  const lines: Parsed[] = rawLines.map((line) => {
-    const isBold = line.startsWith("*") && line.endsWith("*") && line.length > 2;
-    const text   = isBold ? line.slice(1, -1) : line;
-    const m      = text.match(/^([^:]+):\s*(.+)$/);
-    return { text, isBold, key: m?.[1], val: m?.[2] };
+function normalizeReceiptKey(value?: string) {
+  return (value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("pt-BR");
+}
+
+function parseReceiptMessage(message: string): ReceiptDocument {
+  const lines: ReceiptLine[] = message
+    .split("\n")
+    .filter((line) => line.trim())
+    .map((line) => {
+      const isBold = line.startsWith("*") && line.endsWith("*") && line.length > 2;
+      const text = (isBold ? line.slice(1, -1) : line).trim();
+      const match = text.match(/^([^:]+):\s*(.+)$/);
+      return { text, isBold, key: match?.[1]?.trim(), value: match?.[2]?.trim() };
+    });
+  const titleLine = lines[0]?.isBold ? lines[0] : null;
+  const body = titleLine ? lines.slice(1) : lines;
+  const identifier = body.find((line) => normalizeReceiptKey(line.key) === "comprovante");
+  const status = body.find((line) => {
+    const key = normalizeReceiptKey(line.key);
+    return key === "situacao" || key === "status";
   });
 
-  const titleLine   = lines[0]?.isBold ? lines[0] : null;
-  const bodyLines   = lines.filter((_, i) => !(i === 0 && lines[0].isBold));
-  const normalLines = bodyLines.filter((l) => !l.isBold);
-  const totalLines  = bodyLines.filter((l) => l.isBold);
+  return {
+    title: titleLine?.text ?? "Comprovante",
+    identifier,
+    status,
+    information: body.filter(
+      (line) => !line.isBold && line !== identifier && line !== status,
+    ),
+    totals: body.filter((line) => line.isBold),
+  };
+}
 
-  // ── height ──────────────────────────────────────────────────
-  const H =
-    8                          // top bar
-    + 28 + 4                   // label
-    + 32 + 20                  // title
-    + 1 + 28                   // divider
-    + normalLines.length * LINE
-    + 1 + 28                   // divider
-    + totalLines.length * (LINE + 10)
-    + 1 + 24                   // divider
-    + 48;                      // footer
+function escapeReceiptHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function wrapCanvasText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+) {
+  const words = text
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .flatMap((word) => {
+      if (ctx.measureText(word).width <= maxWidth) return [word];
+      const pieces: string[] = [];
+      let piece = "";
+      for (const character of word) {
+        const candidate = `${piece}${character}`;
+        if (piece && ctx.measureText(candidate).width > maxWidth) {
+          pieces.push(piece);
+          piece = character;
+        } else {
+          piece = candidate;
+        }
+      }
+      if (piece) pieces.push(piece);
+      return pieces;
+    });
+  if (words.length === 0) return [""];
+  const lines: string[] = [];
+  let current = words[0]!;
+  for (const word of words.slice(1)) {
+    const candidate = `${current} ${word}`;
+    if (ctx.measureText(candidate).width <= maxWidth) current = candidate;
+    else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  lines.push(current);
+  return lines;
+}
+
+function loadReceiptLogo() {
+  return new Promise<HTMLImageElement | null>((resolve) => {
+    const logo = new Image();
+    logo.onload = () => resolve(logo);
+    logo.onerror = () => resolve(null);
+    logo.src = "/infinity-logo.png";
+  });
+}
+
+async function generateReceiptImage(message: string, documentLabel: string): Promise<Blob> {
+  const receipt = parseReceiptMessage(message);
+  const W = 720;
+  const SCALE = 2;
+  const PAD = 54;
+  const CONTENT_W = W - PAD * 2;
+  const INFO_GAP = 24;
+  const INFO_W = (CONTENT_W - INFO_GAP) / 2;
+  const measureCanvas = document.createElement("canvas");
+  const measure = measureCanvas.getContext("2d")!;
+
+  measure.font = "500 20px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  const subtitleLines = wrapCanvasText(measure, receipt.title, CONTENT_W);
+
+  measure.font = "600 18px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  const informationLayout = receipt.information.map((line) => ({
+    ...line,
+    valueLines: wrapCanvasText(measure, line.value ?? line.text, INFO_W),
+  }));
+  const informationRows: Array<typeof informationLayout> = [];
+  for (let index = 0; index < informationLayout.length; index += 2) {
+    informationRows.push(informationLayout.slice(index, index + 2));
+  }
+  const informationHeight = informationRows.reduce((sum, row) => {
+    const rowHeight = Math.max(
+      76,
+      ...row.map((item) => 30 + item.valueLines.length * 25),
+    );
+    return sum + rowHeight;
+  }, 0);
+
+  measure.font = "800 38px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  const totalLayout = receipt.totals.map((line, index) => {
+    const valueLines = wrapCanvasText(measure, line.value ?? line.text, CONTENT_W - 56);
+    const height = index === 0
+      ? (line.key ? 28 : 0) + valueLines.length * 44 + 28
+      : 24 + (line.key ? 28 : 0) + valueLines.length * 30 + 24;
+    return { ...line, valueLines, height };
+  });
+
+  const headerHeight =
+    220 +
+    subtitleLines.length * 26 +
+    (receipt.identifier ? 20 : 0) +
+    (receipt.status ? 50 : 0);
+  const detailsHeight = receipt.information.length > 0 ? 46 + informationHeight : 0;
+  const summaryPanelHeight = totalLayout.length > 0
+    ? 74 + totalLayout.reduce((sum, total) => sum + total.height, 0) + 12
+    : 0;
+  const summaryHeight = summaryPanelHeight > 0 ? summaryPanelHeight + 28 : 0;
+  const footerHeight = 104;
+  const H = headerHeight + detailsHeight + summaryHeight + footerHeight;
 
   const canvas = document.createElement("canvas");
-  canvas.width  = W * SCALE;
+  canvas.width = W * SCALE;
   canvas.height = H * SCALE;
   const ctx = canvas.getContext("2d")!;
   ctx.scale(SCALE, SCALE);
 
-  // ── background ──────────────────────────────────────────────
-  ctx.fillStyle = "#0c1a10";
+  ctx.fillStyle = "#fbfcfa";
   ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#18794e";
+  ctx.fillRect(0, 0, W, 8);
 
-  // subtle noise texture feel via horizontal lines
-  ctx.fillStyle = "rgba(255,255,255,0.012)";
-  for (let yy = 0; yy < H; yy += 3) ctx.fillRect(0, yy, W, 1);
+  let y = 40;
+  const logo = await loadReceiptLogo();
+  if (logo) {
+    const logoWidth = 112;
+    const logoHeight = logoWidth / (logo.naturalWidth / logo.naturalHeight);
+    ctx.drawImage(logo, PAD, y, logoWidth, logoHeight);
+  } else {
+    ctx.font = "800 21px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+    ctx.fillStyle = "#1f2937";
+    ctx.fillText("INFINITY ERP", PAD, y + 28);
+  }
 
-  // top accent bar
-  ctx.fillStyle = "#25d366";
-  ctx.fillRect(0, 0, W, 6);
+  const documentText = documentLabel.toLocaleUpperCase("pt-BR");
+  ctx.font = "700 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  const documentWidth = ctx.measureText(documentText).width + 28;
+  ctx.fillStyle = "#edf7f0";
+  ctx.beginPath();
+  ctx.roundRect(W - PAD - documentWidth, y + 8, documentWidth, 34, 17);
+  ctx.fill();
+  ctx.fillStyle = "#17603d";
+  ctx.fillText(documentText, W - PAD - documentWidth + 14, y + 30);
 
-  let y = 32;
+  y += 100;
+  ctx.font = "800 30px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  ctx.fillStyle = "#17211a";
+  ctx.fillText("COMPROVANTE DE FECHAMENTO", PAD, y);
+  y += 36;
 
-  // ── label ───────────────────────────────────────────────────
-  ctx.font      = "600 11px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-  ctx.fillStyle = "#25d366";
-  ctx.letterSpacing = "2px";
-  ctx.fillText(documentLabel.toLocaleUpperCase("pt-BR"), PAD, y);
-  ctx.letterSpacing = "0px";
-  y += 30;
+  ctx.font = "500 20px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  ctx.fillStyle = "#5d675f";
+  for (const line of subtitleLines) {
+    ctx.fillText(line, PAD, y);
+    y += 26;
+  }
 
-  // ── title ───────────────────────────────────────────────────
-  if (titleLine) {
-    const clean = titleLine.text.replace(/^comprovante\s*/i, "").trim();
-    ctx.font      = "bold 26px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-    ctx.fillStyle = "#ffffff";
-    ctx.fillText(clean, PAD, y);
+  if (receipt.identifier?.value) {
+    ctx.font = "600 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+    ctx.fillStyle = "#89918b";
+    ctx.fillText(`IDENTIFICADOR  ${receipt.identifier.value}`, PAD, y + 5);
     y += 30;
+  } else {
+    y += 10;
   }
-  y += 18;
 
-  // ── helper ──────────────────────────────────────────────────
-  function divider() {
-    ctx.strokeStyle = "rgba(255,255,255,0.07)";
-    ctx.lineWidth   = 1;
+  if (receipt.status?.value) {
+    const statusText = receipt.status.value.toLocaleUpperCase("pt-BR");
+    ctx.font = "700 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+    const badgeWidth = Math.min(ctx.measureText(statusText).width + 30, CONTENT_W);
+    ctx.fillStyle = "#e8f5ec";
     ctx.beginPath();
-    ctx.moveTo(PAD, y);
-    ctx.lineTo(W - PAD, y);
+    ctx.roundRect(PAD, y, badgeWidth, 34, 17);
+    ctx.fill();
+    ctx.fillStyle = "#17603d";
+    ctx.fillText(statusText, PAD + 15, y + 22);
+    y += 50;
+  }
+
+  ctx.strokeStyle = "#dfe5e0";
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(PAD, y);
+  ctx.lineTo(W - PAD, y);
+  ctx.stroke();
+  y += 34;
+
+  if (receipt.information.length > 0) {
+    ctx.font = "700 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+    ctx.fillStyle = "#6d766f";
+    ctx.fillText("INFORMAÇÕES DO FECHAMENTO", PAD, y);
+    y += 34;
+
+    informationRows.forEach((row, rowIndex) => {
+      const rowHeight = Math.max(
+        76,
+        ...row.map((item) => 30 + item.valueLines.length * 25),
+      );
+      row.forEach((item, column) => {
+        const x = PAD + column * (INFO_W + INFO_GAP);
+        if (item.key) {
+          ctx.font = "700 11px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+          ctx.fillStyle = "#7d867f";
+          ctx.fillText(item.key.toLocaleUpperCase("pt-BR"), x, y);
+        }
+        ctx.font = "600 18px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+        ctx.fillStyle = "#1d2821";
+        item.valueLines.forEach((line, lineIndex) => {
+          ctx.fillText(line, x, y + 27 + lineIndex * 25);
+        });
+      });
+      y += rowHeight;
+      if (rowIndex < informationRows.length - 1) {
+        ctx.strokeStyle = "#edf0ed";
+        ctx.beginPath();
+        ctx.moveTo(PAD, y - 14);
+        ctx.lineTo(W - PAD, y - 14);
+        ctx.stroke();
+      }
+    });
+    y += 12;
+  }
+
+  if (totalLayout.length > 0) {
+    const panelTop = y;
+    ctx.fillStyle = "#f0f7f2";
+    ctx.strokeStyle = "#d7e7db";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.roundRect(PAD, panelTop, CONTENT_W, summaryPanelHeight, 18);
+    ctx.fill();
     ctx.stroke();
-    y += 28;
+
+    y += 36;
+    ctx.font = "700 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+    ctx.fillStyle = "#587061";
+    ctx.fillText("RESUMO DO FECHAMENTO", PAD + 28, y);
+    y += 38;
+
+    totalLayout.forEach((total, index) => {
+      const x = PAD + 28;
+      if (index > 0) {
+        ctx.strokeStyle = "#d9e6dc";
+        ctx.beginPath();
+        ctx.moveTo(x, y);
+        ctx.lineTo(W - PAD - 28, y);
+        ctx.stroke();
+        y += 24;
+      }
+      if (total.key) {
+        ctx.font = "700 11px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+        ctx.fillStyle = index === 0 ? "#28704b" : "#6f7c73";
+        ctx.fillText(total.key.toLocaleUpperCase("pt-BR"), x, y);
+        y += 28;
+      }
+      ctx.font = `${index === 0 ? "800 38px" : "700 24px"} system-ui,-apple-system,'Segoe UI',Arial,sans-serif`;
+      ctx.fillStyle = index === 0 ? "#18794e" : "#26332b";
+      total.valueLines.forEach((line, lineIndex) => {
+        ctx.fillText(line, x, y + lineIndex * (index === 0 ? 44 : 30));
+      });
+      y += total.valueLines.length * (index === 0 ? 44 : 30);
+      y += index === 0 ? 28 : 24;
+    });
+    y = panelTop + summaryPanelHeight + 28;
   }
 
-  divider();
-
-  // ── normal key-value lines ───────────────────────────────────
-  for (const line of normalLines) {
-    if (line.key && line.val) {
-      ctx.font      = "400 15px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-      ctx.fillStyle = "#6b7280";
-      ctx.fillText(line.key, PAD, y);
-
-      ctx.font      = "500 15px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-      ctx.fillStyle = "#d1d5db";
-      const vw = ctx.measureText(line.val).width;
-      ctx.fillText(line.val, W - PAD - vw, y);
-    } else {
-      ctx.font      = "400 15px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-      ctx.fillStyle = "#9ca3af";
-      ctx.fillText(line.text, PAD, y);
-    }
-    y += LINE;
-  }
-
-  divider();
-
-  // ── total lines ──────────────────────────────────────────────
-  for (const line of totalLines) {
-    if (line.key && line.val) {
-      ctx.font      = "600 14px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-      ctx.fillStyle = "#9ca3af";
-      ctx.fillText(line.key.toUpperCase(), PAD, y);
-
-      ctx.font      = "bold 24px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-      ctx.fillStyle = "#25d366";
-      const vw = ctx.measureText(line.val).width;
-      ctx.fillText(line.val, W - PAD - vw, y);
-    } else {
-      ctx.font      = "bold 20px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-      ctx.fillStyle = "#25d366";
-      ctx.fillText(line.text, PAD, y);
-    }
-    y += LINE + 10;
-  }
-
-  divider();
-
-  // ── footer ───────────────────────────────────────────────────
-  const dateStr = new Date().toLocaleDateString("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
+  const footerTop = H - footerHeight + 18;
+  ctx.strokeStyle = "#dfe5e0";
+  ctx.beginPath();
+  ctx.moveTo(PAD, footerTop);
+  ctx.lineTo(W - PAD, footerTop);
+  ctx.stroke();
+  const generatedAt = new Date().toLocaleDateString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
   });
-  ctx.font      = "400 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-  ctx.fillStyle = "#374151";
-  ctx.fillText("Comprovante gerado automaticamente", PAD, y + 14);
-  const dw = ctx.measureText(dateStr).width;
-  ctx.fillText(dateStr, W - PAD - dw, y + 14);
+  ctx.font = "600 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  ctx.fillStyle = "#58635b";
+  ctx.fillText("Infinity ERP", PAD, H - 52);
+  ctx.font = "400 11px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  ctx.fillStyle = "#8a938c";
+  ctx.fillText("Comprovante gerado automaticamente pelo sistema.", PAD, H - 29);
+  const dateWidth = ctx.measureText(generatedAt).width;
+  ctx.fillText(generatedAt, W - PAD - dateWidth, H - 29);
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
@@ -161,9 +361,6 @@ async function generateReceiptImage(message: string, documentLabel: string): Pro
   });
 }
 
-/* ──────────────────────────────────────────────────────────────
-   Component
-   ────────────────────────────────────────────────────────────── */
 export function WhatsAppReceiptButton({
   defaultPhone = "",
   message,
@@ -173,14 +370,14 @@ export function WhatsAppReceiptButton({
   documentLabel = "Comprovante",
   pdfButtonLabel = "Baixar como PDF",
 }: Props) {
-  const [phone, setPhone]           = useState(defaultPhone);
-  const [countdown, setCountdown]   = useState<number | null>(null);
+  const [phone, setPhone] = useState(defaultPhone);
+  const [countdown, setCountdown] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
-  const [showText, setShowText]     = useState(false);
+  const [showText, setShowText] = useState(false);
   const cancelledRef = useRef(false);
-  const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const messageRef   = useRef(message);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const messageRef = useRef(message);
 
   useEffect(() => {
     messageRef.current = message;
@@ -188,35 +385,32 @@ export function WhatsAppReceiptButton({
 
   const isReady = phone.replace(/\D/g, "").length >= 10;
 
-  function buildTextUrl(p: string) {
-    const clean       = p.replace(/\D/g, "");
+  function buildTextUrl(value: string) {
+    const clean = value.replace(/\D/g, "");
     const withCountry = clean.startsWith("55") ? clean : `55${clean}`;
     return `https://wa.me/${withCountry}?text=${encodeURIComponent(messageRef.current)}`;
   }
 
-  // ── share image ─────────────────────────────────────────────
   async function handleShareImage() {
     setGenerating(true);
     setShareError(null);
     try {
       const blob = await generateReceiptImage(messageRef.current, documentLabel);
       const file = new File([blob], "comprovante.png", { type: "image/png" });
-
       if (typeof navigator !== "undefined" && navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: "Comprovante" });
       } else {
-        // Desktop fallback: download
         const url = URL.createObjectURL(blob);
-        const a   = document.createElement("a");
-        a.href     = url;
-        a.download = "comprovante.png";
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = "comprovante.png";
+        document.body.appendChild(anchor);
+        anchor.click();
+        document.body.removeChild(anchor);
         setTimeout(() => URL.revokeObjectURL(url), 1500);
       }
-    } catch (err) {
-      if (err instanceof Error && err.name !== "AbortError") {
+    } catch (error) {
+      if (error instanceof Error && error.name !== "AbortError") {
         setShareError("Não foi possível compartilhar. Tente baixar a imagem.");
       }
     } finally {
@@ -224,89 +418,114 @@ export function WhatsAppReceiptButton({
     }
   }
 
-  // ── PDF export ──────────────────────────────────────────────
   function handleDownloadPDF() {
-    const msg = messageRef.current;
-    const lines = msg.split("\n");
-
-    const titleLine = lines[0]?.startsWith("*") && lines[0]?.endsWith("*") ? lines[0].slice(1, -1) : null;
-    const bodyLines = titleLine ? lines.slice(1) : lines;
-
-    const rows = bodyLines.map((line) => {
-      const isBold = line.startsWith("*") && line.endsWith("*") && line.length > 2;
-      const text = isBold ? line.slice(1, -1) : line;
-      const m = text.match(/^([^:]+):\s*(.+)$/);
-      if (isBold) {
-        if (m) return `<div class="total"><span class="total-k">${m[1]}</span><span class="total-v">${m[2]}</span></div>`;
-        return `<div class="total"><span class="total-v">${text}</span></div>`;
-      }
-      if (m) return `<div class="row"><span class="k">${m[1]}</span><span class="v">${m[2]}</span></div>`;
-      if (text.trim()) return `<div class="note">${text}</div>`;
-      return "";
-    }).join("");
-
+    const receipt = parseReceiptMessage(messageRef.current);
     const logoUrl = `${window.location.origin}/infinity-logo.png`;
     const generatedAt = new Date().toLocaleDateString("pt-BR", {
-      day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
+    const informationHtml = receipt.information
+      .map((line) => {
+        const label = line.key
+          ? `<p class="info-label">${escapeReceiptHtml(line.key)}</p>`
+          : "";
+        return `<div class="info-item">${label}<p class="info-value">${escapeReceiptHtml(line.value ?? line.text)}</p></div>`;
+      })
+      .join("");
+    const totalsHtml = receipt.totals
+      .map((line, index) => `
+        <div class="summary-item ${index === 0 ? "primary" : "secondary"}">
+          ${line.key ? `<p class="summary-label">${escapeReceiptHtml(line.key)}</p>` : ""}
+          <p class="summary-value">${escapeReceiptHtml(line.value ?? line.text)}</p>
+        </div>`)
+      .join("");
+    const statusHtml = receipt.status?.value
+      ? `<span class="status">${escapeReceiptHtml(receipt.status.value)}</span>`
+      : "";
+    const identifierHtml = receipt.identifier?.value
+      ? `<p class="identifier">Identificador&nbsp;&nbsp;${escapeReceiptHtml(receipt.identifier.value)}</p>`
+      : "";
 
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/>
-<title>${documentLabel} — ${titleLine ?? "Comprovante"}</title>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>${escapeReceiptHtml(documentLabel)} — ${escapeReceiptHtml(receipt.title)}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#fff;color:#1a1a1a;padding:40px 36px;max-width:520px;margin:0 auto}
-.header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding-bottom:18px}
-.header img{height:52px;width:auto;display:block}
-.header .title{text-align:right}
-.eyebrow{font-size:10px;font-weight:700;letter-spacing:.16em;text-transform:uppercase;color:#b8863f}
-.header h1{font-size:19px;font-weight:800;letter-spacing:-.2px;margin-top:3px;color:#1a1a1a}
-.rule{height:3px;background:linear-gradient(90deg,#d1a04f,#f0d98a 55%,transparent);border-radius:2px;margin-bottom:6px}
-.meta{font-size:11px;color:#9a958b;margin-bottom:22px}
-.card{border:1px solid #ececec;border-radius:14px;overflow:hidden}
-.row{display:flex;justify-content:space-between;gap:14px;padding:11px 16px;font-size:13px;border-bottom:1px solid #f0f0f0}
-.row:last-child{border-bottom:none}
-.k{color:#8a857b}.v{font-weight:600;text-align:right;color:#1a1a1a}
-.note{font-size:12px;color:#8a857b;padding:10px 16px;font-style:italic;border-bottom:1px solid #f0f0f0}
-.total{display:flex;justify-content:space-between;align-items:baseline;gap:14px;padding:14px 16px;background:#fbf6ea;border-top:2px solid #d1a04f}
-.total-k{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8a6a2f}
-.total-v{font-size:19px;font-weight:800;color:#8a6a2f}
-.footer{margin-top:26px;padding-top:14px;border-top:1px solid #ececec;display:flex;align-items:center;justify-content:space-between;gap:10px}
-.footer p{font-size:10px;color:#b3ada1}
-@media print{body{padding:18px}}
+@page{size:A4;margin:14mm}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#edf1ee;color:#17211a;padding:28px 16px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.sheet{width:100%;max-width:620px;margin:0 auto;background:#fbfcfa;border-top:6px solid #18794e;padding:34px 40px 28px;box-shadow:0 12px 35px rgba(24,55,37,.08)}
+.brand-row{display:flex;align-items:center;justify-content:space-between;gap:24px}
+.brand-row img{display:block;width:104px;height:auto;object-fit:contain}
+.document-label{border-radius:999px;background:#edf7f0;color:#17603d;padding:8px 13px;font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
+.heading{margin-top:30px}
+.heading h1{font-size:25px;line-height:1.12;letter-spacing:-.035em;font-weight:850;color:#17211a}
+.subtitle{margin-top:8px;font-size:16px;line-height:1.4;font-weight:550;color:#5d675f;overflow-wrap:anywhere}
+.identifier{margin-top:12px;font-size:10px;line-height:1.5;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#89918b;overflow-wrap:anywhere}
+.status{display:inline-flex;margin-top:18px;border-radius:999px;background:#e8f5ec;color:#17603d;padding:8px 13px;font-size:10px;font-weight:800;letter-spacing:.055em;text-transform:uppercase}
+.section{margin-top:28px;padding-top:24px;border-top:1px solid #dfe5e0}
+.section-title{font-size:10px;font-weight:800;letter-spacing:.105em;text-transform:uppercase;color:#6d766f}
+.info-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 28px;margin-top:22px}
+.info-item{min-width:0}
+.info-label{font-size:10px;line-height:1.3;font-weight:800;letter-spacing:.065em;text-transform:uppercase;color:#7d867f}
+.info-value{margin-top:5px;font-size:15px;line-height:1.45;font-weight:650;color:#1d2821;overflow-wrap:anywhere}
+.summary{margin-top:28px;border:1px solid #d7e7db;border-radius:16px;background:#f0f7f2;padding:26px 28px 24px}
+.summary-title{font-size:10px;font-weight:800;letter-spacing:.105em;text-transform:uppercase;color:#587061}
+.summary-item{padding-top:22px}
+.summary-item.secondary{margin-top:22px;border-top:1px solid #d9e6dc}
+.summary-label{font-size:10px;line-height:1.3;font-weight:800;letter-spacing:.075em;text-transform:uppercase;color:#28704b}
+.summary-item.secondary .summary-label{color:#6f7c73}
+.summary-value{margin-top:8px;overflow-wrap:anywhere}
+.summary-item.primary .summary-value{font-size:33px;line-height:1.08;font-weight:850;letter-spacing:-.035em;color:#18794e}
+.summary-item.secondary .summary-value{font-size:21px;line-height:1.15;font-weight:750;color:#26332b}
+.footer{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-top:32px;padding-top:20px;border-top:1px solid #dfe5e0}
+.company{font-size:11px;font-weight:800;color:#58635b}
+.footer-note,.generated-at{margin-top:5px;font-size:9px;line-height:1.45;color:#8a938c}
+.generated-at{text-align:right;white-space:nowrap}
+@media(max-width:480px){body{padding:0;background:#fbfcfa}.sheet{padding:26px 24px 24px;box-shadow:none}.brand-row img{width:90px}.heading h1{font-size:22px}.info-grid{gap:18px 20px}.summary{padding:23px 22px}.summary-item.primary .summary-value{font-size:29px}.footer{align-items:flex-start;flex-direction:column;gap:8px}.generated-at{text-align:left}}
+@media print{body{background:#fff;padding:0}.sheet{max-width:none;padding:0;box-shadow:none;border-top-width:5px}}
 </style></head><body>
-<div class="header">
-  <img src="${logoUrl}" alt="Infinity" />
-  <div class="title">
-    <p class="eyebrow">${documentLabel}</p>
-    <h1>${titleLine ? titleLine.replace(/^comprovante\s*/i, "").trim() || titleLine : ""}</h1>
-  </div>
-</div>
-<div class="rule"></div>
-<p class="meta">Gerado em ${generatedAt}</p>
-<div class="card">${rows}</div>
-<div class="footer">
-  <p>Infinity ERP</p>
-  <p>Comprovante gerado automaticamente</p>
-</div>
+<main class="sheet">
+  <header>
+    <div class="brand-row">
+      <img src="${logoUrl}" alt="Infinity"/>
+      <span class="document-label">${escapeReceiptHtml(documentLabel)}</span>
+    </div>
+    <div class="heading">
+      <h1>COMPROVANTE DE FECHAMENTO</h1>
+      <p class="subtitle">${escapeReceiptHtml(receipt.title)}</p>
+      ${identifierHtml}
+      ${statusHtml}
+    </div>
+  </header>
+  ${informationHtml ? `<section class="section"><p class="section-title">Informações do fechamento</p><div class="info-grid">${informationHtml}</div></section>` : ""}
+  ${totalsHtml ? `<section class="summary"><p class="summary-title">Resumo do fechamento</p>${totalsHtml}</section>` : ""}
+  <footer class="footer">
+    <div><p class="company">Infinity ERP</p><p class="footer-note">Comprovante gerado automaticamente pelo sistema.</p></div>
+    <p class="generated-at">${escapeReceiptHtml(generatedAt)}</p>
+  </footer>
+</main>
 </body></html>`;
 
-    const win = window.open("", "_blank");
-    if (!win) return;
-    win.document.write(html);
-    win.document.close();
-    win.focus();
-    const img = win.document.querySelector("img");
-    const triggerPrint = () => win.print();
-    if (img && !img.complete) {
-      img.addEventListener("load", triggerPrint, { once: true });
-      img.addEventListener("error", triggerPrint, { once: true });
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) return;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    const image = printWindow.document.querySelector("img");
+    const triggerPrint = () => printWindow.print();
+    if (image && !image.complete) {
+      image.addEventListener("load", triggerPrint, { once: true });
+      image.addEventListener("error", triggerPrint, { once: true });
       setTimeout(triggerPrint, 1200);
     } else {
       setTimeout(triggerPrint, 300);
     }
   }
 
-  // ── text send ───────────────────────────────────────────────
   function handleSendText() {
     if (intervalRef.current) clearInterval(intervalRef.current);
     setCountdown(null);
@@ -329,25 +548,26 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;ba
       if (remaining <= 0) {
         clearInterval(intervalRef.current!);
         setCountdown(null);
-        if (!cancelledRef.current)
+        if (!cancelledRef.current) {
           window.open(buildTextUrl(phone), "_blank", "noopener,noreferrer");
+        }
       } else {
         setCountdown(remaining);
       }
     }, 1000);
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-[#25d366]/30 bg-[#0d1f14]">
-      {/* Header */}
       <div className="flex items-center gap-2 border-b border-[#25d366]/15 px-4 py-3">
         <MessageCircle className="size-4 text-[#25d366]" />
         <p className="text-sm font-semibold text-[#25d366]">{title}</p>
       </div>
 
-      {/* Countdown */}
       {countdown !== null ? (
         <div className="flex items-center justify-between gap-3 px-4 py-4">
           <p className="text-sm text-[#25d366]">
@@ -356,72 +576,67 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;ba
           <button
             type="button"
             onClick={handleCancel}
-            className="flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-[#9a958b] transition hover:text-white"
+            className="flex min-h-11 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-[#9a958b] transition active:text-white"
           >
             <X className="size-3.5" />
             Cancelar
           </button>
         </div>
       ) : (
-        <div className="p-4 space-y-3">
-          {/* Image share — PRIMARY */}
+        <div className="space-y-3 p-4">
           <button
             type="button"
             onClick={handleShareImage}
             disabled={generating}
-            className="inline-flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#25d366] px-4 py-4 text-base font-bold text-[#0a1a10] shadow-[0_6px_20px_rgba(37,211,102,0.4)] transition hover:bg-[#22c55e] active:scale-[0.98] disabled:opacity-40 disabled:shadow-none"
+            className="inline-flex min-h-14 w-full items-center justify-center gap-2.5 rounded-xl bg-[#25d366] px-4 py-4 text-base font-bold text-[#0a1a10] shadow-[0_6px_20px_rgba(37,211,102,0.4)] transition active:scale-[0.98] active:bg-[#22c55e] disabled:opacity-40 disabled:shadow-none"
           >
-            {generating
-              ? <LoaderCircle className="size-5 animate-spin" />
-              : <ImageIcon className="size-5" />}
+            {generating ? (
+              <LoaderCircle className="size-5 animate-spin" />
+            ) : (
+              <ImageIcon className="size-5" />
+            )}
             {generating ? "Gerando comprovante…" : "Compartilhar comprovante"}
           </button>
 
-          {/* Error */}
-          {shareError ? (
-            <p className="text-xs text-[#f0a08f] text-center">{shareError}</p>
-          ) : null}
+          {shareError ? <p className="text-center text-xs text-[#f0a08f]">{shareError}</p> : null}
 
-          {/* PDF download */}
           <button
             type="button"
             onClick={handleDownloadPDF}
-            className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#25d366]/20 bg-transparent px-4 py-3 text-sm font-semibold text-[#25d366]/70 transition hover:bg-[#25d366]/8 hover:text-[#25d366]"
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#25d366]/20 bg-transparent px-4 py-3 text-sm font-semibold text-[#25d366]/70 transition active:bg-[#25d366]/10 active:text-[#25d366]"
           >
             <FileDown className="size-4" />
             {pdfButtonLabel}
           </button>
 
-          {/* Desktop note / text fallback toggle */}
           <div className="text-center">
             <button
               type="button"
-              onClick={() => setShowText((v) => !v)}
-              className="text-xs text-[#25d366]/50 underline-offset-2 hover:text-[#25d366]/80 transition"
+              onClick={() => setShowText((current) => !current)}
+              className="min-h-11 text-xs text-[#25d366]/50 underline-offset-2 transition active:text-[#25d366]/80"
             >
               {showText ? "Ocultar opção de texto" : "Ou enviar como texto no WhatsApp"}
             </button>
           </div>
 
-          {/* Text fallback */}
           {showText ? (
-            <div className="space-y-2 pt-1 border-t border-[#25d366]/10">
+            <div className="space-y-2 border-t border-[#25d366]/10 pt-3">
               <div className="space-y-1.5">
                 <p className="text-xs text-[#25d366]/60">{phoneLabel}</p>
                 <input
                   type="tel"
                   inputMode="tel"
                   value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
+                  onChange={(event) => setPhone(event.target.value)}
                   placeholder="(DDD) 9 9999-9999"
-                  className="w-full rounded-xl border border-[#25d366]/20 bg-white/[0.04] px-4 py-3 text-base text-white outline-none placeholder:text-slate-600 focus:border-[#25d366]/50 transition"
+                  className="min-h-12 w-full rounded-xl border border-[#25d366]/20 bg-white/[0.04] px-4 py-3 text-base text-white outline-none placeholder:text-slate-600 focus:border-[#25d366]/50"
                 />
               </div>
               <button
                 type="button"
                 onClick={handleSendText}
                 disabled={!isReady}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#25d366]/30 bg-transparent px-4 py-3 text-sm font-semibold text-[#25d366] transition hover:bg-[#25d366]/10 disabled:opacity-35"
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#25d366]/30 bg-transparent px-4 py-3 text-sm font-semibold text-[#25d366] transition active:bg-[#25d366]/10 disabled:opacity-35"
               >
                 <Send className="size-4" />
                 Enviar texto agora
@@ -429,9 +644,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;ba
             </div>
           ) : null}
 
-          {/* Download hint for desktop */}
-          <p className="text-center text-[11px] text-[#25d366]/30 leading-tight">
-            No celular: compartilha direto para o WhatsApp.<br />
+          <p className="text-center text-[11px] leading-tight text-[#25d366]/30">
+            No celular: compartilha direto para o WhatsApp.
+            <br />
             No computador: baixa a imagem para enviar manualmente.
           </p>
         </div>
