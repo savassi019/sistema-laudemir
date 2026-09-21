@@ -355,6 +355,7 @@ const visitMachineSchema = z
       ctx.addIssue({ code: "custom", path: ["screenPhoto"], message: "Tire uma foto da tela antes de salvar." });
     }
   });
+type VisitMachineValues = z.output<typeof visitMachineSchema>;
 
 const visitSchema = z
   .object({
@@ -362,11 +363,11 @@ const visitSchema = z
     paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
     previousCustomerDebt: z.coerce.number().min(0),
     customerDebtDiscounted: z.coerce.number().min(0),
-    generatedDebtAmount: z.coerce.number().min(0),
     machines: z.array(visitMachineSchema).min(1),
   })
   .superRefine((data, ctx) => {
-    if (data.customerDebtDiscounted > data.previousCustomerDebt + data.generatedDebtAmount) {
+    const generatedDebtAmount = calculateAutomaticGeneratedDebt(data.machines);
+    if (data.customerDebtDiscounted > data.previousCustomerDebt + generatedDebtAmount) {
       ctx.addIssue({
         code: "custom",
         path: ["customerDebtDiscounted"],
@@ -377,6 +378,7 @@ const visitSchema = z
 
 type VisitInput = z.input<typeof visitSchema>;
 type VisitValues = z.output<typeof visitSchema>;
+type ReviewedVisitValues = VisitValues & { generatedDebtAmount: number };
 
 function computeMachineSplit(m: {
   currentIncome: number;
@@ -407,6 +409,13 @@ function computeMachineSplit(m: {
     clientShareFinal: clientShareAfterGreed,
     houseAmount: houseShareAfterGreed,
   };
+}
+
+function calculateAutomaticGeneratedDebt(machines: VisitMachineValues[]) {
+  const clientTotal = machines
+    .filter((machine) => machine.included)
+    .reduce((sum, machine) => sum + computeMachineSplit(machine).clientShareFinal, 0);
+  return Math.round(Math.max(-clientTotal, 0) * 100) / 100;
 }
 
 type MachineResult = {
@@ -580,20 +589,8 @@ function MachineFieldset({
               />
             </div>
             <div className="space-y-1.5">
-              <label className={labelClass}>Negativo anterior da máquina</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                readOnly
-                className={`${fieldClass} opacity-70`}
-                {...form.register(`machines.${index}.previousMachineDebt`)}
-              />
-              <p className={hintClass}>Puxado automaticamente do último fechamento.</p>
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelClass}>Negativo atual da máquina</label>
+              <input type="hidden" {...form.register(`machines.${index}.previousMachineDebt`)} />
+              <label className={labelClass}>Negativo da máquina</label>
               <input
                 type="number"
                 inputMode="decimal"
@@ -602,7 +599,9 @@ function MachineFieldset({
                 className={fieldClass}
                 {...form.register(`machines.${index}.finalMachineDebt`)}
               />
-              <p className={hintClass}>Informe o valor mostrado na máquina; a variação é calculada sozinha.</p>
+              <p className={hintClass}>
+                Já vem com o último valor; altere somente se o negativo mostrado na máquina mudou.
+              </p>
             </div>
           </div>
 
@@ -639,7 +638,7 @@ function SlotVisitForm({
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [reloadVersion, setReloadVersion] = useState(0);
-  const [reviewValues, setReviewValues] = useState<VisitValues | null>(null);
+  const [reviewValues, setReviewValues] = useState<ReviewedVisitValues | null>(null);
   const [results, setResults] = useState<MachineResult[] | null>(null);
   const [lastSubmission, setLastSubmission] = useState<{ paymentMethod: string; occurredAt: string } | null>(null);
   const savingRef = useRef(false);
@@ -653,7 +652,6 @@ function SlotVisitForm({
       paymentMethod: "PIX",
       previousCustomerDebt: 0,
       customerDebtDiscounted: 0,
-      generatedDebtAmount: 0,
       machines: [],
     },
   });
@@ -667,7 +665,6 @@ function SlotVisitForm({
         setPhone(data.phone);
         form.setValue("previousCustomerDebt", data.customerDebt);
         form.setValue("customerDebtDiscounted", 0);
-        form.setValue("generatedDebtAmount", 0);
         replace(
           data.machines.map((m) => ({
             machineId: m.id,
@@ -702,14 +699,14 @@ function SlotVisitForm({
   const watchedPreviousCustomerDebt = Number(
     useWatch({ control: form.control, name: "previousCustomerDebt" }) ?? 0,
   );
-  const watchedGeneratedDebt = Number(
-    useWatch({ control: form.control, name: "generatedDebtAmount" }) ?? 0,
-  );
   const watchedDiscountedDebt = Number(
     useWatch({ control: form.control, name: "customerDebtDiscounted" }) ?? 0,
   );
+  const automaticGeneratedDebt = calculateAutomaticGeneratedDebt(
+    watchedMachines as VisitMachineValues[],
+  );
   const finalCustomerDebt = Math.max(
-    watchedPreviousCustomerDebt + watchedGeneratedDebt - watchedDiscountedDebt,
+    watchedPreviousCustomerDebt + automaticGeneratedDebt - watchedDiscountedDebt,
     0,
   );
 
@@ -720,7 +717,10 @@ function SlotVisitForm({
       setSaveError("Selecione ao menos uma máquina pra fechar.");
       return;
     }
-    setReviewValues(values);
+    setReviewValues({
+      ...values,
+      generatedDebtAmount: calculateAutomaticGeneratedDebt(values.machines),
+    });
   });
 
   async function confirmSave() {
@@ -767,7 +767,6 @@ function SlotVisitForm({
           paymentMethod: reviewValues.paymentMethod,
           previousCustomerDebt: Number(reviewValues.previousCustomerDebt),
           customerDebtDiscounted: Number(reviewValues.customerDebtDiscounted),
-          generatedDebtAmount: Number(reviewValues.generatedDebtAmount),
           machines: uploadedMachines,
         }),
       });
@@ -960,7 +959,7 @@ function SlotVisitForm({
                 <div>
                   <p className="text-[#7e786d]">Negativo da máquina</p>
                   <p className="mt-0.5 text-[#c9c2b4]">
-                    {formatCurrency(machine.previousMachineDebt)} → {formatCurrency(machine.finalMachineDebt)}
+                    {formatCurrency(machine.finalMachineDebt)}
                   </p>
                 </div>
               </div>
@@ -995,12 +994,14 @@ function SlotVisitForm({
                 </p>
               </div>
             ) : null}
-            <div className="rounded-xl border border-white/10 bg-black/10 p-3">
-              <p className="text-[#9a958b]">Gerada agora</p>
-              <p className="mt-1 font-semibold text-white">
-                {formatCurrency(reviewValues.generatedDebtAmount)}
-              </p>
-            </div>
+            {!hideFinancials ? (
+              <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+                <p className="text-[#9a958b]">Gerada automaticamente</p>
+                <p className="mt-1 font-semibold text-white">
+                  {formatCurrency(reviewValues.generatedDebtAmount)}
+                </p>
+              </div>
+            ) : null}
             <div className="rounded-xl border border-white/10 bg-black/10 p-3">
               <p className="text-[#9a958b]">Descontada agora</p>
               <p className="mt-1 font-semibold text-white">
@@ -1128,17 +1129,15 @@ function SlotVisitForm({
                 />
               </div>
             ) : null}
-            <div className="space-y-1.5">
-              <label className={labelClass}>Dívida gerada agora</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                className={fieldClass}
-                {...form.register("generatedDebtAmount")}
-              />
-            </div>
+            {!hideFinancials ? (
+              <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.025] p-3">
+                <p className={labelClass}>Dívida gerada automaticamente</p>
+                <p className="text-base font-semibold text-white">
+                  {formatCurrency(automaticGeneratedDebt)}
+                </p>
+                <p className={hintClass}>Parte do cliente que ficou negativa neste fechamento.</p>
+              </div>
+            ) : null}
             <div className="space-y-1.5">
               <label className={labelClass}>Dívida descontada agora</label>
               <input

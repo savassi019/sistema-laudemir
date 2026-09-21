@@ -311,7 +311,6 @@ const createSlotVisitSchema = z
     // devolvermos uma mensagem pedindo atualizacao, sem gravar nada.
     previousCustomerDebt: slotMoneySchema.optional(),
     customerDebtDiscounted: slotMoneySchema.optional(),
-    generatedDebtAmount: slotMoneySchema.optional(),
     machines: z.array(slotVisitMachineSchema).min(1).max(200),
   })
   .superRefine((data, ctx) => {
@@ -870,8 +869,7 @@ export async function saveSlotVisit(
   const data = createSlotVisitSchema.parse(payload);
   if (
     data.previousCustomerDebt === undefined ||
-    data.customerDebtDiscounted === undefined ||
-    data.generatedDebtAmount === undefined
+    data.customerDebtDiscounted === undefined
   ) {
     throw new SlotVisitConflictError(
       "Esta tela de visita esta desatualizada. Atualize a pagina e abra o fechamento novamente.",
@@ -879,7 +877,32 @@ export async function saveSlotVisit(
   }
   const submittedPreviousCustomerDebt = data.previousCustomerDebt;
   const customerDebtDiscounted = data.customerDebtDiscounted;
-  const generatedDebtAmount = data.generatedDebtAmount;
+  // A divida nova e sempre o valor absoluto da parte do cliente quando o
+  // fechamento inteiro termina negativo. O servidor recalcula para nao
+  // confiar em valores derivados enviados pelo navegador.
+  const generatedDebtAmount = roundMoney(
+    Math.max(
+      -data.machines.reduce(
+        (sum, machine) =>
+          sum +
+          computeSlotSplit({
+            currentIncome: machine.currentIncome,
+            previousIncome: machine.previousIncome,
+            currentExpense: machine.currentExpense,
+            previousExpense: machine.previousExpense,
+            percentageSplit: machine.percentageSplit,
+            optionalGreedAmount: machine.optionalGreedAmount,
+            previousMachineDebt: machine.previousMachineDebt,
+            finalMachineDebt: machine.finalMachineDebt,
+            feedingNegativeAmount: 0,
+            customerDebtDiscounted: 0,
+            generatedDebtAmount: 0,
+          }).clientShareFinal,
+        0,
+      ),
+      0,
+    ),
+  );
   const machineIds = data.machines.map((machine) => machine.machineId);
   const sortedMachineIds = [...machineIds].sort();
 
@@ -1607,12 +1630,6 @@ async function saveWithPrisma(
         : data.customerDebt ?? 0;
       // P.P (pagamento pendente) abate do saldo permanente da divida, separado do desconto pos-split (customerDebtDiscounted).
       const previousCustomerDebt = Math.max(baseDebt - (data.ppValue ?? 0), 0);
-      const customerDebt = Math.max(
-        previousCustomerDebt +
-          (data.generatedDebtAmount ?? 0) -
-          (data.customerDebtDiscounted ?? 0),
-        0,
-      );
 
       // Valor inicial em modo "Negativo" entra no negativo deste fechamento, igual um negativo manual.
       const initialNegativeBonus =
@@ -1625,6 +1642,25 @@ async function saveWithPrisma(
       // valor enviado pelo funcionario JA E o novo saldo da maquina, nao um
       // lancamento avulso que se perde no fim do fechamento.
       const machineDebt = effectiveNegativeAmount;
+      const automaticGeneratedDebt = roundMoney(
+        Math.max(
+          -computeSlotSplit({
+            ...data,
+            previousMachineDebt,
+            finalMachineDebt: effectiveNegativeAmount,
+            feedingNegativeAmount: 0,
+            customerDebtDiscounted: 0,
+            generatedDebtAmount: 0,
+          }).clientShareFinal,
+          0,
+        ),
+      );
+      const customerDebt = Math.max(
+        previousCustomerDebt +
+          automaticGeneratedDebt -
+          (data.customerDebtDiscounted ?? 0),
+        0,
+      );
 
       // newClient force-clears cadastro fields not resent, so the old client's data never lingers under the new one.
       const clientFields = resetDebtForNewClient
@@ -1718,7 +1754,7 @@ async function saveWithPrisma(
           feedingNegativeAmount: 0,
           previousCustomerDebt,
           customerDebtDiscounted: data.customerDebtDiscounted,
-          generatedDebtAmount: data.generatedDebtAmount,
+          generatedDebtAmount: automaticGeneratedDebt,
           finalCustomerDebt: customerDebt,
           paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
           screenPhotoId: data.screenPhotoFileId,
@@ -1732,6 +1768,7 @@ async function saveWithPrisma(
         previousMachineDebt,
         finalMachineDebt: effectiveNegativeAmount,
         feedingNegativeAmount: 0,
+        generatedDebtAmount: automaticGeneratedDebt,
       });
 
       await logFieldVisitForModuleRecord({
