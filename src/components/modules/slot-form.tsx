@@ -842,9 +842,12 @@ function SlotVisitForm({
             <WhatsAppReceiptButton
               defaultPhone={phone}
               autoOpen={!!phone}
-              title="Enviar comprovante do fechamento pelo WhatsApp"
+              title="Via do cliente — WhatsApp e PDF"
+              documentLabel="Via do cliente"
+              pdfButtonLabel="Gerar via do cliente em PDF"
               message={[
-                "*Comprovante H — Caça-níquel*",
+                "*Fechamento H — Caça-níquel*",
+                `Comprovante: ${results[0]?.recordId.slice(0, 8).toLocaleUpperCase("pt-BR") ?? "-"}`,
                 `Cliente: ${clientName}`,
                 lastSubmission
                   ? `Data: ${new Date(`${lastSubmission.occurredAt}T12:00:00`).toLocaleDateString("pt-BR")}`
@@ -859,6 +862,7 @@ function SlotVisitForm({
                 lastSubmission
                   ? `Pagamento: ${PAYMENT_METHOD_LABEL[lastSubmission.paymentMethod] ?? lastSubmission.paymentMethod}`
                   : "",
+                "Situação: Fechamento concluído",
               ]
                 .filter(Boolean)
                 .join("\n")}

@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, FileDown, ImageIcon, LoaderCircle, MessageCircle, Send, X } from "lucide-react";
+import { FileDown, ImageIcon, LoaderCircle, MessageCircle, Send, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 type Props = {
@@ -9,12 +9,14 @@ type Props = {
   title?: string;
   phoneLabel?: string;
   autoOpen?: boolean;
+  documentLabel?: string;
+  pdfButtonLabel?: string;
 };
 
 /* ──────────────────────────────────────────────────────────────
    Canvas receipt generator — no external dependencies
    ────────────────────────────────────────────────────────────── */
-async function generateReceiptImage(message: string): Promise<Blob> {
+async function generateReceiptImage(message: string, documentLabel: string): Promise<Blob> {
   const W     = 640;
   const SCALE = 2;          // retina
   const PAD   = 44;
@@ -71,7 +73,7 @@ async function generateReceiptImage(message: string): Promise<Blob> {
   ctx.font      = "600 11px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
   ctx.fillStyle = "#25d366";
   ctx.letterSpacing = "2px";
-  ctx.fillText("COMPROVANTE", PAD, y);
+  ctx.fillText(documentLabel.toLocaleUpperCase("pt-BR"), PAD, y);
   ctx.letterSpacing = "0px";
   y += 30;
 
@@ -168,6 +170,8 @@ export function WhatsAppReceiptButton({
   title = "Enviar comprovante pelo WhatsApp",
   phoneLabel = "Número do cliente",
   autoOpen = false,
+  documentLabel = "Comprovante",
+  pdfButtonLabel = "Baixar como PDF",
 }: Props) {
   const [phone, setPhone]           = useState(defaultPhone);
   const [countdown, setCountdown]   = useState<number | null>(null);
@@ -177,7 +181,10 @@ export function WhatsAppReceiptButton({
   const cancelledRef = useRef(false);
   const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
   const messageRef   = useRef(message);
-  messageRef.current = message;
+
+  useEffect(() => {
+    messageRef.current = message;
+  }, [message]);
 
   const isReady = phone.replace(/\D/g, "").length >= 10;
 
@@ -192,7 +199,7 @@ export function WhatsAppReceiptButton({
     setGenerating(true);
     setShareError(null);
     try {
-      const blob = await generateReceiptImage(messageRef.current);
+      const blob = await generateReceiptImage(messageRef.current, documentLabel);
       const file = new File([blob], "comprovante.png", { type: "image/png" });
 
       if (typeof navigator !== "undefined" && navigator.canShare?.({ files: [file] })) {
@@ -244,7 +251,7 @@ export function WhatsAppReceiptButton({
     });
 
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/>
-<title>${titleLine ?? "Comprovante"}</title>
+<title>${documentLabel} — ${titleLine ?? "Comprovante"}</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;background:#fff;color:#1a1a1a;padding:40px 36px;max-width:520px;margin:0 auto}
@@ -270,7 +277,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;ba
 <div class="header">
   <img src="${logoUrl}" alt="Infinity" />
   <div class="title">
-    <p class="eyebrow">Comprovante</p>
+    <p class="eyebrow">${documentLabel}</p>
     <h1>${titleLine ? titleLine.replace(/^comprovante\s*/i, "").trim() || titleLine : ""}</h1>
   </div>
 </div>
@@ -382,7 +389,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;ba
             className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-[#25d366]/20 bg-transparent px-4 py-3 text-sm font-semibold text-[#25d366]/70 transition hover:bg-[#25d366]/8 hover:text-[#25d366]"
           >
             <FileDown className="size-4" />
-            Baixar como PDF
+            {pdfButtonLabel}
           </button>
 
           {/* Desktop note / text fallback toggle */}
