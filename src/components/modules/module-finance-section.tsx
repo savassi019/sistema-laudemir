@@ -152,6 +152,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 
 type SummaryTotals = { income: number; expense: number; net: number; pending: number };
 type BxTotals = { prize: number; other: number; discount: number; total: number };
+type SlotHTotals = { received: number; pending: number; negative: number; net: number };
 type MethodTotal = { method: string; label: string; amount: number };
 
 function calculateBxTotals(entries: ModuleFinancialEntryItem[]): BxTotals {
@@ -168,6 +169,23 @@ function calculateBxTotals(entries: ModuleFinancialEntryItem[]): BxTotals {
     .filter((entry) => entry.category !== "PRIZE" && entry.category !== "DISCOUNT")
     .reduce((sum, entry) => sum + entry.totalAmount, 0);
   return { prize, other, discount, total: prize + other + discount };
+}
+
+function calculateSlotHTotals(entries: ModuleFinancialEntryItem[]): SlotHTotals {
+  const positiveResults = entries.filter(
+    (entry) =>
+      entry.status !== "CANCELLED" && entry.category === "SLOT_INFINITY_RESULT",
+  );
+  const received = positiveResults.reduce((sum, entry) => sum + entry.paidAmount, 0);
+  const pending = positiveResults.reduce((sum, entry) => sum + entry.remainingAmount, 0);
+  const negative = entries
+    .filter(
+      (entry) =>
+        entry.status !== "CANCELLED" && entry.category === "SLOT_NEGATIVE_RESULT",
+    )
+    .reduce((sum, entry) => sum + entry.totalAmount, 0);
+
+  return { received, pending, negative, net: received + pending - negative };
 }
 
 function calculateMethodTotals(entries: ModuleFinancialEntryItem[]): MethodTotal[] {
@@ -197,6 +215,7 @@ function buildPrintHtml({
   entries,
   totals,
   bxTotals,
+  slotHTotals,
   methodTotals,
 }: {
   moduleTitle: string;
@@ -205,6 +224,7 @@ function buildPrintHtml({
   entries: ModuleFinancialEntryItem[];
   totals: SummaryTotals;
   bxTotals: BxTotals | null;
+  slotHTotals: SlotHTotals | null;
   methodTotals: MethodTotal[];
 }) {
   const rows = entries
@@ -242,6 +262,16 @@ function buildPrintHtml({
       </div>`
     : "";
 
+  const slotHCards = slotHTotals
+    ? `<h2>Resultado das máquinas H</h2>
+      <div class="cards bx">
+        <div class="card"><span>Recebido</span><strong>${escapeHtml(formatCurrency(slotHTotals.received))}</strong></div>
+        <div class="card"><span>A receber</span><strong>${escapeHtml(formatCurrency(slotHTotals.pending))}</strong></div>
+        <div class="card"><span>Resultado negativo</span><strong>${escapeHtml(formatCurrency(slotHTotals.negative))}</strong></div>
+        <div class="card"><span>Saldo das máquinas</span><strong>${escapeHtml(formatCurrency(slotHTotals.net))}</strong></div>
+      </div>`
+    : "";
+
   return `<!doctype html>
   <html lang="pt-BR"><head><meta charset="utf-8" />
   <title>${escapeHtml(moduleTitle)} — Financeiro</title>
@@ -263,6 +293,7 @@ function buildPrintHtml({
       <div class="card"><span>Pendente</span><strong>${escapeHtml(formatCurrency(totals.pending))}</strong></div>
     </div>
     ${bxCards}
+    ${slotHCards}
     ${methodTotals.length ? `<h2>Entradas por forma de pagamento</h2><table class="methods"><tbody>${methodRows}</tbody></table>` : ""}
     <h2>Lançamentos</h2>
     <table><thead><tr><th>Data</th><th>Descrição</th><th>Cliente/local</th><th>Origem</th><th>Categoria</th><th>Funcionário</th><th>Status</th><th>Pagamento</th><th class="number">Valor</th><th class="number">Pago</th><th class="number">Restante</th></tr></thead>
@@ -524,6 +555,11 @@ export function ModuleFinanceSection({
     return calculateBxTotals(activeEntries);
   }, [activeEntries, slug]);
 
+  const slotHTotals = useMemo<SlotHTotals | null>(() => {
+    if (slug !== "h-caca-niquel") return null;
+    return calculateSlotHTotals(activeEntries);
+  }, [activeEntries, slug]);
+
   const methodTotals = useMemo(() => calculateMethodTotals(activeEntries), [activeEntries]);
 
   const operators = useMemo(
@@ -765,6 +801,8 @@ export function ModuleFinanceSection({
         entries: filtered,
         totals: filteredTotals,
         bxTotals: slug === "bx" ? calculateBxTotals(filtered) : null,
+        slotHTotals:
+          slug === "h-caca-niquel" ? calculateSlotHTotals(filtered) : null,
         methodTotals: calculateMethodTotals(filtered),
       }),
     );
@@ -803,6 +841,8 @@ export function ModuleFinanceSection({
   async function handleShare() {
     const visible = filtered.slice(0, 40);
     const sharedBxTotals = slug === "bx" ? calculateBxTotals(filtered) : null;
+    const sharedSlotHTotals =
+      slug === "h-caca-niquel" ? calculateSlotHTotals(filtered) : null;
     const lines = visible.map((entry) => `${formatShortDate(entry.createdAt)} — ${entry.description} — ${entry.categoryLabel} — ${entry.direction === "INCOME" ? "+" : "-"}${formatCurrency(entry.totalAmount)}`);
     const text = [
       `${moduleTitle} — Financeiro`,
@@ -811,6 +851,14 @@ export function ModuleFinanceSection({
       `Despesas: ${formatCurrency(filteredTotals.expense)}`,
       `Saldo: ${formatCurrency(filteredTotals.net)}`,
       ...(sharedBxTotals ? [`Prêmios: ${formatCurrency(sharedBxTotals.prize)}`, `Outras despesas: ${formatCurrency(sharedBxTotals.other)}`, `Descontos: ${formatCurrency(sharedBxTotals.discount)}`] : []),
+      ...(sharedSlotHTotals
+        ? [
+            `H recebido: ${formatCurrency(sharedSlotHTotals.received)}`,
+            `H a receber: ${formatCurrency(sharedSlotHTotals.pending)}`,
+            `H resultado negativo: ${formatCurrency(sharedSlotHTotals.negative)}`,
+            `H saldo das máquinas: ${formatCurrency(sharedSlotHTotals.net)}`,
+          ]
+        : []),
       "",
       ...lines,
       ...(filtered.length > visible.length ? [`... e mais ${filtered.length - visible.length} lançamento(ões).`] : []),
@@ -834,6 +882,18 @@ export function ModuleFinanceSection({
     { key: "despesas", label: "Despesas" },
     { key: "pendentes", label: "Pendentes" },
   ];
+  const incomeDescription =
+    slug === "h-caca-niquel"
+      ? "Resultado da Infinity e entradas avulsas"
+      : slug === "bx"
+        ? "Operações recebidas e entradas avulsas"
+        : "Valores registrados como entrada";
+  const expenseDescription =
+    slug === "h-caca-niquel"
+      ? "Resultados negativos e despesas avulsas"
+      : slug === "bx"
+        ? "Prêmios, gastos e descontos"
+        : "Valores registrados como despesa";
 
   return (
     <div className="space-y-4">
@@ -876,12 +936,12 @@ export function ModuleFinanceSection({
         <article className="rounded-2xl border border-white/10 border-l-4 border-l-[#4ade80] bg-[#111513] p-4">
           <div className="flex items-center gap-2 text-[#d7ded9]"><TrendingUp className="size-4 text-[#4ade80]" /><p className="text-xs font-semibold uppercase tracking-[0.12em]">Entradas</p></div>
           <p className="mt-2 break-words text-xl font-bold text-white">{formatCurrency(totals.income)}</p>
-          <p className="mt-1 text-[11px] text-[#8f9992]">Valores registrados como entrada</p>
+          <p className="mt-1 text-[11px] text-[#8f9992]">{incomeDescription}</p>
         </article>
         <article className="rounded-2xl border border-white/10 border-l-4 border-l-[#fb7185] bg-[#111513] p-4">
           <div className="flex items-center gap-2 text-[#d7ded9]"><TrendingDown className="size-4 text-[#fb7185]" /><p className="text-xs font-semibold uppercase tracking-[0.12em]">Despesas</p></div>
           <p className="mt-2 break-words text-xl font-bold text-white">{formatCurrency(totals.expense)}</p>
-          <p className="mt-1 text-[11px] text-[#8f9992]">Prêmios, gastos e descontos</p>
+          <p className="mt-1 text-[11px] text-[#8f9992]">{expenseDescription}</p>
         </article>
         <article className={cn("rounded-2xl border border-white/10 border-l-4 bg-[#111513] p-4", totals.net >= 0 ? "border-l-[#60a5fa]" : "border-l-[#f87171]")}>
           <div className="flex items-center justify-between gap-2">
@@ -913,6 +973,51 @@ export function ModuleFinanceSection({
             <div className="rounded-xl border border-[#f87171]/30 border-l-4 border-l-[#f87171] bg-[#171313] p-3">
               <p className="text-xs font-semibold text-[#fca5a5]">Total gasto</p>
               <p className="mt-1 text-base font-bold text-white">{formatCurrency(bxTotals.total)}</p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {slotHTotals ? (
+        <div className="rounded-2xl border border-white/10 bg-[#101412] p-4">
+          <p className="text-sm font-semibold text-white">Resultado das máquinas H</p>
+          <p className="mt-1 text-xs text-[#8f9992]">
+            Somente os fechamentos das máquinas; lançamentos avulsos ficam nos totais acima
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-xl border border-white/10 border-l-4 border-l-[#4ade80] bg-[#151a17] p-3">
+              <p className="text-xs font-medium text-[#c5cdc7]">Recebido</p>
+              <p className="mt-1 text-base font-bold text-white">
+                {formatCurrency(slotHTotals.received)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 border-l-4 border-l-[#fbbf24] bg-[#151a17] p-3">
+              <p className="text-xs font-medium text-[#c5cdc7]">A receber</p>
+              <p className="mt-1 text-base font-bold text-white">
+                {formatCurrency(slotHTotals.pending)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 border-l-4 border-l-[#fb7185] bg-[#151a17] p-3">
+              <p className="text-xs font-medium text-[#c5cdc7]">Resultado negativo</p>
+              <p className="mt-1 text-base font-bold text-white">
+                {formatCurrency(slotHTotals.negative)}
+              </p>
+            </div>
+            <div
+              className={cn(
+                "rounded-xl border border-white/10 border-l-4 bg-[#151a17] p-3",
+                slotHTotals.net >= 0 ? "border-l-[#60a5fa]" : "border-l-[#f87171]",
+              )}
+            >
+              <p className="text-xs font-semibold text-[#c5cdc7]">Saldo das máquinas</p>
+              <p
+                className={cn(
+                  "mt-1 text-base font-bold",
+                  slotHTotals.net >= 0 ? "text-[#bfdbfe]" : "text-[#fca5a5]",
+                )}
+              >
+                {formatCurrency(slotHTotals.net)}
+              </p>
             </div>
           </div>
         </div>
