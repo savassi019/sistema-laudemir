@@ -59,6 +59,10 @@ function todayStr() {
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
 }
 
+function isReceiptTestClient(clientName: string) {
+  return clientName.trim().toLocaleLowerCase("pt-BR") === "bar do chico";
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Cadastro: aqui e onde se decide QUANTAS maquinas o cliente tem. O
 // fechamento de cada uma acontece depois, na visita (SlotVisitForm) --
@@ -642,6 +646,7 @@ function SlotVisitForm({
   const [reloadVersion, setReloadVersion] = useState(0);
   const [reviewValues, setReviewValues] = useState<ReviewedVisitValues | null>(null);
   const [results, setResults] = useState<MachineResult[] | null>(null);
+  const [isReceiptPreview, setIsReceiptPreview] = useState(false);
   const [lastSubmission, setLastSubmission] = useState<{ paymentMethod: string; occurredAt: string } | null>(null);
   const savingRef = useRef(false);
   const visitKeyRef = useRef<string | null>(null);
@@ -667,20 +672,25 @@ function SlotVisitForm({
         setPhone(data.phone);
         form.setValue("previousCustomerDebt", data.customerDebt);
         form.setValue("customerDebtDiscounted", 0);
+        const fillReceiptTest = isReceiptTestClient(clientName);
         replace(
           data.machines.map((m) => ({
             machineId: m.id,
             clientMachineNumber: m.clientMachineNumber,
             included: m.active,
-            currentIncome: 0,
+            currentIncome: fillReceiptTest
+              ? m.previousIncome + 500 + m.clientMachineNumber * 100
+              : 0,
             previousIncome: m.previousIncome,
-            currentExpense: 0,
+            currentExpense: fillReceiptTest
+              ? m.previousExpense + 100 + m.clientMachineNumber * 20
+              : 0,
             previousExpense: m.previousExpense,
             percentageSplit: m.percentageSplit,
             optionalGreedAmount: m.optionalGreedAmount,
             previousMachineDebt: m.machineDebt,
             finalMachineDebt: m.machineDebt,
-            notes: "",
+            notes: fillReceiptTest ? "Prévia de comprovante — não salvar" : "",
           })),
         );
         setExpandedIndex(0);
@@ -723,6 +733,47 @@ function SlotVisitForm({
       generatedDebtAmount: customerDebt.generatedDebtAmount,
     });
   });
+
+  function openReceiptPreview() {
+    const values = form.getValues() as VisitValues;
+    const included = values.machines.filter((machine) => machine.included);
+    if (included.length === 0) {
+      setSaveError("Selecione ao menos uma máquina para testar o comprovante.");
+      return;
+    }
+    const customerDebt = calculateAutomaticCustomerDebt(
+      values.machines,
+      values.previousCustomerDebt,
+    );
+    const previewResults = included.map((machine, index) => {
+      const split = computeMachineSplit(machine);
+      const carriesCustomerDebt = index === 0;
+      return {
+        recordId: `PREVIA-${machine.clientMachineNumber}`,
+        clientMachineNumber: machine.clientMachineNumber,
+        clientShareFinal:
+          split.clientShareFinal -
+          (carriesCustomerDebt ? customerDebt.customerDebtDiscounted : 0),
+        houseAmount:
+          split.houseAmount +
+          (carriesCustomerDebt
+            ? customerDebt.customerDebtDiscounted - customerDebt.generatedDebtAmount
+            : 0),
+        previousMachineDebt: machine.previousMachineDebt,
+        finalMachineDebt: machine.finalMachineDebt,
+        previousCustomerDebt: values.previousCustomerDebt,
+        finalCustomerDebt: customerDebt.finalCustomerDebt,
+      };
+    });
+
+    setSaveError(null);
+    setLastSubmission({
+      paymentMethod: values.paymentMethod,
+      occurredAt: values.occurredAt,
+    });
+    setIsReceiptPreview(true);
+    setResults(previewResults);
+  }
 
   async function confirmSave() {
     if (!reviewValues || savingRef.current) return;
@@ -779,6 +830,7 @@ function SlotVisitForm({
       }
 
       setResults(responseBody.results);
+      setIsReceiptPreview(false);
       setLastSubmission({
         paymentMethod: reviewValues.paymentMethod,
         occurredAt: reviewValues.occurredAt,
@@ -805,10 +857,20 @@ function SlotVisitForm({
     const savedFinalCustomerDebt = results[0]?.finalCustomerDebt ?? 0;
     return (
       <div className="space-y-4">
-        <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">
+        <article
+          className={`rounded-[28px] border p-5 ${
+            isReceiptPreview
+              ? "border-[#d1a04f]/30 bg-[#3a2b18]/60"
+              : "border-[#8aa17c]/25 bg-[#243528]/72"
+          }`}
+        >
           <div className="flex items-center gap-2 text-[#dbe6d4]">
             <ReceiptText className="size-4" />
-            <p className="font-medium">Visita de {clientName} salva</p>
+            <p className="font-medium">
+              {isReceiptPreview
+                ? `Prévia da via de ${clientName} — nada foi salvo`
+                : `Visita de ${clientName} salva`}
+            </p>
           </div>
           <div className="mt-4 space-y-1.5 text-sm text-[#dbe6d4]/85">
             {results.map((r) => (
@@ -847,7 +909,11 @@ function SlotVisitForm({
               pdfButtonLabel="Gerar via do cliente em PDF"
               message={[
                 "*Fechamento H — Caça-níquel*",
-                `Comprovante: ${results[0]?.recordId.slice(0, 8).toLocaleUpperCase("pt-BR") ?? "-"}`,
+                `Comprovante: ${
+                  isReceiptPreview
+                    ? "PRÉVIA — NÃO SALVO"
+                    : results[0]?.recordId.slice(0, 8).toLocaleUpperCase("pt-BR") ?? "-"
+                }`,
                 `Cliente: ${clientName}`,
                 lastSubmission
                   ? `Data: ${new Date(`${lastSubmission.occurredAt}T12:00:00`).toLocaleDateString("pt-BR")}`
@@ -862,7 +928,7 @@ function SlotVisitForm({
                 lastSubmission
                   ? `Pagamento: ${PAYMENT_METHOD_LABEL[lastSubmission.paymentMethod] ?? lastSubmission.paymentMethod}`
                   : "",
-                "Situação: Fechamento concluído",
+                `Situação: ${isReceiptPreview ? "Prévia para conferência" : "Fechamento concluído"}`,
               ]
                 .filter(Boolean)
                 .join("\n")}
@@ -872,11 +938,18 @@ function SlotVisitForm({
         <button
           type="button"
           onClick={() => {
+            if (isReceiptPreview) {
+              setResults(null);
+              setLastSubmission(null);
+              setIsReceiptPreview(false);
+              return;
+            }
             setLoading(true);
             setLoadError(null);
             setResults(null);
             setReviewValues(null);
             setLastSubmission(null);
+            setIsReceiptPreview(false);
             setSaveError(null);
             visitKeyRef.current = null;
             uploadedPhotosRef.current.clear();
@@ -884,7 +957,7 @@ function SlotVisitForm({
           }}
           className="inline-flex min-h-11 items-center text-xs font-semibold text-[#9a958b] underline underline-offset-2 transition hover:text-white active:text-white"
         >
-          Fazer outra visita
+          {isReceiptPreview ? "Voltar ao teste" : "Fazer outra visita"}
         </button>
       </div>
     );
@@ -1179,6 +1252,17 @@ function SlotVisitForm({
         ) : null}
 
         {saveError ? <p className="text-sm text-[#d59a8b]">{saveError}</p> : null}
+
+        {isReceiptTestClient(clientName) ? (
+          <button
+            type="button"
+            onClick={openReceiptPreview}
+            className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#25d366]/35 bg-[#0d1f14] px-4 py-3.5 text-sm font-semibold text-[#25d366] transition active:scale-[0.99]"
+          >
+            <ReceiptText className="size-4" />
+            Abrir comprovante de teste — não salva
+          </button>
+        ) : null}
 
         <button
           type="submit"
