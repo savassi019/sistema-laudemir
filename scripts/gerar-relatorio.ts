@@ -172,17 +172,25 @@ async function collectRecords(): Promise<Record[]> {
     const incomeDiff = Number(r.incomeDifference ?? 0);
     const expenseDiff = Number(r.expenseDifference ?? 0);
     const netRevenue = incomeDiff - expenseDiff;
-    const totalNegative = Number(r.negativeAmount ?? 0) + Number(r.feedingNegativeAmount ?? 0);
+    const previousMachineNegative = Number(r.previousMachineDebt ?? 0);
+    const currentMachineNegative = Number(r.negativeAmount ?? 0);
+    const machineNegativeChange = currentMachineNegative - previousMachineNegative;
+    // feedingNegativeAmount so existe em fechamentos antigos. Nos novos, o
+    // proprio saldo da maquina e a fonte unica e somente sua variacao entra.
+    const totalNegative = machineNegativeChange + Number(r.feedingNegativeAmount ?? 0);
     const adjusted = netRevenue - totalNegative;
     const pct = Number(r.percentageSplit ?? 50) / 100;
     const houseBase = adjusted * (1 - pct);
-    // greed and debt adjustments are per-record and not stored directly; use houseBase as approximation
-    const net = houseBase - Number(r.generatedDebtAmount ?? 0);
+    const net =
+      houseBase +
+      Number(r.optionalGreedAmount ?? 0) +
+      Number(r.customerDebtDiscounted ?? 0) -
+      Number(r.generatedDebtAmount ?? 0);
     all.push({
       module: "H / Caça-níquel",
       date: r.occurredAt,
-      income: incomeDiff,
-      expense: expenseDiff + totalNegative,
+      income: Math.max(net, 0),
+      expense: Math.max(-net, 0),
       net,
       description: `Máq. ${r.slotMachine.uniqueMachineNumber}${r.slotMachine.clientName ? " – " + r.slotMachine.clientName : ""}`,
     });

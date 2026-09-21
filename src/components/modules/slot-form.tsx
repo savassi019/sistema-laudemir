@@ -331,7 +331,6 @@ const visitMachineSchema = z
     optionalGreedAmount: z.coerce.number().min(0),
     previousMachineDebt: z.coerce.number().min(0),
     finalMachineDebt: z.coerce.number().min(0),
-    feedingNegativeAmount: z.coerce.number().min(0),
     screenPhoto: z.any().optional(),
     notes: z.string().optional(),
   })
@@ -388,14 +387,14 @@ function computeMachineSplit(m: {
   optionalGreedAmount: number;
   previousMachineDebt: number;
   finalMachineDebt: number;
-  feedingNegativeAmount: number;
 }) {
   const incomeDifference = m.currentIncome - m.previousIncome;
   const expenseDifference = m.currentExpense - m.previousExpense;
   const netRevenue = incomeDifference - expenseDifference;
   const machineDebtChange = m.finalMachineDebt - m.previousMachineDebt;
-  const totalNegative = machineDebtChange + m.feedingNegativeAmount;
-  const adjustedTotal = netRevenue - totalNegative;
+  // O negativo da maquina e um saldo acumulado. Somente a variacao entre o
+  // saldo anterior e o atual pertence a este fechamento.
+  const adjustedTotal = netRevenue - machineDebtChange;
   const clientShareBase = adjustedTotal * (m.percentageSplit / 100);
   const houseShareBase = adjustedTotal - clientShareBase;
   const clientShareAfterGreed = clientShareBase - m.optionalGreedAmount;
@@ -448,7 +447,6 @@ function MachineFieldset({
     optionalGreedAmount: Number(watchedMachine?.optionalGreedAmount ?? 0),
     previousMachineDebt: Number(watchedMachine?.previousMachineDebt ?? 0),
     finalMachineDebt: Number(watchedMachine?.finalMachineDebt ?? 0),
-    feedingNegativeAmount: Number(watchedMachine?.feedingNegativeAmount ?? 0),
   });
 
   const machineErrors = form.formState.errors.machines?.[index];
@@ -582,7 +580,7 @@ function MachineFieldset({
               />
             </div>
             <div className="space-y-1.5">
-              <label className={labelClass}>Saldo anterior da máquina</label>
+              <label className={labelClass}>Negativo anterior da máquina</label>
               <input
                 type="number"
                 inputMode="decimal"
@@ -592,10 +590,10 @@ function MachineFieldset({
                 className={`${fieldClass} opacity-70`}
                 {...form.register(`machines.${index}.previousMachineDebt`)}
               />
-              <p className={hintClass}>Somente leitura; não será descontado novamente.</p>
+              <p className={hintClass}>Puxado automaticamente do último fechamento.</p>
             </div>
             <div className="space-y-1.5">
-              <label className={labelClass}>Saldo final da máquina</label>
+              <label className={labelClass}>Negativo atual da máquina</label>
               <input
                 type="number"
                 inputMode="decimal"
@@ -604,18 +602,7 @@ function MachineFieldset({
                 className={fieldClass}
                 {...form.register(`machines.${index}.finalMachineDebt`)}
               />
-              <p className={hintClass}>Se não mudou, mantenha o mesmo valor.</p>
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelClass}>Negativo de alimentação</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                className={fieldClass}
-                {...form.register(`machines.${index}.feedingNegativeAmount`)}
-              />
+              <p className={hintClass}>Informe o valor mostrado na máquina; a variação é calculada sozinha.</p>
             </div>
           </div>
 
@@ -626,7 +613,7 @@ function MachineFieldset({
 
           {!hideFinancials ? (
             <div className="rounded-xl border border-[#6f8790]/25 bg-[#27383a]/70 p-3 text-xs leading-5 text-[#d6e1de]/80">
-              Receita líquida {formatCurrency(split.netRevenue)} · Movimento do débito da máquina{" "}
+              Receita líquida {formatCurrency(split.netRevenue)} · Variação do negativo da máquina{" "}
               {formatCurrency(split.machineDebtChange)} · Cliente {formatCurrency(split.clientShareFinal)} · Infinity{" "}
               {formatCurrency(split.houseAmount)}
             </div>
@@ -694,7 +681,6 @@ function SlotVisitForm({
             optionalGreedAmount: m.optionalGreedAmount,
             previousMachineDebt: m.machineDebt,
             finalMachineDebt: m.machineDebt,
-            feedingNegativeAmount: 0,
             notes: "",
           })),
         );
@@ -764,7 +750,6 @@ function SlotVisitForm({
             optionalGreedAmount: Number(machine.optionalGreedAmount),
             previousMachineDebt: Number(machine.previousMachineDebt),
             finalMachineDebt: Number(machine.finalMachineDebt),
-            feedingNegativeAmount: Number(machine.feedingNegativeAmount),
             screenPhotoFileId,
             notes: machine.notes,
           };
@@ -973,7 +958,7 @@ function SlotVisitForm({
                   </p>
                 </div>
                 <div>
-                  <p className="text-[#7e786d]">Débito da máquina</p>
+                  <p className="text-[#7e786d]">Negativo da máquina</p>
                   <p className="mt-0.5 text-[#c9c2b4]">
                     {formatCurrency(machine.previousMachineDebt)} → {formatCurrency(machine.finalMachineDebt)}
                   </p>

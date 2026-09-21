@@ -296,7 +296,6 @@ const slotVisitMachineSchema = z.object({
   optionalGreedAmount: slotMoneySchema,
   previousMachineDebt: slotMoneySchema,
   finalMachineDebt: slotMoneySchema,
-  feedingNegativeAmount: slotMoneySchema,
   screenPhotoFileId: z.string().min(1, "A foto da tela e obrigatoria."),
   notes: z.string().max(2_000).optional(),
 });
@@ -800,9 +799,11 @@ function mapSlotCollectionRecord(
     `Movimento da entrada: ${formatCurrency(split.incomeDifference)}`,
     `Leitura da saída: ${formatCurrency(previousExpense)} → ${formatCurrency(currentExpense)}`,
     `Movimento da saída: ${formatCurrency(split.expenseDifference)}`,
-    `Débito da máquina: ${formatCurrency(previousMachineDebt)} → ${formatCurrency(finalMachineDebt)}`,
-    `Movimento do débito: ${formatCurrency(split.machineDebtChange)}`,
-    `Negativo de alimentação: ${formatCurrency(Number(record.feedingNegativeAmount ?? 0))}`,
+    `Negativo da máquina: ${formatCurrency(previousMachineDebt)} → ${formatCurrency(finalMachineDebt)}`,
+    `Variação automática do negativo: ${formatCurrency(split.machineDebtChange)}`,
+    ...(Number(record.feedingNegativeAmount ?? 0) > 0
+      ? [`Ajuste antigo da alimentação: ${formatCurrency(Number(record.feedingNegativeAmount))}`]
+      : []),
     `Dívida do cliente: ${formatCurrency(previousCustomerDebt)} → ${formatCurrency(finalCustomerDebt)}`,
     `Dívida gerada: ${formatCurrency(generatedDebt)}`,
     `Dívida descontada: ${formatCurrency(discountedDebt)}`,
@@ -1082,7 +1083,9 @@ export async function saveSlotVisit(
             conferenceCount,
             previousMachineDebt,
             negativeAmount: finalMachineDebt,
-            feedingNegativeAmount: input.feedingNegativeAmount,
+            // Campo legado preservado no banco para o historico antigo. Nos
+            // novos fechamentos o negativo e somente o saldo da maquina.
+            feedingNegativeAmount: 0,
             previousCustomerDebt: currentCustomerDebt,
             customerDebtDiscounted: carriesCustomerDebt ? customerDebtDiscounted : 0,
             generatedDebtAmount: carriesCustomerDebt ? generatedDebtAmount : 0,
@@ -1102,7 +1105,7 @@ export async function saveSlotVisit(
           percentageSplit: input.percentageSplit,
           previousMachineDebt,
           finalMachineDebt,
-          feedingNegativeAmount: input.feedingNegativeAmount,
+          feedingNegativeAmount: 0,
           optionalGreedAmount: input.optionalGreedAmount,
           customerDebtDiscounted: carriesCustomerDebt ? customerDebtDiscounted : 0,
           generatedDebtAmount: carriesCustomerDebt ? generatedDebtAmount : 0,
@@ -1712,7 +1715,7 @@ async function saveWithPrisma(
           conferenceCount,
           previousMachineDebt,
           negativeAmount: effectiveNegativeAmount,
-          feedingNegativeAmount: data.feedingNegativeAmount,
+          feedingNegativeAmount: 0,
           previousCustomerDebt,
           customerDebtDiscounted: data.customerDebtDiscounted,
           generatedDebtAmount: data.generatedDebtAmount,
@@ -1728,6 +1731,7 @@ async function saveWithPrisma(
         ...data,
         previousMachineDebt,
         finalMachineDebt: effectiveNegativeAmount,
+        feedingNegativeAmount: 0,
       });
 
       await logFieldVisitForModuleRecord({
