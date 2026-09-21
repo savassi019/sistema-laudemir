@@ -8,6 +8,15 @@ export function formatCurrency(value: number) {
   }).format(value);
 }
 
+export function formatMachineCounter(value: number) {
+  const safeValue = Number.isFinite(value) ? value : 0;
+  const formatted = new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  }).format(safeValue);
+  return `${formatted} fichas`;
+}
+
 function toLocalDate(value: string | Date) {
   if (value instanceof Date) {
     return value;

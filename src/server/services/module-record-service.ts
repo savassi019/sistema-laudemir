@@ -9,7 +9,7 @@ import {
 import { randomUUID } from "crypto";
 import { z } from "zod";
 
-import { formatCurrency, formatShortDate } from "@/lib/format";
+import { formatCurrency, formatMachineCounter, formatShortDate } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import {
   CONTRACT_STATUS_LABEL,
@@ -794,10 +794,10 @@ function mapSlotCollectionRecord(
     record.screenPhotoId ? "Foto da tela: anexada" : "Foto da tela: não anexada",
   ];
   const financialDetails = [
-    `Leitura da entrada: ${formatCurrency(previousIncome)} → ${formatCurrency(currentIncome)}`,
-    `Movimento da entrada: ${formatCurrency(split.incomeDifference)}`,
-    `Leitura da saída: ${formatCurrency(previousExpense)} → ${formatCurrency(currentExpense)}`,
-    `Movimento da saída: ${formatCurrency(split.expenseDifference)}`,
+    `Leitura da entrada: ${formatMachineCounter(previousIncome)} → ${formatMachineCounter(currentIncome)}`,
+    `Movimento da entrada: ${formatMachineCounter(split.incomeDifference)}`,
+    `Leitura da saída: ${formatMachineCounter(previousExpense)} → ${formatMachineCounter(currentExpense)}`,
+    `Movimento da saída: ${formatMachineCounter(split.expenseDifference)}`,
     `Negativo da máquina: ${formatCurrency(previousMachineDebt)} → ${formatCurrency(finalMachineDebt)}`,
     `Variação automática do negativo: ${formatCurrency(split.machineDebtChange)}`,
     ...(Number(record.feedingNegativeAmount ?? 0) > 0

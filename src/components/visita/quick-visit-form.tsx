@@ -16,8 +16,8 @@ import { saveVisitAction } from "@/server/actions/visit-actions";
 import { listBilliardPointsAction } from "@/server/actions/billiard-route-actions";
 import type { BilliardPointItem } from "@/server/services/billiard-route-service";
 import { WhatsAppReceiptButton } from "@/components/modules/whatsapp-receipt-button";
-import { formatCurrency } from "@/lib/format";
-import { fieldClass, labelClass, selectClass, textareaClass } from "@/components/modules/styles";
+import { formatCurrency, formatMachineCounter } from "@/lib/format";
+import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "@/components/modules/styles";
 import type { ClientListItem } from "@/types/app";
 
 const VISIT_TYPES = [
@@ -1234,7 +1234,7 @@ ${rows}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
               <label className={labelClass} htmlFor="slotPreviousIncome">
-                Entrada anterior
+                Entrada anterior (fichas)
               </label>
               <input
                 id="slotPreviousIncome"
@@ -1247,10 +1247,11 @@ ${rows}
                 onChange={(e) => setSlotPreviousIncome(Number(e.target.value))}
                 className={fieldClass}
               />
+              <p className={hintClass}>{formatMachineCounter(slotPreviousIncome)}</p>
             </div>
             <div className="space-y-2">
               <label className={labelClass} htmlFor="slotCurrentIncome">
-                Entrada atual
+                Entrada atual (fichas)
               </label>
               <input
                 id="slotCurrentIncome"
@@ -1263,10 +1264,11 @@ ${rows}
                 onChange={(e) => setSlotCurrentIncome(Number(e.target.value))}
                 className={fieldClass}
               />
+              <p className={hintClass}>{formatMachineCounter(slotCurrentIncome)}</p>
             </div>
             <div className="space-y-2">
               <label className={labelClass} htmlFor="slotPreviousExpense">
-                Saída anterior
+                Saída anterior (fichas)
               </label>
               <input
                 id="slotPreviousExpense"
@@ -1279,10 +1281,11 @@ ${rows}
                 onChange={(e) => setSlotPreviousExpense(Number(e.target.value))}
                 className={fieldClass}
               />
+              <p className={hintClass}>{formatMachineCounter(slotPreviousExpense)}</p>
             </div>
             <div className="space-y-2">
               <label className={labelClass} htmlFor="slotCurrentExpense">
-                Saída atual
+                Saída atual (fichas)
               </label>
               <input
                 id="slotCurrentExpense"
@@ -1295,6 +1298,7 @@ ${rows}
                 onChange={(e) => setSlotCurrentExpense(Number(e.target.value))}
                 className={fieldClass}
               />
+              <p className={hintClass}>{formatMachineCounter(slotCurrentExpense)}</p>
             </div>
             <div className="space-y-2 sm:col-span-2">
               <label className={labelClass} htmlFor="slotPercentageSplit">
@@ -1333,8 +1337,8 @@ ${rows}
 
           <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-sm sm:grid-cols-4">
             <div>
-              <p className="text-[11px] text-[#9a958b]">Líquido</p>
-              <p className="font-semibold text-white">{formatCurrency(slotTotals.netRevenue)}</p>
+              <p className="text-[11px] text-[#9a958b]">Saldo de fichas</p>
+              <p className="font-semibold text-white">{formatMachineCounter(slotTotals.netRevenue)}</p>
             </div>
             <div>
               <p className="text-[11px] text-[#9a958b]">Cliente</p>

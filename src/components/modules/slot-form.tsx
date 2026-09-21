@@ -15,7 +15,7 @@ import { useFieldArray, useForm, useWatch, type UseFormReturn } from "react-hook
 import { z } from "zod";
 
 import { fetchAddressByCep } from "@/lib/cep";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatMachineCounter } from "@/lib/format";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import { isValidCpf } from "@/lib/validators";
@@ -514,7 +514,7 @@ function MachineFieldset({
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
-              <label className={labelClass}>Entrada atual</label>
+              <label className={labelClass}>Entrada atual (fichas)</label>
               <input
                 type="number"
                 inputMode="decimal"
@@ -525,22 +525,22 @@ function MachineFieldset({
               />
               {machineErrors?.currentIncome ? (
                 <p className="text-xs text-[#d59a8b]">{machineErrors.currentIncome.message?.toString()}</p>
-              ) : null}
+              ) : (
+                <p className={hintClass}>
+                  Leitura: {formatMachineCounter(Number(watchedMachine?.currentIncome ?? 0))}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
-              <label className={labelClass}>Entrada anterior</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                className={fieldClass}
-                {...form.register(`machines.${index}.previousIncome`)}
-              />
+              <input type="hidden" {...form.register(`machines.${index}.previousIncome`)} />
+              <label className={labelClass}>Entrada anterior (fichas)</label>
+              <div className="flex min-h-12 items-center rounded-2xl border border-[rgba(245,241,232,0.1)] bg-white/[0.025] px-4 py-3 text-base font-semibold text-white">
+                {formatMachineCounter(Number(watchedMachine?.previousIncome ?? 0))}
+              </div>
               <p className={hintClass}>Puxa sozinho da última conferência.</p>
             </div>
             <div className="space-y-1.5">
-              <label className={labelClass}>Saída atual</label>
+              <label className={labelClass}>Saída atual (fichas)</label>
               <input
                 type="number"
                 inputMode="decimal"
@@ -551,18 +551,18 @@ function MachineFieldset({
               />
               {machineErrors?.currentExpense ? (
                 <p className="text-xs text-[#d59a8b]">{machineErrors.currentExpense.message?.toString()}</p>
-              ) : null}
+              ) : (
+                <p className={hintClass}>
+                  Leitura: {formatMachineCounter(Number(watchedMachine?.currentExpense ?? 0))}
+                </p>
+              )}
             </div>
             <div className="space-y-1.5">
-              <label className={labelClass}>Saída anterior</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                className={fieldClass}
-                {...form.register(`machines.${index}.previousExpense`)}
-              />
+              <input type="hidden" {...form.register(`machines.${index}.previousExpense`)} />
+              <label className={labelClass}>Saída anterior (fichas)</label>
+              <div className="flex min-h-12 items-center rounded-2xl border border-[rgba(245,241,232,0.1)] bg-white/[0.025] px-4 py-3 text-base font-semibold text-white">
+                {formatMachineCounter(Number(watchedMachine?.previousExpense ?? 0))}
+              </div>
               <p className={hintClass}>Puxa sozinho da última conferência.</p>
             </div>
             <div className="space-y-1.5">
@@ -612,7 +612,7 @@ function MachineFieldset({
 
           {!hideFinancials ? (
             <div className="rounded-xl border border-[#6f8790]/25 bg-[#27383a]/70 p-3 text-xs leading-5 text-[#d6e1de]/80">
-              Receita líquida {formatCurrency(split.netRevenue)} · Variação do negativo da máquina{" "}
+              Saldo de fichas {formatMachineCounter(split.netRevenue)} · Variação do negativo da máquina{" "}
               {formatCurrency(split.machineDebtChange)} · Cliente {formatCurrency(split.clientShareFinal)} · Infinity{" "}
               {formatCurrency(split.houseAmount)}
             </div>
@@ -947,13 +947,13 @@ function SlotVisitForm({
                 <div>
                   <p className="text-[#7e786d]">Entrada anterior → atual</p>
                   <p className="mt-0.5 text-[#c9c2b4]">
-                    {formatCurrency(machine.previousIncome)} → {formatCurrency(machine.currentIncome)}
+                    {formatMachineCounter(machine.previousIncome)} → {formatMachineCounter(machine.currentIncome)}
                   </p>
                 </div>
                 <div>
                   <p className="text-[#7e786d]">Saída anterior → atual</p>
                   <p className="mt-0.5 text-[#c9c2b4]">
-                    {formatCurrency(machine.previousExpense)} → {formatCurrency(machine.currentExpense)}
+                    {formatMachineCounter(machine.previousExpense)} → {formatMachineCounter(machine.currentExpense)}
                   </p>
                 </div>
                 <div>
@@ -966,8 +966,8 @@ function SlotVisitForm({
               {!hideFinancials ? (
                 <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/10 pt-3 text-xs">
                   <div>
-                    <p className="text-[#7e786d]">Líquido</p>
-                    <p className="mt-0.5 font-semibold text-white">{formatCurrency(split.netRevenue)}</p>
+                    <p className="text-[#7e786d]">Saldo de fichas</p>
+                    <p className="mt-0.5 font-semibold text-white">{formatMachineCounter(split.netRevenue)}</p>
                   </div>
                   <div>
                     <p className="text-[#7e786d]">Cliente</p>
@@ -1115,18 +1115,13 @@ function SlotVisitForm({
             Informe uma única vez para toda a visita, independentemente da quantidade de máquinas.
           </p>
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <input type="hidden" {...form.register("previousCustomerDebt")} />
             {!hideFinancials ? (
               <div className="space-y-1.5">
                 <label className={labelClass}>Dívida anterior do cliente</label>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="0"
-                  readOnly
-                  className={`${fieldClass} opacity-70`}
-                  {...form.register("previousCustomerDebt")}
-                />
+                <div className="flex min-h-12 items-center rounded-2xl border border-[rgba(245,241,232,0.1)] bg-white/[0.025] px-4 py-3 text-base font-semibold text-white">
+                  {formatCurrency(watchedPreviousCustomerDebt)}
+                </div>
               </div>
             ) : null}
             {!hideFinancials ? (
