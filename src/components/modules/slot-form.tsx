@@ -323,7 +323,6 @@ const visitMachineSchema = z
     machineId: z.string(),
     clientMachineNumber: z.number(),
     included: z.boolean(),
-    previousCustomerDebt: z.coerce.number().min(0),
     currentIncome: z.coerce.number().min(0),
     previousIncome: z.coerce.number().min(0),
     currentExpense: z.coerce.number().min(0),
@@ -333,8 +332,6 @@ const visitMachineSchema = z
     previousMachineDebt: z.coerce.number().min(0),
     finalMachineDebt: z.coerce.number().min(0),
     feedingNegativeAmount: z.coerce.number().min(0),
-    customerDebtDiscounted: z.coerce.number().min(0),
-    generatedDebtAmount: z.coerce.number().min(0),
     screenPhoto: z.any().optional(),
     notes: z.string().optional(),
   })
@@ -354,24 +351,30 @@ const visitMachineSchema = z
         message: "A saida atual nao pode ser menor que a anterior.",
       });
     }
-    if (data.customerDebtDiscounted > data.previousCustomerDebt + data.generatedDebtAmount) {
-      ctx.addIssue({
-        code: "custom",
-        path: ["customerDebtDiscounted"],
-        message: "O desconto supera o saldo da divida.",
-      });
-    }
     const photo = (data.screenPhoto as FileList | undefined)?.[0];
     if (!photo) {
       ctx.addIssue({ code: "custom", path: ["screenPhoto"], message: "Tire uma foto da tela antes de salvar." });
     }
   });
 
-const visitSchema = z.object({
-  occurredAt: z.string().min(1, "Informe a data."),
-  paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
-  machines: z.array(visitMachineSchema).min(1),
-});
+const visitSchema = z
+  .object({
+    occurredAt: z.string().min(1, "Informe a data."),
+    paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
+    previousCustomerDebt: z.coerce.number().min(0),
+    customerDebtDiscounted: z.coerce.number().min(0),
+    generatedDebtAmount: z.coerce.number().min(0),
+    machines: z.array(visitMachineSchema).min(1),
+  })
+  .superRefine((data, ctx) => {
+    if (data.customerDebtDiscounted > data.previousCustomerDebt + data.generatedDebtAmount) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["customerDebtDiscounted"],
+        message: "O desconto supera o saldo da dívida.",
+      });
+    }
+  });
 
 type VisitInput = z.input<typeof visitSchema>;
 type VisitValues = z.output<typeof visitSchema>;
@@ -386,9 +389,6 @@ function computeMachineSplit(m: {
   previousMachineDebt: number;
   finalMachineDebt: number;
   feedingNegativeAmount: number;
-  previousCustomerDebt: number;
-  customerDebtDiscounted: number;
-  generatedDebtAmount: number;
 }) {
   const incomeDifference = m.currentIncome - m.previousIncome;
   const expenseDifference = m.currentExpense - m.previousExpense;
@@ -400,20 +400,13 @@ function computeMachineSplit(m: {
   const houseShareBase = adjustedTotal - clientShareBase;
   const clientShareAfterGreed = clientShareBase - m.optionalGreedAmount;
   const houseShareAfterGreed = houseShareBase + m.optionalGreedAmount;
-  const clientShareFinal = clientShareAfterGreed - m.customerDebtDiscounted;
-  const houseAmount = houseShareAfterGreed + m.customerDebtDiscounted - m.generatedDebtAmount;
-  const finalCustomerDebt = Math.max(
-    m.previousCustomerDebt + m.generatedDebtAmount - m.customerDebtDiscounted,
-    0,
-  );
   return {
     incomeDifference,
     expenseDifference,
     netRevenue,
     machineDebtChange,
-    clientShareFinal,
-    houseAmount,
-    finalCustomerDebt,
+    clientShareFinal: clientShareAfterGreed,
+    houseAmount: houseShareAfterGreed,
   };
 }
 
@@ -456,9 +449,6 @@ function MachineFieldset({
     previousMachineDebt: Number(watchedMachine?.previousMachineDebt ?? 0),
     finalMachineDebt: Number(watchedMachine?.finalMachineDebt ?? 0),
     feedingNegativeAmount: Number(watchedMachine?.feedingNegativeAmount ?? 0),
-    previousCustomerDebt: Number(watchedMachine?.previousCustomerDebt ?? 0),
-    customerDebtDiscounted: Number(watchedMachine?.customerDebtDiscounted ?? 0),
-    generatedDebtAmount: Number(watchedMachine?.generatedDebtAmount ?? 0),
   });
 
   const machineErrors = form.formState.errors.machines?.[index];
@@ -629,53 +619,6 @@ function MachineFieldset({
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <label className={labelClass}>Dívida anterior do cliente</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                readOnly
-                className={`${fieldClass} opacity-70`}
-                {...form.register(`machines.${index}.previousCustomerDebt`)}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelClass}>Dívida descontada agora</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                className={fieldClass}
-                {...form.register(`machines.${index}.customerDebtDiscounted`)}
-              />
-              {machineErrors?.customerDebtDiscounted ? (
-                <p className="text-xs text-[#d59a8b]">{machineErrors.customerDebtDiscounted.message?.toString()}</p>
-              ) : null}
-            </div>
-            <div className="space-y-1.5">
-              <label className={labelClass}>Dívida gerada agora</label>
-              <input
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                className={fieldClass}
-                {...form.register(`machines.${index}.generatedDebtAmount`)}
-              />
-            </div>
-            {!hideFinancials ? (
-              <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.025] p-3">
-                <p className={labelClass}>Saldo final da dívida</p>
-                <p className="text-base font-semibold text-white">{formatCurrency(split.finalCustomerDebt)}</p>
-                <p className={hintClass}>Anterior + gerada − descontada.</p>
-              </div>
-            ) : null}
-          </div>
-
           <div className="space-y-1.5">
             <label className={labelClass}>Observações</label>
             <textarea className={textareaClass} {...form.register(`machines.${index}.notes`)} />
@@ -721,6 +664,9 @@ function SlotVisitForm({
     defaultValues: {
       occurredAt: todayStr(),
       paymentMethod: "PIX",
+      previousCustomerDebt: 0,
+      customerDebtDiscounted: 0,
+      generatedDebtAmount: 0,
       machines: [],
     },
   });
@@ -732,12 +678,14 @@ function SlotVisitForm({
       .then((data) => {
         if (cancelled) return;
         setPhone(data.phone);
+        form.setValue("previousCustomerDebt", data.customerDebt);
+        form.setValue("customerDebtDiscounted", 0);
+        form.setValue("generatedDebtAmount", 0);
         replace(
           data.machines.map((m) => ({
             machineId: m.id,
             clientMachineNumber: m.clientMachineNumber,
             included: m.active,
-            previousCustomerDebt: m.customerDebt,
             currentIncome: 0,
             previousIncome: m.previousIncome,
             currentExpense: 0,
@@ -747,8 +695,6 @@ function SlotVisitForm({
             previousMachineDebt: m.machineDebt,
             finalMachineDebt: m.machineDebt,
             feedingNegativeAmount: 0,
-            customerDebtDiscounted: 0,
-            generatedDebtAmount: 0,
             notes: "",
           })),
         );
@@ -767,6 +713,19 @@ function SlotVisitForm({
   }, [clientName, reloadVersion]);
 
   const watchedMachines = useWatch({ control: form.control, name: "machines" }) ?? [];
+  const watchedPreviousCustomerDebt = Number(
+    useWatch({ control: form.control, name: "previousCustomerDebt" }) ?? 0,
+  );
+  const watchedGeneratedDebt = Number(
+    useWatch({ control: form.control, name: "generatedDebtAmount" }) ?? 0,
+  );
+  const watchedDiscountedDebt = Number(
+    useWatch({ control: form.control, name: "customerDebtDiscounted" }) ?? 0,
+  );
+  const finalCustomerDebt = Math.max(
+    watchedPreviousCustomerDebt + watchedGeneratedDebt - watchedDiscountedDebt,
+    0,
+  );
 
   const onSubmit = form.handleSubmit((values) => {
     setSaveError(null);
@@ -806,9 +765,6 @@ function SlotVisitForm({
             previousMachineDebt: Number(machine.previousMachineDebt),
             finalMachineDebt: Number(machine.finalMachineDebt),
             feedingNegativeAmount: Number(machine.feedingNegativeAmount),
-            previousCustomerDebt: Number(machine.previousCustomerDebt),
-            customerDebtDiscounted: Number(machine.customerDebtDiscounted),
-            generatedDebtAmount: Number(machine.generatedDebtAmount),
             screenPhotoFileId,
             notes: machine.notes,
           };
@@ -824,6 +780,9 @@ function SlotVisitForm({
           clientName,
           occurredAt: reviewValues.occurredAt,
           paymentMethod: reviewValues.paymentMethod,
+          previousCustomerDebt: Number(reviewValues.previousCustomerDebt),
+          customerDebtDiscounted: Number(reviewValues.customerDebtDiscounted),
+          generatedDebtAmount: Number(reviewValues.generatedDebtAmount),
           machines: uploadedMachines,
         }),
       });
@@ -858,6 +817,7 @@ function SlotVisitForm({
   if (results) {
     const totalCliente = results.reduce((s, r) => s + (r.clientShareFinal ?? 0), 0);
     const totalCasa = results.reduce((s, r) => s + (r.houseAmount ?? 0), 0);
+    const savedFinalCustomerDebt = results[0]?.finalCustomerDebt ?? 0;
     return (
       <div className="space-y-4">
         <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">
@@ -884,6 +844,12 @@ function SlotVisitForm({
               <p>
                 Total Infinity: <span className="font-semibold text-white">{formatCurrency(totalCasa)}</span>
               </p>
+              <p className="col-span-2">
+                Saldo final da dívida: {" "}
+                <span className="font-semibold text-white">
+                  {formatCurrency(savedFinalCustomerDebt)}
+                </span>
+              </p>
             </div>
           )}
           {saveError ? <p className="mt-3 text-sm text-[#f0c9ad]">{saveError}</p> : null}
@@ -907,6 +873,7 @@ function SlotVisitForm({
               : [
                   `*Total cliente: ${formatCurrency(totalCliente)}*`,
                   `*Total Infinity: ${formatCurrency(totalCasa)}*`,
+                  `*Saldo final da dívida: ${formatCurrency(savedFinalCustomerDebt)}*`,
                 ]),
             lastSubmission
               ? `Pagamento: ${PAYMENT_METHOD_LABEL[lastSubmission.paymentMethod] ?? lastSubmission.paymentMethod}`
@@ -942,8 +909,19 @@ function SlotVisitForm({
       machine,
       split: computeMachineSplit(machine),
     }));
-    const totalClient = reviewed.reduce((sum, item) => sum + item.split.clientShareFinal, 0);
-    const totalInfinity = reviewed.reduce((sum, item) => sum + item.split.houseAmount, 0);
+    const totalClient =
+      reviewed.reduce((sum, item) => sum + item.split.clientShareFinal, 0) -
+      reviewValues.customerDebtDiscounted;
+    const totalInfinity =
+      reviewed.reduce((sum, item) => sum + item.split.houseAmount, 0) +
+      reviewValues.customerDebtDiscounted -
+      reviewValues.generatedDebtAmount;
+    const reviewedFinalCustomerDebt = Math.max(
+      reviewValues.previousCustomerDebt +
+        reviewValues.generatedDebtAmount -
+        reviewValues.customerDebtDiscounted,
+      0,
+    );
 
     return (
       <div className="space-y-4">
@@ -1000,15 +978,9 @@ function SlotVisitForm({
                     {formatCurrency(machine.previousMachineDebt)} → {formatCurrency(machine.finalMachineDebt)}
                   </p>
                 </div>
-                <div>
-                  <p className="text-[#7e786d]">Dívida gerada / descontada</p>
-                  <p className="mt-0.5 text-[#c9c2b4]">
-                    {formatCurrency(machine.generatedDebtAmount)} / {formatCurrency(machine.customerDebtDiscounted)}
-                  </p>
-                </div>
               </div>
               {!hideFinancials ? (
-                <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/10 pt-3 text-xs sm:grid-cols-4">
+                <div className="mt-3 grid grid-cols-3 gap-2 border-t border-white/10 pt-3 text-xs">
                   <div>
                     <p className="text-[#7e786d]">Líquido</p>
                     <p className="mt-0.5 font-semibold text-white">{formatCurrency(split.netRevenue)}</p>
@@ -1021,14 +993,44 @@ function SlotVisitForm({
                     <p className="text-[#7e786d]">Infinity</p>
                     <p className="mt-0.5 font-semibold text-white">{formatCurrency(split.houseAmount)}</p>
                   </div>
-                  <div>
-                    <p className="text-[#7e786d]">Dívida final</p>
-                    <p className="mt-0.5 font-semibold text-white">{formatCurrency(split.finalCustomerDebt)}</p>
-                  </div>
                 </div>
               ) : null}
             </article>
           ))}
+        </div>
+
+        <div className="rounded-2xl border border-[#d1a04f]/25 bg-[#2a2318]/55 p-4">
+          <p className="text-sm font-semibold text-white">Dívida do cliente neste fechamento</p>
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            {!hideFinancials ? (
+              <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+                <p className="text-[#9a958b]">Dívida anterior</p>
+                <p className="mt-1 font-semibold text-white">
+                  {formatCurrency(reviewValues.previousCustomerDebt)}
+                </p>
+              </div>
+            ) : null}
+            <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+              <p className="text-[#9a958b]">Gerada agora</p>
+              <p className="mt-1 font-semibold text-white">
+                {formatCurrency(reviewValues.generatedDebtAmount)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+              <p className="text-[#9a958b]">Descontada agora</p>
+              <p className="mt-1 font-semibold text-white">
+                {formatCurrency(reviewValues.customerDebtDiscounted)}
+              </p>
+            </div>
+            {!hideFinancials ? (
+              <div className="rounded-xl border border-white/10 bg-black/10 p-3">
+                <p className="text-[#9a958b]">Saldo final</p>
+                <p className="mt-1 font-semibold text-white">
+                  {formatCurrency(reviewedFinalCustomerDebt)}
+                </p>
+              </div>
+            ) : null}
+          </div>
         </div>
 
         {!hideFinancials ? (
@@ -1121,6 +1123,65 @@ function SlotVisitForm({
           ))}
         </div>
 
+        <div className="rounded-2xl border border-[#d1a04f]/25 bg-[#2a2318]/45 p-4">
+          <p className="text-sm font-semibold text-white">Dívida do cliente neste fechamento</p>
+          <p className="mt-1 text-xs text-[#9a958b]">
+            Informe uma única vez para toda a visita, independentemente da quantidade de máquinas.
+          </p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {!hideFinancials ? (
+              <div className="space-y-1.5">
+                <label className={labelClass}>Dívida anterior do cliente</label>
+                <input
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  readOnly
+                  className={`${fieldClass} opacity-70`}
+                  {...form.register("previousCustomerDebt")}
+                />
+              </div>
+            ) : null}
+            <div className="space-y-1.5">
+              <label className={labelClass}>Dívida gerada agora</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register("generatedDebtAmount")}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className={labelClass}>Dívida descontada agora</label>
+              <input
+                type="number"
+                inputMode="decimal"
+                step="0.01"
+                min="0"
+                className={fieldClass}
+                {...form.register("customerDebtDiscounted")}
+              />
+              {form.formState.errors.customerDebtDiscounted ? (
+                <p className="text-xs text-[#d59a8b]">
+                  {form.formState.errors.customerDebtDiscounted.message?.toString()}
+                </p>
+              ) : null}
+            </div>
+            {!hideFinancials ? (
+              <div className="space-y-1.5 rounded-xl border border-white/10 bg-white/[0.025] p-3">
+                <p className={labelClass}>Saldo final da dívida</p>
+                <p className="text-base font-semibold text-white">
+                  {formatCurrency(finalCustomerDebt)}
+                </p>
+                <p className={hintClass}>Anterior + gerada − descontada.</p>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
         <button
           type="button"
           onClick={onAddMoreMachines}
@@ -1134,7 +1195,7 @@ function SlotVisitForm({
           <div className="rounded-2xl border border-[#b46c5d]/35 bg-[#2b1e19]/70 p-3 text-sm text-[#f0c9ad]">
             <p className="font-medium">Falta corrigir para salvar:</p>
             <p className="mt-1 text-[13px]">
-              Confira as máquinas marcadas para fechar hoje — alguma foto ou campo está faltando.
+              Confira os dados do fechamento e as máquinas marcadas — alguma foto ou campo está faltando.
             </p>
           </div>
         ) : null}

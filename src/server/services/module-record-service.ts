@@ -297,9 +297,6 @@ const slotVisitMachineSchema = z.object({
   previousMachineDebt: slotMoneySchema,
   finalMachineDebt: slotMoneySchema,
   feedingNegativeAmount: slotMoneySchema,
-  previousCustomerDebt: slotMoneySchema,
-  customerDebtDiscounted: slotMoneySchema,
-  generatedDebtAmount: slotMoneySchema,
   screenPhotoFileId: z.string().min(1, "A foto da tela e obrigatoria."),
   notes: z.string().max(2_000).optional(),
 });
@@ -310,6 +307,12 @@ const createSlotVisitSchema = z
     clientName: z.string().min(1, "Cliente nao informado."),
     occurredAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data invalida."),
     paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
+    // O saldo pertence ao fechamento do cliente, nao a cada maquina. Os
+    // campos sao opcionais apenas para reconhecermos abas antigas e
+    // devolvermos uma mensagem pedindo atualizacao, sem gravar nada.
+    previousCustomerDebt: slotMoneySchema.optional(),
+    customerDebtDiscounted: slotMoneySchema.optional(),
+    generatedDebtAmount: slotMoneySchema.optional(),
     machines: z.array(slotVisitMachineSchema).min(1).max(200),
   })
   .superRefine((data, ctx) => {
@@ -420,7 +423,12 @@ export type SlotClientMachine = {
 export async function getSlotClientMachines(
   session: SessionData,
   clientName: string,
-): Promise<{ clientName: string; phone: string; machines: SlotClientMachine[] }> {
+): Promise<{
+  clientName: string;
+  phone: string;
+  customerDebt: number;
+  machines: SlotClientMachine[];
+}> {
   const machines = await prisma.slotMachine.findMany({
     where: { organizationId: session.organizationId, clientName },
     orderBy: { clientMachineNumber: "asc" },
@@ -450,6 +458,10 @@ export async function getSlotClientMachines(
   return {
     clientName,
     phone: machines[0]?.phone ?? "",
+    // Registros antigos guardavam a divida em apenas uma das maquinas. Ate
+    // que o proximo fechamento sincronize todas, o maior saldo preserva o
+    // valor existente em vez de troca-lo por zero vindo de outra maquina.
+    customerDebt: Math.max(0, ...results.map((machine) => machine.customerDebt)),
     machines: results,
   };
 }
@@ -855,6 +867,18 @@ export async function saveSlotVisit(
   payload: Record<string, unknown>,
 ): Promise<SlotVisitSaveResult> {
   const data = createSlotVisitSchema.parse(payload);
+  if (
+    data.previousCustomerDebt === undefined ||
+    data.customerDebtDiscounted === undefined ||
+    data.generatedDebtAmount === undefined
+  ) {
+    throw new SlotVisitConflictError(
+      "Esta tela de visita esta desatualizada. Atualize a pagina e abra o fechamento novamente.",
+    );
+  }
+  const submittedPreviousCustomerDebt = data.previousCustomerDebt;
+  const customerDebtDiscounted = data.customerDebtDiscounted;
+  const generatedDebtAmount = data.generatedDebtAmount;
   const machineIds = data.machines.map((machine) => machine.machineId);
   const sortedMachineIds = [...machineIds].sort();
 
@@ -863,6 +887,13 @@ export async function saveSlotVisit(
       const visitLockKey = `slot-visit-key:${session.organizationId}:${data.visitKey}`;
       await tx.$queryRaw(
         Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${visitLockKey}))::text AS "lock"`,
+      );
+      // A divida e unica por cliente. Este lock impede que duas visitas do
+      // mesmo cliente, mesmo envolvendo maquinas diferentes, alterem o saldo
+      // ao mesmo tempo.
+      const clientLockKey = `slot-client-debt:${session.organizationId}:${data.clientName.trim().toLocaleLowerCase("pt-BR")}`;
+      await tx.$queryRaw(
+        Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${clientLockKey}))::text AS "lock"`,
       );
       // Serializa qualquer fechamento que envolva a mesma maquina. Assim duas
       // abas/celulares nao conseguem usar a mesma leitura anterior ao mesmo tempo.
@@ -929,6 +960,33 @@ export async function saveSlotVisit(
         }
       }
 
+      const clientMachines = await tx.slotMachine.findMany({
+        where: {
+          organizationId: session.organizationId,
+          clientName: data.clientName,
+        },
+        select: { id: true, customerDebt: true },
+      });
+      const currentCustomerDebt = roundMoney(
+        Math.max(
+          0,
+          ...clientMachines.map((machine) => Number(machine.customerDebt ?? 0)),
+        ),
+      );
+      if (!sameMoney(submittedPreviousCustomerDebt, currentCustomerDebt)) {
+        throw new SlotVisitConflictError(
+          "A divida deste cliente mudou enquanto a visita estava aberta. Atualize a pagina e confira o fechamento novamente.",
+        );
+      }
+      const debtAvailable = roundMoney(currentCustomerDebt + generatedDebtAmount);
+      if (customerDebtDiscounted > debtAvailable) {
+        throw new SlotVisitConflictError(
+          "A divida descontada supera o saldo disponivel do cliente.",
+        );
+      }
+      const finalCustomerDebt = roundMoney(debtAvailable - customerDebtDiscounted);
+      const debtCarrierMachineId = data.machines[0]!.machineId;
+
       const photoIds = data.machines.map((machine) => machine.screenPhotoFileId);
       if (new Set(photoIds).size !== photoIds.length) {
         throw new SlotVisitConflictError("Cada maquina precisa ter sua propria foto da tela.");
@@ -966,13 +1024,11 @@ export async function saveSlotVisit(
         const expectedPreviousIncome = Number(latest?.currentIncome ?? 0);
         const expectedPreviousExpense = Number(latest?.currentExpense ?? 0);
         const previousMachineDebt = Number(machine.machineDebt ?? 0);
-        const previousCustomerDebt = Number(machine.customerDebt ?? 0);
 
         if (
           !sameMoney(input.previousIncome, expectedPreviousIncome) ||
           !sameMoney(input.previousExpense, expectedPreviousExpense) ||
-          !sameMoney(input.previousMachineDebt, previousMachineDebt) ||
-          !sameMoney(input.previousCustomerDebt, previousCustomerDebt)
+          !sameMoney(input.previousMachineDebt, previousMachineDebt)
         ) {
           throw new SlotVisitConflictError(
             `A maquina ${machine.clientMachineNumber} recebeu outro fechamento enquanto esta tela estava aberta. Volte e abra a visita novamente.`,
@@ -989,18 +1045,8 @@ export async function saveSlotVisit(
           );
         }
 
-        const debtAvailable = roundMoney(
-          previousCustomerDebt + input.generatedDebtAmount,
-        );
-        if (input.customerDebtDiscounted > debtAvailable) {
-          throw new SlotVisitConflictError(
-            `Na maquina ${machine.clientMachineNumber}, a divida descontada supera o saldo disponivel.`,
-          );
-        }
-        const finalCustomerDebt = roundMoney(
-          debtAvailable - input.customerDebtDiscounted,
-        );
         const finalMachineDebt = roundMoney(input.finalMachineDebt);
+        const carriesCustomerDebt = machine.id === debtCarrierMachineId;
 
         const conferenceCount =
           (await tx.slotCollection.count({
@@ -1013,7 +1059,6 @@ export async function saveSlotVisit(
         await tx.slotMachine.update({
           where: { id: machine.id },
           data: {
-            customerDebt: finalCustomerDebt,
             machineDebt: finalMachineDebt,
             optionalGreedAmount: input.optionalGreedAmount,
           },
@@ -1038,9 +1083,9 @@ export async function saveSlotVisit(
             previousMachineDebt,
             negativeAmount: finalMachineDebt,
             feedingNegativeAmount: input.feedingNegativeAmount,
-            previousCustomerDebt,
-            customerDebtDiscounted: input.customerDebtDiscounted,
-            generatedDebtAmount: input.generatedDebtAmount,
+            previousCustomerDebt: currentCustomerDebt,
+            customerDebtDiscounted: carriesCustomerDebt ? customerDebtDiscounted : 0,
+            generatedDebtAmount: carriesCustomerDebt ? generatedDebtAmount : 0,
             finalCustomerDebt,
             paymentMethod: mapPaymentMethod(data.paymentMethod),
             screenPhotoId: input.screenPhotoFileId,
@@ -1059,8 +1104,8 @@ export async function saveSlotVisit(
           finalMachineDebt,
           feedingNegativeAmount: input.feedingNegativeAmount,
           optionalGreedAmount: input.optionalGreedAmount,
-          customerDebtDiscounted: input.customerDebtDiscounted,
-          generatedDebtAmount: input.generatedDebtAmount,
+          customerDebtDiscounted: carriesCustomerDebt ? customerDebtDiscounted : 0,
+          generatedDebtAmount: carriesCustomerDebt ? generatedDebtAmount : 0,
         });
 
         await tx.fieldVisit.create({
@@ -1087,6 +1132,16 @@ export async function saveSlotVisit(
         persisted.push(record);
       }
 
+      // Mantem uma unica divida logica do cliente mesmo que ela ainda esteja
+      // armazenada nas maquinas por compatibilidade com o modelo existente.
+      await tx.slotMachine.updateMany({
+        where: {
+          organizationId: session.organizationId,
+          clientName: data.clientName,
+        },
+        data: { customerDebt: finalCustomerDebt },
+      });
+
       await tx.auditLog.create({
         data: {
           organizationId: session.organizationId,
@@ -1100,6 +1155,10 @@ export async function saveSlotVisit(
             occurredAt: data.occurredAt,
             machineIds,
             collectionIds: persisted.map((record) => record.id),
+            previousCustomerDebt: currentCustomerDebt,
+            generatedDebtAmount,
+            customerDebtDiscounted,
+            finalCustomerDebt,
           },
         },
       });
