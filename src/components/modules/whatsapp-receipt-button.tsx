@@ -135,23 +135,26 @@ async function generateReceiptImage(
   closedAt?: string,
 ): Promise<Blob> {
   const receipt = parseReceiptMessage(message);
-  const W = 620;
-  const SCALE = 2;
+  const W = 404;
+  const SCALE = 3;
   const FONT = "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif";
-  const HEADER_X = 38;
-  const HEADER_W = W - HEADER_X * 2;
-  const DETAIL_GAP = 50;
-  const DETAIL_W = (HEADER_W - DETAIL_GAP) / 2;
+  const OUTER = 12;
+  const CARD_X = OUTER;
+  const CARD_W = W - OUTER * 2;
+  const CONTENT_X = 40;
+  const CONTENT_W = 332;
+  const DETAIL_GAP = 24;
+  const DETAIL_W = (CONTENT_W - DETAIL_GAP) / 2;
   const measureCanvas = document.createElement("canvas");
   const measure = measureCanvas.getContext("2d")!;
   const logo = await loadReceiptLogo();
 
-  measure.font = `800 28px ${FONT}`;
-  const headingLines = wrapCanvasText(measure, "COMPROVANTE DE FECHAMENTO", HEADER_W);
-  measure.font = `400 18px ${FONT}`;
-  const subtitleLines = wrapCanvasText(measure, receipt.title, HEADER_W);
+  measure.font = `800 19px ${FONT}`;
+  const headingLines = wrapCanvasText(measure, "COMPROVANTE DE FECHAMENTO", CONTENT_W);
+  measure.font = `400 13px ${FONT}`;
+  const subtitleLines = wrapCanvasText(measure, receipt.title, CONTENT_W);
 
-  measure.font = `600 19px ${FONT}`;
+  measure.font = `600 14px ${FONT}`;
   const informationLayout = receipt.information.map((line) => ({
     ...line,
     valueLines: wrapCanvasText(measure, line.value ?? line.text, DETAIL_W),
@@ -163,54 +166,60 @@ async function generateReceiptImage(
 
   const informationHeight = informationRows.reduce((sum, row, index) => {
     const rowHeight = Math.max(
-      ...row.map((item) => 19 + item.valueLines.length * 26),
+      ...row.map((item) => 16 + item.valueLines.length * 19),
     );
-    return sum + rowHeight + (index === informationRows.length - 1 ? 0 : 28);
+    return sum + rowHeight + (index === informationRows.length - 1 ? 0 : 16);
   }, 0);
 
   const primaryTotal = receipt.totals[0];
   const secondaryTotals = receipt.totals.slice(1);
-  measure.font = `800 43px ${FONT}`;
+  measure.font = `800 31px ${FONT}`;
   const primaryValueLines = primaryTotal
-    ? wrapCanvasText(measure, primaryTotal.value ?? primaryTotal.text, 330)
+    ? wrapCanvasText(measure, primaryTotal.value ?? primaryTotal.text, 190)
     : [];
-  measure.font = `800 32px ${FONT}`;
+  measure.font = `800 27px ${FONT}`;
   const secondaryLayout = secondaryTotals.map((line) => ({
     ...line,
-    valueLines: wrapCanvasText(measure, line.value ?? line.text, HEADER_W),
+    valueLines: wrapCanvasText(measure, line.value ?? line.text, CONTENT_W),
   }));
 
-  const logoWidth = 92;
-  const logoHeight = logo ? logoWidth / (logo.naturalWidth / logo.naturalHeight) : 38;
-  const brandHeight = Math.max(logoHeight, 29);
+  const logoWidth = 58;
+  const logoHeight = logo ? logoWidth / (logo.naturalWidth / logo.naturalHeight) : 28;
+  const brandHeight = Math.max(logoHeight, 22);
   const headerHeight =
-    38 +
+    26 +
     brandHeight +
-    38 +
-    headingLines.length * 31 +
+    25 +
+    headingLines.length * 24 +
+    5 +
+    subtitleLines.length * 18 +
     10 +
-    subtitleLines.length * 25 +
-    27 +
-    1 +
-    30;
+    18;
   const mainValueContentHeight = primaryTotal
-    ? (primaryTotal.key ? 21 : 0) + primaryValueLines.length * 43
+    ? (primaryTotal.key ? 15 : 0) + primaryValueLines.length * 34
     : 0;
-  const mainValueHeight = primaryTotal ? Math.max(120, mainValueContentHeight + 56) : 0;
+  const mainValueHeight = primaryTotal ? Math.max(75, mainValueContentHeight + 26) : 0;
   const detailsHeight = receipt.information.length > 0
-    ? 1 + 28 + 12 + 26 + informationHeight + 28 + 1
+    ? 1 + 15 + 10 + 17 + informationHeight + 10 + 1
     : 0;
   const balanceContentHeight = secondaryLayout.reduce(
     (sum, total, index) =>
       sum +
-      (total.key ? 21 : 0) +
-      total.valueLines.length * 34 +
-      (index === secondaryLayout.length - 1 ? 0 : 24),
+      (total.key ? 17 : 0) +
+      total.valueLines.length * 30 +
+      (index === secondaryLayout.length - 1 ? 0 : 20),
     0,
   );
-  const balanceHeight = secondaryLayout.length > 0 ? 60 + balanceContentHeight : 0;
-  const footerHeight = 89;
-  const H = headerHeight + mainValueHeight + (primaryTotal ? 28 : 0) + detailsHeight + balanceHeight + footerHeight;
+  const balanceHeight = secondaryLayout.length > 0 ? 44 + balanceContentHeight : 0;
+  const footerHeight = 85;
+  const cardHeight =
+    headerHeight +
+    mainValueHeight +
+    (primaryTotal ? 17 : 0) +
+    detailsHeight +
+    balanceHeight +
+    footerHeight;
+  const H = cardHeight + OUTER * 2;
 
   const canvas = document.createElement("canvas");
   canvas.width = W * SCALE;
@@ -218,165 +227,178 @@ async function generateReceiptImage(
   const ctx = canvas.getContext("2d")!;
   ctx.scale(SCALE, SCALE);
 
-  ctx.textBaseline = "top";
+  ctx.fillStyle = "#f2f4f7";
+  ctx.fillRect(0, 0, W, H);
+  ctx.save();
+  ctx.shadowColor = "rgba(16,24,40,.12)";
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 5;
+  ctx.fillStyle = "#ffffff";
   ctx.beginPath();
-  ctx.roundRect(0, 0, W, H, 24);
+  ctx.roundRect(CARD_X, OUTER, CARD_W, cardHeight, 14);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.roundRect(CARD_X, OUTER, CARD_W, cardHeight, 14);
   ctx.clip();
   ctx.fillStyle = "#ffffff";
-  ctx.fillRect(0, 0, W, H);
+  ctx.fillRect(CARD_X, OUTER, CARD_W, cardHeight);
+  ctx.textBaseline = "top";
 
-  let y = 38;
+  let y = OUTER + 26;
   if (logo) {
-    ctx.drawImage(logo, HEADER_X, y, logoWidth, logoHeight);
+    ctx.drawImage(logo, CONTENT_X, y, logoWidth, logoHeight);
   } else {
-    ctx.font = `800 18px ${FONT}`;
+    ctx.font = `800 13px ${FONT}`;
     ctx.fillStyle = "#111827";
-    ctx.fillText("INFINITY ERP", HEADER_X, y + 9);
+    ctx.fillText("INFINITY ERP", CONTENT_X, y + 7);
   }
 
   const documentText = documentLabel.toLocaleUpperCase("pt-BR");
-  ctx.font = `700 11px ${FONT}`;
-  const documentWidth = ctx.measureText(documentText).width + 30;
+  ctx.font = `700 7px ${FONT}`;
+  const documentWidth = ctx.measureText(documentText).width + 20;
   ctx.fillStyle = "#f5f6f8";
   ctx.beginPath();
-  ctx.roundRect(W - HEADER_X - documentWidth, y, documentWidth, 29, 15);
+  ctx.roundRect(CARD_X + CARD_W - 18 - documentWidth, y, documentWidth, 22, 11);
   ctx.fill();
   ctx.fillStyle = "#5f6878";
-  ctx.fillText(documentText, W - HEADER_X - documentWidth + 15, y + 9);
+  ctx.fillText(documentText, CARD_X + CARD_W - 18 - documentWidth + 10, y + 8);
 
-  y += brandHeight + 38;
-  ctx.font = `800 28px ${FONT}`;
+  y += brandHeight + 25;
+  ctx.font = `800 19px ${FONT}`;
   ctx.fillStyle = "#111827";
   headingLines.forEach((line) => {
-    ctx.fillText(line, HEADER_X, y);
-    y += 31;
+    ctx.fillText(line, CONTENT_X, y);
+    y += 24;
   });
 
-  y += 10;
-  ctx.font = `400 18px ${FONT}`;
+  y += 5;
+  ctx.font = `400 13px ${FONT}`;
   ctx.fillStyle = "#697386";
   for (const line of subtitleLines) {
-    ctx.fillText(line, HEADER_X, y);
-    y += 25;
+    ctx.fillText(line, CONTENT_X, y);
+    y += 18;
   }
 
-  y += 27;
+  y += 10;
   ctx.strokeStyle = "#e1e5ea";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(HEADER_X, y + 0.5);
-  ctx.lineTo(W - HEADER_X, y + 0.5);
+  ctx.moveTo(CONTENT_X, y + 0.5);
+  ctx.lineTo(CONTENT_X + CONTENT_W, y + 0.5);
   ctx.stroke();
   ctx.fillStyle = "#2563eb";
   ctx.beginPath();
-  ctx.roundRect(HEADER_X, y - 1.5, 62, 4, 2);
+  ctx.roundRect(CONTENT_X, y - 1, 39, 3, 1.5);
   ctx.fill();
-  y += 31;
+  y += 18;
 
   if (primaryTotal) {
-    const panelX = 28;
-    const panelW = W - 56;
+    const panelX = CARD_X + 11;
+    const panelW = CARD_W - 22;
     const panelTop = y;
     ctx.fillStyle = "#f7f8fa";
     ctx.beginPath();
-    ctx.roundRect(panelX, panelTop, panelW, mainValueHeight, 18);
+    ctx.roundRect(panelX, panelTop, panelW, mainValueHeight, 12);
     ctx.fill();
 
-    let primaryY = panelTop + 28;
+    let primaryY = panelTop + 15;
     if (primaryTotal.key) {
-      ctx.font = `750 11px ${FONT}`;
+      ctx.font = `750 8px ${FONT}`;
       ctx.fillStyle = "#697386";
-      ctx.fillText(primaryTotal.key.toLocaleUpperCase("pt-BR"), panelX + 26, primaryY);
-      primaryY += 21;
+      ctx.fillText(primaryTotal.key.toLocaleUpperCase("pt-BR"), panelX + 23, primaryY);
+      primaryY += 15;
     }
-    ctx.font = `800 43px ${FONT}`;
+    ctx.font = `800 31px ${FONT}`;
     ctx.fillStyle = "#111827";
     primaryValueLines.forEach((line, index) => {
-      ctx.fillText(line, panelX + 26, primaryY + index * 43);
+      ctx.fillText(line, panelX + 23, primaryY + index * 34);
     });
 
     if (receipt.status?.value) {
       const statusText = receipt.status.value;
-      ctx.font = `500 13px ${FONT}`;
-      const statusWidth = Math.min(ctx.measureText(statusText).width, 174);
-      const statusX = panelX + panelW - 26 - statusWidth;
-      const statusY = panelTop + (mainValueHeight - 13) / 2;
+      ctx.font = `500 8px ${FONT}`;
+      const statusWidth = Math.min(ctx.measureText(statusText).width, 100);
+      const statusX = panelX + panelW - 14 - statusWidth;
+      const statusY = panelTop + (mainValueHeight - 8) / 2;
       ctx.fillStyle = "#2563eb";
       ctx.beginPath();
-      ctx.arc(statusX - 15, statusY + 6, 5, 0, Math.PI * 2);
+      ctx.arc(statusX - 11, statusY + 4, 3.5, 0, Math.PI * 2);
       ctx.fill();
       ctx.fillStyle = "#667085";
       ctx.fillText(statusText, statusX, statusY);
     }
-    y = panelTop + mainValueHeight + 28;
+    y = panelTop + mainValueHeight + 17;
   }
 
   if (receipt.information.length > 0) {
     ctx.strokeStyle = "#e5e7eb";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.moveTo(HEADER_X, y + 0.5);
-    ctx.lineTo(W - HEADER_X, y + 0.5);
+    ctx.moveTo(CONTENT_X, y + 0.5);
+    ctx.lineTo(CONTENT_X + CONTENT_W, y + 0.5);
     ctx.stroke();
-    y += 29;
+    y += 16;
 
-    ctx.font = `750 12px ${FONT}`;
+    ctx.font = `750 8px ${FONT}`;
     ctx.fillStyle = "#667085";
-    ctx.fillText("INFORMAÇÕES DO FECHAMENTO", HEADER_X, y);
-    y += 38;
+    ctx.fillText("INFORMAÇÕES DO FECHAMENTO", CONTENT_X, y);
+    y += 27;
 
     informationRows.forEach((row, rowIndex) => {
-      const rowHeight = Math.max(...row.map((item) => 19 + item.valueLines.length * 26));
+      const rowHeight = Math.max(...row.map((item) => 16 + item.valueLines.length * 19));
       row.forEach((item, column) => {
-        const x = HEADER_X + column * (DETAIL_W + DETAIL_GAP);
+        const x = CONTENT_X + column * (DETAIL_W + DETAIL_GAP);
         if (item.key) {
-          ctx.font = `750 11px ${FONT}`;
+          ctx.font = `750 8px ${FONT}`;
           ctx.fillStyle = "#697386";
           ctx.fillText(item.key.toLocaleUpperCase("pt-BR"), x, y);
         }
-        ctx.font = `600 19px ${FONT}`;
+        ctx.font = `600 14px ${FONT}`;
         ctx.fillStyle = "#111827";
         item.valueLines.forEach((line, lineIndex) => {
-          ctx.fillText(line, x, y + 19 + lineIndex * 26);
+          ctx.fillText(line, x, y + 16 + lineIndex * 19);
         });
       });
-      y += rowHeight + (rowIndex === informationRows.length - 1 ? 0 : 28);
+      y += rowHeight + (rowIndex === informationRows.length - 1 ? 0 : 16);
     });
-    y += 28;
+    y += 10;
 
     ctx.strokeStyle = "#e5e7eb";
     ctx.beginPath();
-    ctx.moveTo(HEADER_X, y + 0.5);
-    ctx.lineTo(W - HEADER_X, y + 0.5);
+    ctx.moveTo(CONTENT_X, y + 0.5);
+    ctx.lineTo(CONTENT_X + CONTENT_W, y + 0.5);
     ctx.stroke();
     y += 1;
   }
 
   if (secondaryLayout.length > 0) {
-    y += 30;
+    y += 22;
     secondaryLayout.forEach((total, totalIndex) => {
       if (total.key) {
-        ctx.font = `750 11px ${FONT}`;
+        ctx.font = `750 8px ${FONT}`;
         ctx.fillStyle = "#697386";
-        ctx.fillText(total.key.toLocaleUpperCase("pt-BR"), HEADER_X, y);
-        y += 21;
+        ctx.fillText(total.key.toLocaleUpperCase("pt-BR"), CONTENT_X, y);
+        y += 17;
       }
-      ctx.font = `800 32px ${FONT}`;
+      ctx.font = `800 27px ${FONT}`;
       ctx.fillStyle = "#111827";
       total.valueLines.forEach((line, lineIndex) => {
-        ctx.fillText(line, HEADER_X, y + lineIndex * 34);
+        ctx.fillText(line, CONTENT_X, y + lineIndex * 30);
       });
-      y += total.valueLines.length * 34;
-      if (totalIndex < secondaryLayout.length - 1) y += 24;
+      y += total.valueLines.length * 30;
+      if (totalIndex < secondaryLayout.length - 1) y += 20;
     });
-    y += 30;
+    y += 22;
   }
 
-  const footerTop = H - footerHeight;
+  const footerTop = OUTER + cardHeight - footerHeight;
   ctx.strokeStyle = "#e5e7eb";
   ctx.beginPath();
-  ctx.moveTo(HEADER_X, footerTop + 0.5);
-  ctx.lineTo(W - HEADER_X, footerTop + 0.5);
+  ctx.moveTo(CONTENT_X, footerTop + 0.5);
+  ctx.lineTo(CONTENT_X + CONTENT_W, footerTop + 0.5);
   ctx.stroke();
 
   const receiptTimestamp = getReceiptTimestamp(closedAt);
@@ -390,30 +412,30 @@ async function generateReceiptImage(
     minute: "2-digit",
   });
   const footerY = footerTop + 27;
-  ctx.font = `700 14px ${FONT}`;
+  ctx.font = `700 11px ${FONT}`;
   ctx.fillStyle = "#111827";
-  ctx.fillText("Infinity ERP", HEADER_X, footerY);
-  ctx.font = `400 10px ${FONT}`;
+  ctx.fillText("Infinity ERP", CONTENT_X, footerY);
+  ctx.font = `400 7px ${FONT}`;
   ctx.fillStyle = "#98a2b3";
-  ctx.fillText("Documento gerado automaticamente", HEADER_X, footerY + 19);
+  ctx.fillText("Documento gerado automaticamente", CONTENT_X, footerY + 16);
 
   const footerMeta = [
     `${generatedDate} ${generatedTime}`,
     receipt.identifier?.value ? `ID: ${receipt.identifier.value}` : "",
   ].filter(Boolean);
-  ctx.font = `400 10px ${FONT}`;
+  ctx.font = `400 7px ${FONT}`;
   footerMeta.forEach((line, index) => {
     const width = ctx.measureText(line).width;
     ctx.fillStyle = "#7b8494";
-    ctx.fillText(line, W - HEADER_X - width, footerY + index * 15);
+    ctx.fillText(line, CONTENT_X + CONTENT_W - width, footerY + index * 13);
   });
-  const metaWidths = footerMeta.map((line) => ctx.measureText(line).width);
-  const dividerX = W - HEADER_X - Math.max(0, ...metaWidths) - 25;
+  const dividerX = CONTENT_X + CONTENT_W - 100;
   ctx.strokeStyle = "#e5e7eb";
   ctx.beginPath();
   ctx.moveTo(dividerX, footerY);
-  ctx.lineTo(dividerX, footerY + 25);
+  ctx.lineTo(dividerX, footerY + 30);
   ctx.stroke();
+  ctx.restore();
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
