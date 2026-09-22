@@ -63,6 +63,17 @@ function isReceiptTestClient(clientName: string) {
   return clientName.trim().toLocaleLowerCase("pt-BR") === "bar do chico";
 }
 
+function formatClosingReceiptId(recordId: string, occurredAt: string) {
+  let hash = 2166136261;
+  for (const character of recordId) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  const year = occurredAt.match(/^\d{4}/)?.[0] ?? String(new Date().getFullYear());
+  const numericId = String((hash >>> 0) % 100_000).padStart(5, "0");
+  return `FECH-${year}-${numericId}`;
+}
+
 // ──────────────────────────────────────────────────────────────────────────
 // Cadastro: aqui e onde se decide QUANTAS maquinas o cliente tem. O
 // fechamento de cada uma acontece depois, na visita (SlotVisitForm) --
@@ -911,7 +922,7 @@ function SlotVisitForm({
                 "*Fechamento H — Caça-níquel*",
                 isReceiptPreview
                   ? ""
-                  : `Comprovante: ${results[0]?.recordId.slice(0, 8).toLocaleUpperCase("pt-BR") ?? "-"}`,
+                  : `Comprovante: ${formatClosingReceiptId(results[0]?.recordId ?? "", lastSubmission?.occurredAt ?? todayStr())}`,
                 `Cliente: ${clientName}`,
                 lastSubmission
                   ? `Data: ${new Date(`${lastSubmission.occurredAt}T12:00:00`).toLocaleDateString("pt-BR")}`

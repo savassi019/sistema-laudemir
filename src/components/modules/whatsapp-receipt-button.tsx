@@ -125,56 +125,82 @@ function loadReceiptLogo() {
 
 async function generateReceiptImage(message: string, documentLabel: string): Promise<Blob> {
   const receipt = parseReceiptMessage(message);
-  const W = 720;
+  const W = 620;
   const SCALE = 2;
-  const PAD = 48;
-  const CONTENT_W = W - PAD * 2;
-  const INFO_GAP = 28;
-  const INFO_W = (CONTENT_W - INFO_GAP) / 2;
+  const FONT = "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif";
+  const HEADER_X = 38;
+  const HEADER_W = W - HEADER_X * 2;
+  const DETAIL_GAP = 50;
+  const DETAIL_W = (HEADER_W - DETAIL_GAP) / 2;
   const measureCanvas = document.createElement("canvas");
   const measure = measureCanvas.getContext("2d")!;
+  const logo = await loadReceiptLogo();
 
-  measure.font = "550 22px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-  const subtitleLines = wrapCanvasText(measure, receipt.title, CONTENT_W);
+  measure.font = `800 28px ${FONT}`;
+  const headingLines = wrapCanvasText(measure, "COMPROVANTE DE FECHAMENTO", HEADER_W);
+  measure.font = `400 18px ${FONT}`;
+  const subtitleLines = wrapCanvasText(measure, receipt.title, HEADER_W);
 
-  measure.font = "650 26px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  measure.font = `600 19px ${FONT}`;
   const informationLayout = receipt.information.map((line) => ({
     ...line,
-    valueLines: wrapCanvasText(measure, line.value ?? line.text, INFO_W),
+    valueLines: wrapCanvasText(measure, line.value ?? line.text, DETAIL_W),
   }));
   const informationRows: Array<typeof informationLayout> = [];
   for (let index = 0; index < informationLayout.length; index += 2) {
     informationRows.push(informationLayout.slice(index, index + 2));
   }
-  const informationHeight = informationRows.reduce((sum, row) => {
+
+  const informationHeight = informationRows.reduce((sum, row, index) => {
     const rowHeight = Math.max(
-      92,
-      ...row.map((item) => 42 + item.valueLines.length * 32),
+      ...row.map((item) => 19 + item.valueLines.length * 26),
     );
-    return sum + rowHeight;
+    return sum + rowHeight + (index === informationRows.length - 1 ? 0 : 28);
   }, 0);
 
-  measure.font = "800 44px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-  const totalLayout = receipt.totals.map((line, index) => {
-    const valueLines = wrapCanvasText(measure, line.value ?? line.text, CONTENT_W - 56);
-    const height = index === 0
-      ? (line.key ? 32 : 0) + valueLines.length * 50 + 30
-      : 24 + (line.key ? 32 : 0) + valueLines.length * 36 + 26;
-    return { ...line, valueLines, height };
-  });
+  const primaryTotal = receipt.totals[0];
+  const secondaryTotals = receipt.totals.slice(1);
+  measure.font = `800 43px ${FONT}`;
+  const primaryValueLines = primaryTotal
+    ? wrapCanvasText(measure, primaryTotal.value ?? primaryTotal.text, 330)
+    : [];
+  measure.font = `800 32px ${FONT}`;
+  const secondaryLayout = secondaryTotals.map((line) => ({
+    ...line,
+    valueLines: wrapCanvasText(measure, line.value ?? line.text, HEADER_W),
+  }));
 
+  const logoWidth = 92;
+  const logoHeight = logo ? logoWidth / (logo.naturalWidth / logo.naturalHeight) : 38;
+  const brandHeight = Math.max(logoHeight, 29);
   const headerHeight =
-    242 +
-    subtitleLines.length * 31 +
-    (receipt.identifier ? 36 : 10) +
-    (receipt.status ? 52 : 0);
-  const detailsHeight = receipt.information.length > 0 ? 52 + informationHeight : 0;
-  const summaryPanelHeight = totalLayout.length > 0
-    ? 84 + totalLayout.reduce((sum, total) => sum + total.height, 0) + 14
+    38 +
+    brandHeight +
+    38 +
+    headingLines.length * 31 +
+    10 +
+    subtitleLines.length * 25 +
+    27 +
+    1 +
+    30;
+  const mainValueContentHeight = primaryTotal
+    ? (primaryTotal.key ? 21 : 0) + primaryValueLines.length * 43
     : 0;
-  const summaryHeight = summaryPanelHeight > 0 ? summaryPanelHeight + 28 : 0;
-  const footerHeight = 112;
-  const H = headerHeight + detailsHeight + summaryHeight + footerHeight;
+  const mainValueHeight = primaryTotal ? Math.max(120, mainValueContentHeight + 56) : 0;
+  const detailsHeight = receipt.information.length > 0
+    ? 1 + 28 + 12 + 26 + informationHeight + 28 + 1
+    : 0;
+  const balanceContentHeight = secondaryLayout.reduce(
+    (sum, total, index) =>
+      sum +
+      (total.key ? 21 : 0) +
+      total.valueLines.length * 34 +
+      (index === secondaryLayout.length - 1 ? 0 : 24),
+    0,
+  );
+  const balanceHeight = secondaryLayout.length > 0 ? 60 + balanceContentHeight : 0;
+  const footerHeight = 89;
+  const H = headerHeight + mainValueHeight + (primaryTotal ? 28 : 0) + detailsHeight + balanceHeight + footerHeight;
 
   const canvas = document.createElement("canvas");
   canvas.width = W * SCALE;
@@ -182,176 +208,201 @@ async function generateReceiptImage(message: string, documentLabel: string): Pro
   const ctx = canvas.getContext("2d")!;
   ctx.scale(SCALE, SCALE);
 
-  ctx.fillStyle = "#fbfcfa";
+  ctx.textBaseline = "top";
+  ctx.beginPath();
+  ctx.roundRect(0, 0, W, H, 24);
+  ctx.clip();
+  ctx.fillStyle = "#ffffff";
   ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = "#18794e";
-  ctx.fillRect(0, 0, W, 8);
 
-  let y = 36;
-  const logo = await loadReceiptLogo();
+  let y = 38;
   if (logo) {
-    const logoWidth = 132;
-    const logoHeight = logoWidth / (logo.naturalWidth / logo.naturalHeight);
-    ctx.drawImage(logo, PAD, y, logoWidth, logoHeight);
+    ctx.drawImage(logo, HEADER_X, y, logoWidth, logoHeight);
   } else {
-    ctx.font = "800 24px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-    ctx.fillStyle = "#1f2937";
-    ctx.fillText("INFINITY ERP", PAD, y + 28);
+    ctx.font = `800 18px ${FONT}`;
+    ctx.fillStyle = "#111827";
+    ctx.fillText("INFINITY ERP", HEADER_X, y + 9);
   }
 
   const documentText = documentLabel.toLocaleUpperCase("pt-BR");
-  ctx.font = "750 14px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-  const documentWidth = ctx.measureText(documentText).width + 32;
-  ctx.fillStyle = "#edf7f0";
+  ctx.font = `700 11px ${FONT}`;
+  const documentWidth = ctx.measureText(documentText).width + 30;
+  ctx.fillStyle = "#f5f6f8";
   ctx.beginPath();
-  ctx.roundRect(W - PAD - documentWidth, y + 8, documentWidth, 38, 19);
+  ctx.roundRect(W - HEADER_X - documentWidth, y, documentWidth, 29, 15);
   ctx.fill();
-  ctx.fillStyle = "#17603d";
-  ctx.fillText(documentText, W - PAD - documentWidth + 16, y + 33);
+  ctx.fillStyle = "#5f6878";
+  ctx.fillText(documentText, W - HEADER_X - documentWidth + 15, y + 9);
 
-  y += 132;
-  ctx.font = "850 32px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-  ctx.fillStyle = "#17211a";
-  ctx.fillText("COMPROVANTE DE FECHAMENTO", PAD, y);
-  y += 40;
-
-  ctx.font = "550 22px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-  ctx.fillStyle = "#5d675f";
-  for (const line of subtitleLines) {
-    ctx.fillText(line, PAD, y);
+  y += brandHeight + 38;
+  ctx.font = `800 28px ${FONT}`;
+  ctx.fillStyle = "#111827";
+  headingLines.forEach((line) => {
+    ctx.fillText(line, HEADER_X, y);
     y += 31;
+  });
+
+  y += 10;
+  ctx.font = `400 18px ${FONT}`;
+  ctx.fillStyle = "#697386";
+  for (const line of subtitleLines) {
+    ctx.fillText(line, HEADER_X, y);
+    y += 25;
   }
 
-  if (receipt.identifier?.value) {
-    ctx.font = "700 14px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-    ctx.fillStyle = "#657168";
-    ctx.fillText(`IDENTIFICADOR  ${receipt.identifier.value}`, PAD, y + 7);
-    y += 36;
-  } else {
-    y += 10;
-  }
-
-  if (receipt.status?.value) {
-    const statusText = receipt.status.value.toLocaleUpperCase("pt-BR");
-    ctx.font = "750 14px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-    const badgeWidth = Math.min(ctx.measureText(statusText).width + 34, CONTENT_W);
-    ctx.fillStyle = "#e8f5ec";
-    ctx.beginPath();
-    ctx.roundRect(PAD, y, badgeWidth, 38, 19);
-    ctx.fill();
-    ctx.fillStyle = "#17603d";
-    ctx.fillText(statusText, PAD + 17, y + 25);
-    y += 52;
-  }
-
-  ctx.strokeStyle = "#dfe5e0";
+  y += 27;
+  ctx.strokeStyle = "#e1e5ea";
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(PAD, y);
-  ctx.lineTo(W - PAD, y);
+  ctx.moveTo(HEADER_X, y + 0.5);
+  ctx.lineTo(W - HEADER_X, y + 0.5);
   ctx.stroke();
-  y += 34;
+  ctx.fillStyle = "#2563eb";
+  ctx.beginPath();
+  ctx.roundRect(HEADER_X, y - 1.5, 62, 4, 2);
+  ctx.fill();
+  y += 31;
+
+  if (primaryTotal) {
+    const panelX = 28;
+    const panelW = W - 56;
+    const panelTop = y;
+    ctx.fillStyle = "#f7f8fa";
+    ctx.beginPath();
+    ctx.roundRect(panelX, panelTop, panelW, mainValueHeight, 18);
+    ctx.fill();
+
+    let primaryY = panelTop + 28;
+    if (primaryTotal.key) {
+      ctx.font = `750 11px ${FONT}`;
+      ctx.fillStyle = "#697386";
+      ctx.fillText(primaryTotal.key.toLocaleUpperCase("pt-BR"), panelX + 26, primaryY);
+      primaryY += 21;
+    }
+    ctx.font = `800 43px ${FONT}`;
+    ctx.fillStyle = "#111827";
+    primaryValueLines.forEach((line, index) => {
+      ctx.fillText(line, panelX + 26, primaryY + index * 43);
+    });
+
+    if (receipt.status?.value) {
+      const statusText = receipt.status.value;
+      ctx.font = `500 13px ${FONT}`;
+      const statusWidth = Math.min(ctx.measureText(statusText).width, 174);
+      const statusX = panelX + panelW - 26 - statusWidth;
+      const statusY = panelTop + (mainValueHeight - 13) / 2;
+      ctx.fillStyle = "#2563eb";
+      ctx.beginPath();
+      ctx.arc(statusX - 15, statusY + 6, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#667085";
+      ctx.fillText(statusText, statusX, statusY);
+    }
+    y = panelTop + mainValueHeight + 28;
+  }
 
   if (receipt.information.length > 0) {
-    ctx.font = "750 15px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-    ctx.fillStyle = "#526158";
-    ctx.fillText("INFORMAÇÕES DO FECHAMENTO", PAD, y);
-    y += 40;
-
-    informationRows.forEach((row, rowIndex) => {
-      const rowHeight = Math.max(
-        92,
-        ...row.map((item) => 42 + item.valueLines.length * 32),
-      );
-      row.forEach((item, column) => {
-        const x = PAD + column * (INFO_W + INFO_GAP);
-        if (item.key) {
-          ctx.font = "750 16px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-          ctx.fillStyle = "#66736b";
-          ctx.fillText(item.key.toLocaleUpperCase("pt-BR"), x, y);
-        }
-        ctx.font = "650 26px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-        ctx.fillStyle = "#17211a";
-        item.valueLines.forEach((line, lineIndex) => {
-          ctx.fillText(line, x, y + 34 + lineIndex * 32);
-        });
-      });
-      y += rowHeight;
-      if (rowIndex < informationRows.length - 1) {
-        ctx.strokeStyle = "#edf0ed";
-        ctx.beginPath();
-        ctx.moveTo(PAD, y - 14);
-        ctx.lineTo(W - PAD, y - 14);
-        ctx.stroke();
-      }
-    });
-    y += 12;
-  }
-
-  if (totalLayout.length > 0) {
-    const panelTop = y;
-    ctx.fillStyle = "#f0f7f2";
-    ctx.strokeStyle = "#d7e7db";
+    ctx.strokeStyle = "#e5e7eb";
     ctx.lineWidth = 1;
     ctx.beginPath();
-    ctx.roundRect(PAD, panelTop, CONTENT_W, summaryPanelHeight, 18);
-    ctx.fill();
+    ctx.moveTo(HEADER_X, y + 0.5);
+    ctx.lineTo(W - HEADER_X, y + 0.5);
     ctx.stroke();
+    y += 29;
 
-    y += 40;
-    ctx.font = "750 15px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-    ctx.fillStyle = "#496553";
-    ctx.fillText("RESUMO DO FECHAMENTO", PAD + 28, y);
-    y += 44;
+    ctx.font = `750 12px ${FONT}`;
+    ctx.fillStyle = "#667085";
+    ctx.fillText("INFORMAÇÕES DO FECHAMENTO", HEADER_X, y);
+    y += 38;
 
-    totalLayout.forEach((total, index) => {
-      const x = PAD + 28;
-      if (index > 0) {
-        ctx.strokeStyle = "#d9e6dc";
-        ctx.beginPath();
-        ctx.moveTo(x, y);
-        ctx.lineTo(W - PAD - 28, y);
-        ctx.stroke();
-        y += 24;
-      }
-      if (total.key) {
-        ctx.font = "750 15px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-        ctx.fillStyle = index === 0 ? "#28704b" : "#6f7c73";
-        ctx.fillText(total.key.toLocaleUpperCase("pt-BR"), x, y);
-        y += 32;
-      }
-      ctx.font = `${index === 0 ? "850 44px" : "750 30px"} system-ui,-apple-system,'Segoe UI',Arial,sans-serif`;
-      ctx.fillStyle = index === 0 ? "#18794e" : "#26332b";
-      total.valueLines.forEach((line, lineIndex) => {
-        ctx.fillText(line, x, y + lineIndex * (index === 0 ? 50 : 36));
+    informationRows.forEach((row, rowIndex) => {
+      const rowHeight = Math.max(...row.map((item) => 19 + item.valueLines.length * 26));
+      row.forEach((item, column) => {
+        const x = HEADER_X + column * (DETAIL_W + DETAIL_GAP);
+        if (item.key) {
+          ctx.font = `750 11px ${FONT}`;
+          ctx.fillStyle = "#697386";
+          ctx.fillText(item.key.toLocaleUpperCase("pt-BR"), x, y);
+        }
+        ctx.font = `600 19px ${FONT}`;
+        ctx.fillStyle = "#111827";
+        item.valueLines.forEach((line, lineIndex) => {
+          ctx.fillText(line, x, y + 19 + lineIndex * 26);
+        });
       });
-      y += total.valueLines.length * (index === 0 ? 50 : 36);
-      y += index === 0 ? 30 : 26;
+      y += rowHeight + (rowIndex === informationRows.length - 1 ? 0 : 28);
     });
-    y = panelTop + summaryPanelHeight + 28;
+    y += 28;
+
+    ctx.strokeStyle = "#e5e7eb";
+    ctx.beginPath();
+    ctx.moveTo(HEADER_X, y + 0.5);
+    ctx.lineTo(W - HEADER_X, y + 0.5);
+    ctx.stroke();
+    y += 1;
   }
 
-  const footerTop = H - footerHeight + 18;
-  ctx.strokeStyle = "#dfe5e0";
+  if (secondaryLayout.length > 0) {
+    y += 30;
+    secondaryLayout.forEach((total, totalIndex) => {
+      if (total.key) {
+        ctx.font = `750 11px ${FONT}`;
+        ctx.fillStyle = "#697386";
+        ctx.fillText(total.key.toLocaleUpperCase("pt-BR"), HEADER_X, y);
+        y += 21;
+      }
+      ctx.font = `800 32px ${FONT}`;
+      ctx.fillStyle = "#111827";
+      total.valueLines.forEach((line, lineIndex) => {
+        ctx.fillText(line, HEADER_X, y + lineIndex * 34);
+      });
+      y += total.valueLines.length * 34;
+      if (totalIndex < secondaryLayout.length - 1) y += 24;
+    });
+    y += 30;
+  }
+
+  const footerTop = H - footerHeight;
+  ctx.strokeStyle = "#e5e7eb";
   ctx.beginPath();
-  ctx.moveTo(PAD, footerTop);
-  ctx.lineTo(W - PAD, footerTop);
+  ctx.moveTo(HEADER_X, footerTop + 0.5);
+  ctx.lineTo(W - HEADER_X, footerTop + 0.5);
   ctx.stroke();
-  const generatedAt = new Date().toLocaleDateString("pt-BR", {
+
+  const generatedDate = new Date().toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
+  });
+  const generatedTime = new Date().toLocaleTimeString("pt-BR", {
     hour: "2-digit",
     minute: "2-digit",
   });
-  ctx.font = "700 14px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-  ctx.fillStyle = "#58635b";
-  ctx.fillText("Infinity ERP", PAD, H - 52);
-  ctx.font = "500 13px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-  ctx.fillStyle = "#8a938c";
-  ctx.fillText("Comprovante gerado automaticamente pelo sistema.", PAD, H - 29);
-  const dateWidth = ctx.measureText(generatedAt).width;
-  ctx.fillText(generatedAt, W - PAD - dateWidth, H - 29);
+  const footerY = footerTop + 27;
+  ctx.font = `700 14px ${FONT}`;
+  ctx.fillStyle = "#111827";
+  ctx.fillText("Infinity ERP", HEADER_X, footerY);
+  ctx.font = `400 10px ${FONT}`;
+  ctx.fillStyle = "#98a2b3";
+  ctx.fillText("Documento gerado automaticamente", HEADER_X, footerY + 19);
+
+  const footerMeta = [
+    `${generatedDate} ${generatedTime}`,
+    receipt.identifier?.value ? `ID: ${receipt.identifier.value}` : "",
+  ].filter(Boolean);
+  ctx.font = `400 10px ${FONT}`;
+  footerMeta.forEach((line, index) => {
+    const width = ctx.measureText(line).width;
+    ctx.fillStyle = "#7b8494";
+    ctx.fillText(line, W - HEADER_X - width, footerY + index * 15);
+  });
+  const metaWidths = footerMeta.map((line) => ctx.measureText(line).width);
+  const dividerX = W - HEADER_X - Math.max(0, ...metaWidths) - 25;
+  ctx.strokeStyle = "#e5e7eb";
+  ctx.beginPath();
+  ctx.moveTo(dividerX, footerY);
+  ctx.lineTo(dividerX, footerY + 25);
+  ctx.stroke();
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
@@ -421,33 +472,46 @@ export function WhatsAppReceiptButton({
   function handleDownloadPDF() {
     const receipt = parseReceiptMessage(messageRef.current);
     const logoUrl = `${window.location.origin}/infinity-logo.png`;
-    const generatedAt = new Date().toLocaleDateString("pt-BR", {
+    const generatedDate = new Date().toLocaleDateString("pt-BR", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
+    });
+    const generatedTime = new Date().toLocaleTimeString("pt-BR", {
       hour: "2-digit",
       minute: "2-digit",
     });
     const informationHtml = receipt.information
       .map((line) => {
         const label = line.key
-          ? `<p class="info-label">${escapeReceiptHtml(line.key)}</p>`
+          ? `<span class="field-label">${escapeReceiptHtml(line.key)}</span>`
           : "";
-        return `<div class="info-item">${label}<p class="info-value">${escapeReceiptHtml(line.value ?? line.text)}</p></div>`;
+        return `<div class="detail">${label}<strong>${escapeReceiptHtml(line.value ?? line.text)}</strong></div>`;
       })
       .join("");
-    const totalsHtml = receipt.totals
-      .map((line, index) => `
-        <div class="summary-item ${index === 0 ? "primary" : "secondary"}">
-          ${line.key ? `<p class="summary-label">${escapeReceiptHtml(line.key)}</p>` : ""}
-          <p class="summary-value">${escapeReceiptHtml(line.value ?? line.text)}</p>
+    const primaryTotal = receipt.totals[0];
+    const balanceHtml = receipt.totals
+      .slice(1)
+      .map((line) => `
+        <div class="balance-item">
+          ${line.key ? `<span class="field-label">${escapeReceiptHtml(line.key)}</span>` : ""}
+          <strong>${escapeReceiptHtml(line.value ?? line.text)}</strong>
         </div>`)
       .join("");
     const statusHtml = receipt.status?.value
-      ? `<span class="status">${escapeReceiptHtml(receipt.status.value)}</span>`
+      ? `<div class="closing-status"><span class="status-dot"></span><span>${escapeReceiptHtml(receipt.status.value)}</span></div>`
       : "";
     const identifierHtml = receipt.identifier?.value
-      ? `<p class="identifier">Identificador&nbsp;&nbsp;${escapeReceiptHtml(receipt.identifier.value)}</p>`
+      ? `<span>ID: ${escapeReceiptHtml(receipt.identifier.value)}</span>`
+      : "";
+    const mainValueHtml = primaryTotal
+      ? `<section class="receipt-main-value">
+          <div class="main-value-content">
+            ${primaryTotal.key ? `<span class="field-label">${escapeReceiptHtml(primaryTotal.key)}</span>` : ""}
+            <strong class="main-value">${escapeReceiptHtml(primaryTotal.value ?? primaryTotal.text)}</strong>
+          </div>
+          ${statusHtml}
+        </section>`
       : "";
 
     const html = `<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"/>
@@ -456,56 +520,34 @@ export function WhatsAppReceiptButton({
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 @page{size:A4;margin:14mm}
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;background:#edf1ee;color:#17211a;padding:28px 16px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-.sheet{width:100%;max-width:620px;margin:0 auto;background:#fbfcfa;border-top:6px solid #18794e;padding:34px 40px 28px;box-shadow:0 12px 35px rgba(24,55,37,.08)}
-.brand-row{display:flex;align-items:center;justify-content:space-between;gap:24px}
-.brand-row img{display:block;width:104px;height:auto;object-fit:contain}
-.document-label{border-radius:999px;background:#edf7f0;color:#17603d;padding:8px 13px;font-size:10px;font-weight:800;letter-spacing:.09em;text-transform:uppercase;white-space:nowrap}
-.heading{margin-top:30px}
-.heading h1{font-size:25px;line-height:1.12;letter-spacing:-.035em;font-weight:850;color:#17211a}
-.subtitle{margin-top:8px;font-size:16px;line-height:1.4;font-weight:550;color:#5d675f;overflow-wrap:anywhere}
-.identifier{margin-top:12px;font-size:10px;line-height:1.5;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:#89918b;overflow-wrap:anywhere}
-.status{display:inline-flex;margin-top:18px;border-radius:999px;background:#e8f5ec;color:#17603d;padding:8px 13px;font-size:10px;font-weight:800;letter-spacing:.055em;text-transform:uppercase}
-.section{margin-top:28px;padding-top:24px;border-top:1px solid #dfe5e0}
-.section-title{font-size:10px;font-weight:800;letter-spacing:.105em;text-transform:uppercase;color:#6d766f}
-.info-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px 28px;margin-top:22px}
-.info-item{min-width:0}
-.info-label{font-size:10px;line-height:1.3;font-weight:800;letter-spacing:.065em;text-transform:uppercase;color:#7d867f}
-.info-value{margin-top:5px;font-size:15px;line-height:1.45;font-weight:650;color:#1d2821;overflow-wrap:anywhere}
-.summary{margin-top:28px;border:1px solid #d7e7db;border-radius:16px;background:#f0f7f2;padding:26px 28px 24px}
-.summary-title{font-size:10px;font-weight:800;letter-spacing:.105em;text-transform:uppercase;color:#587061}
-.summary-item{padding-top:22px}
-.summary-item.secondary{margin-top:22px;border-top:1px solid #d9e6dc}
-.summary-label{font-size:10px;line-height:1.3;font-weight:800;letter-spacing:.075em;text-transform:uppercase;color:#28704b}
-.summary-item.secondary .summary-label{color:#6f7c73}
-.summary-value{margin-top:8px;overflow-wrap:anywhere}
-.summary-item.primary .summary-value{font-size:33px;line-height:1.08;font-weight:850;letter-spacing:-.035em;color:#18794e}
-.summary-item.secondary .summary-value{font-size:21px;line-height:1.15;font-weight:750;color:#26332b}
-.footer{display:flex;align-items:flex-end;justify-content:space-between;gap:24px;margin-top:32px;padding-top:20px;border-top:1px solid #dfe5e0}
-.company{font-size:11px;font-weight:800;color:#58635b}
-.footer-note,.generated-at{margin-top:5px;font-size:9px;line-height:1.45;color:#8a938c}
-.generated-at{text-align:right;white-space:nowrap}
-@media(max-width:480px){body{padding:0;background:#fbfcfa}.sheet{padding:26px 24px 24px;box-shadow:none}.brand-row img{width:90px}.heading h1{font-size:22px}.info-grid{gap:18px 20px}.summary{padding:23px 22px}.summary-item.primary .summary-value{font-size:29px}.footer{align-items:flex-start;flex-direction:column;gap:8px}.generated-at{text-align:left}}
-@media print{body{background:#fff;padding:0}.sheet{max-width:none;padding:0;box-shadow:none;border-top-width:5px}}
+body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+.receipt{width:100%;max-width:620px;margin:0 auto;background:#fff;border-radius:24px;overflow:hidden;color:#101828;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 18px 60px rgba(16,24,40,.08)}
+.receipt-header{padding:38px 38px 30px}.receipt-brand{display:flex;justify-content:space-between;align-items:flex-start;gap:30px}.receipt-logo{width:92px;height:auto;object-fit:contain}.receipt-copy{padding:9px 15px;background:#f5f6f8;border-radius:999px;color:#5f6878;font-size:11px;font-weight:700;letter-spacing:.04em;white-space:nowrap}.receipt-heading{margin-top:38px}.receipt-heading h1{font-size:28px;line-height:1.08;font-weight:800;letter-spacing:-.9px;color:#111827}.receipt-heading p{margin-top:10px;color:#697386;font-size:18px;line-height:1.4}.heading-line{position:relative;height:1px;margin-top:27px;background:#e1e5ea}.heading-line span{position:absolute;top:-2px;left:0;width:62px;height:4px;border-radius:999px;background:#2563eb}
+.receipt-main-value{margin:0 28px;padding:28px 26px;display:flex;justify-content:space-between;align-items:center;gap:28px;border-radius:18px;background:#f7f8fa}.field-label{display:block;color:#697386;font-size:11px;line-height:1;font-weight:750;letter-spacing:.05em;text-transform:uppercase}.main-value{display:block;margin-top:10px;color:#111827;font-size:43px;line-height:1;font-weight:800;letter-spacing:-1.8px;overflow-wrap:anywhere}.closing-status{display:flex;align-items:center;gap:10px;flex-shrink:0;color:#667085;font-size:13px;font-weight:500}.status-dot{width:10px;height:10px;border-radius:50%;background:#2563eb}
+.receipt-details{margin:28px 38px 0;padding:28px 0;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb}.receipt-details h2{margin:0 0 26px;color:#667085;font-size:12px;font-weight:750;letter-spacing:.05em}.details-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px 50px}.detail{min-width:0}.detail strong{display:block;margin-top:8px;color:#111827;font-size:19px;line-height:1.35;font-weight:600;overflow-wrap:anywhere}
+.receipt-balance{margin:0 38px;padding:30px 0}.receipt-balance strong{display:block;margin-top:10px;color:#111827;font-size:32px;line-height:1;font-weight:800;letter-spacing:-1px;overflow-wrap:anywhere}.balance-item+.balance-item{margin-top:24px}
+.receipt-footer{margin:0 38px;padding:27px 0 32px;border-top:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:flex-end;gap:25px}.footer-brand{display:flex;flex-direction:column;gap:5px}.footer-brand strong{color:#111827;font-size:14px;font-weight:700}.footer-brand span{color:#98a2b3;font-size:10px}.footer-meta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;padding-left:25px;border-left:1px solid #e5e7eb;color:#7b8494;font-size:10px;white-space:nowrap}
+@media(max-width:520px){body{padding:0}.receipt{border-radius:18px}.receipt-header{padding:28px 24px 24px}.receipt-logo{width:74px}.receipt-heading{margin-top:28px}.receipt-heading h1{font-size:23px}.receipt-heading p{font-size:14px}.receipt-main-value{margin:0 18px;padding:23px 20px;align-items:flex-start;flex-direction:column;gap:16px}.main-value{font-size:37px}.receipt-details{margin-left:24px;margin-right:24px}.details-grid{gap:24px 20px}.detail strong{font-size:16px}.receipt-balance{margin-left:24px;margin-right:24px}.receipt-footer{margin-left:24px;margin-right:24px}}
+@media print{body{background:#fff;padding:0}.receipt{max-width:none;border-radius:0;box-shadow:none}}
 </style></head><body>
-<main class="sheet">
-  <header>
-    <div class="brand-row">
-      <img src="${logoUrl}" alt="Infinity"/>
-      <span class="document-label">${escapeReceiptHtml(documentLabel)}</span>
+<main class="receipt">
+  <header class="receipt-header">
+    <div class="receipt-brand">
+      <img src="${logoUrl}" alt="Infinity" class="receipt-logo"/>
+      <span class="receipt-copy">${escapeReceiptHtml(documentLabel)}</span>
     </div>
-    <div class="heading">
+    <div class="receipt-heading">
       <h1>COMPROVANTE DE FECHAMENTO</h1>
-      <p class="subtitle">${escapeReceiptHtml(receipt.title)}</p>
-      ${identifierHtml}
-      ${statusHtml}
+      <p>${escapeReceiptHtml(receipt.title)}</p>
+      <div class="heading-line"><span></span></div>
     </div>
   </header>
-  ${informationHtml ? `<section class="section"><p class="section-title">Informações do fechamento</p><div class="info-grid">${informationHtml}</div></section>` : ""}
-  ${totalsHtml ? `<section class="summary"><p class="summary-title">Resumo do fechamento</p>${totalsHtml}</section>` : ""}
-  <footer class="footer">
-    <div><p class="company">Infinity ERP</p><p class="footer-note">Comprovante gerado automaticamente pelo sistema.</p></div>
-    <p class="generated-at">${escapeReceiptHtml(generatedAt)}</p>
+  ${mainValueHtml}
+  ${informationHtml ? `<section class="receipt-details"><h2>INFORMAÇÕES DO FECHAMENTO</h2><div class="details-grid">${informationHtml}</div></section>` : ""}
+  ${balanceHtml ? `<section class="receipt-balance">${balanceHtml}</section>` : ""}
+  <footer class="receipt-footer">
+    <div class="footer-brand"><strong>Infinity ERP</strong><span>Documento gerado automaticamente</span></div>
+    <div class="footer-meta"><span>${escapeReceiptHtml(generatedDate)} ${escapeReceiptHtml(generatedTime)}</span>${identifierHtml}</div>
   </footer>
 </main>
 </body></html>`;
