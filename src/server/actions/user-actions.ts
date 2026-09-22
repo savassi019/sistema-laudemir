@@ -1,6 +1,7 @@
 "use server";
 
 import { requireSession } from "@/lib/auth";
+import { moduleCatalog } from "@/lib/module-catalog";
 import {
   normalizarEmail,
   validarEmail,
@@ -15,6 +16,22 @@ import {
 } from "@/server/services/user-service";
 import type { ModuleName, StaffMember } from "@/types/app";
 
+const ASSIGNABLE_MODULES = new Set(
+  moduleCatalog.filter((item) => item.group !== "core").map((item) => item.module),
+);
+
+function validateAccessSelection(role: unknown, modules: unknown): asserts modules is ModuleName[] {
+  if (role !== "STAFF" && role !== "ADMIN") {
+    throw new Error("Perfil de acesso invalido.");
+  }
+  if (!Array.isArray(modules) || modules.length === 0) {
+    throw new Error("Selecione ao menos um modulo para este funcionario.");
+  }
+  if (modules.some((module) => !ASSIGNABLE_MODULES.has(module as ModuleName))) {
+    throw new Error("Um dos modulos selecionados nao pode ser liberado por esta tela.");
+  }
+}
+
 export async function createStaffAction(data: {
   name: string;
   email: string;
@@ -24,7 +41,7 @@ export async function createStaffAction(data: {
   modules: ModuleName[];
 }): Promise<StaffMember> {
   const session = await requireSession();
-  if (session.role !== "OWNER" && session.role !== "ADMIN") {
+  if (session.role !== "OWNER") {
     throw new Error("Sem permissão.");
   }
 
@@ -35,9 +52,7 @@ export async function createStaffAction(data: {
     (validarSenha(data.password) ? `Senha: ${validarSenha(data.password)}` : null);
   if (erro) throw new Error(erro);
 
-  if (!data.modules || data.modules.length === 0) {
-    throw new Error("Selecione ao menos um módulo para este funcionário.");
-  }
+  validateAccessSelection(data.role, data.modules);
 
   return createStaff(session, {
     ...data,
@@ -56,7 +71,7 @@ export async function updateStaffAction(
   },
 ): Promise<StaffMember> {
   const session = await requireSession();
-  if (session.role !== "OWNER" && session.role !== "ADMIN") {
+  if (session.role !== "OWNER") {
     throw new Error("Sem permissão.");
   }
 
@@ -64,8 +79,11 @@ export async function updateStaffAction(
     const erroNome = validarNome(data.name);
     if (erroNome) throw new Error(erroNome);
   }
-  if (data.modules && data.modules.length === 0) {
-    throw new Error("Selecione ao menos um módulo para este funcionário.");
+  if (data.role !== undefined && data.role !== "STAFF" && data.role !== "ADMIN") {
+    throw new Error("Perfil de acesso invalido.");
+  }
+  if (data.modules !== undefined) {
+    validateAccessSelection(data.role ?? "STAFF", data.modules);
   }
 
   return updateStaff(session, userId, data);
@@ -76,7 +94,7 @@ export async function resetStaffPasswordAction(
   newPassword: string,
 ): Promise<void> {
   const session = await requireSession();
-  if (session.role !== "OWNER" && session.role !== "ADMIN") {
+  if (session.role !== "OWNER") {
     throw new Error("Sem permissão.");
   }
 
@@ -91,7 +109,7 @@ export async function setStaffStatusAction(
   status: "ativo" | "inativo",
 ): Promise<void> {
   const session = await requireSession();
-  if (session.role !== "OWNER" && session.role !== "ADMIN") {
+  if (session.role !== "OWNER") {
     throw new Error("Sem permissão.");
   }
 

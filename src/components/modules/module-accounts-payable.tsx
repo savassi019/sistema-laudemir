@@ -62,7 +62,7 @@ export function ModuleAccountsPayable({
   function markStatus(id: string, status: "PENDING" | "PARTIAL" | "PAID") {
     startTransition(async () => {
       try {
-        const updated = await updateModuleFinancialEntryStatusAction(id, status);
+        const updated = await updateModuleFinancialEntryStatusAction(slug, id, status);
         setEntries((prev) => prev.map((e) => (e.id === id ? updated : e)));
       } catch {
         // silently ignore — optimistic update reverted on reload

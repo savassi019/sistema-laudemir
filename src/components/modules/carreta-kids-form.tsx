@@ -9,6 +9,10 @@ import { z } from "zod";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
+import {
+  formatClosingReceiptId,
+  type SavedModuleRecordResponse,
+} from "@/lib/receipt";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
@@ -55,6 +59,8 @@ type FormInput = z.input<typeof schema>;
 type FormValues = z.output<typeof schema>;
 
 type ReceiptState = {
+  receiptId?: string;
+  closedAt?: string;
   localName: string;
   serviceDate: string;
   sheetName: string;
@@ -134,6 +140,7 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
     setSaveError(null);
 
     const totalValue = Math.max(0, baseValue - Number(values.expenseAmount));
+    let savedRecord: SavedModuleRecordResponse["record"];
 
     try {
       const response = await fetch("/api/modules/carreta-kids/records", {
@@ -156,12 +163,16 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
       if (!response.ok) {
         throw new Error("Falha ao salvar a Carreta Kids.");
       }
+      const result = (await response.json()) as SavedModuleRecordResponse;
+      savedRecord = result.record;
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }
 
     clearDraft();
     setReceipt({
+      receiptId: savedRecord?.id,
+      closedAt: savedRecord?.createdAt,
       localName: values.localName,
       serviceDate: values.serviceDate,
       sheetName: values.sheetName,
@@ -401,8 +412,16 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
           ) : null}
           <WhatsAppReceiptButton
             defaultPhone={receipt.phone}
+            autoOpen={!saveError && !!receipt.phone}
+            closedAt={receipt.closedAt}
+            title="Via do cliente — WhatsApp e PDF"
+            documentLabel="Via do cliente"
+            pdfButtonLabel="Gerar via do cliente em PDF"
             message={[
-              "*Comprovante Carreta Kids*",
+              "*Fechamento Carreta Kids*",
+              ...(receipt.receiptId
+                ? [`Comprovante: ${formatClosingReceiptId(receipt.receiptId, receipt.serviceDate)}`]
+                : []),
               `Local: ${receipt.localName}`,
               `Ficha: ${receipt.sheetName}`,
               `Data: ${formatShortDate(receipt.serviceDate)}`,
@@ -410,8 +429,13 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
               ...(receipt.entryTime ? [`Entrada: ${receipt.entryTime}`] : []),
               ...(receipt.exitTime ? [`Saída: ${receipt.exitTime}`] : []),
               `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
-              `Despesa: ${formatCurrency(receipt.expenseAmount)}`,
-              `*Total: ${formatCurrency(receipt.totalValue)}*`,
+              ...(!hideFinancials
+                ? [
+                    `Despesa: ${formatCurrency(receipt.expenseAmount)}`,
+                    `*Total: ${formatCurrency(receipt.totalValue)}*`,
+                  ]
+                : []),
+              `Situação: ${saveError ? "Não salvo — confira a conexão" : "Fechamento concluído"}`,
             ].join("\n")}
           />
         </article>

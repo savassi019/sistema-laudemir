@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 export default async function RelatorioPage(props: {
   searchParams: Promise<{ from?: string; to?: string }>;
 }) {
-  const session = await requireSession("DASHBOARD");
+  const session = await requireSession("REPORTS");
 
   // Exigia so DASHBOARD, que todo funcionario recebe automaticamente na
   // criacao — entao qualquer um da equipe via entrada, saida e liquido.

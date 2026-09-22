@@ -59,7 +59,7 @@ export type MarketingClientDetail = {
 };
 
 export async function getMarketingClientsAction(): Promise<MarketingClientDetail[]> {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
 
   const contracts = await prisma.marketingContract.findMany({
     where: { organizationId: session.organizationId },
@@ -118,7 +118,7 @@ export async function updateMarketingPipelineAction(
   id: string,
   pipelineStage: MarketingPipelineStage,
 ) {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
   await prisma.marketingContract.update({
     where: { id, organizationId: session.organizationId },
     data: { pipelineStage },
@@ -129,7 +129,7 @@ export async function updateMarketingChecklistAction(
   id: string,
   checklist: OnboardingChecklist,
 ) {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
   await prisma.marketingContract.update({
     where: { id, organizationId: session.organizationId },
     data: { onboardingChecklist: checklist },
@@ -155,7 +155,7 @@ export async function addMarketingContentAction(
   kind: MarketingContentKind = "POST",
   fileId?: string | null,
 ): Promise<MarketingContentDetail> {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
 
   const contract = await prisma.marketingContract.findFirst({
     where: { id: contractId, organizationId: session.organizationId },
@@ -191,7 +191,7 @@ export async function updateMarketingContentStatusAction(
   contentId: string,
   status: MarketingContentStatus,
 ) {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
   await prisma.marketingContent.update({
     where: { id: contentId, organizationId: session.organizationId },
     data: { status },
@@ -213,7 +213,7 @@ export async function updateMarketingContentAction(
     notes?: string | null;
   },
 ): Promise<MarketingContentDetail> {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
 
   const titulo = data.title.trim();
   if (!titulo) throw new Error("Descreva o compromisso.");
@@ -240,7 +240,7 @@ export async function updateMarketingContentAction(
 }
 
 export async function setMarketingContentFileAction(contentId: string, fileId: string | null) {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
   await prisma.marketingContent.update({
     where: { id: contentId, organizationId: session.organizationId },
     data: { fileId },
@@ -248,7 +248,7 @@ export async function setMarketingContentFileAction(contentId: string, fileId: s
 }
 
 export async function deleteMarketingContentAction(contentId: string) {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
   await prisma.marketingContent.delete({
     where: { id: contentId, organizationId: session.organizationId },
   });
@@ -264,7 +264,7 @@ export async function updateMarketingClientAction(
     expenseAmount?: number;
   },
 ) {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
   await prisma.marketingContract.update({
     where: { id, organizationId: session.organizationId },
     data: {
@@ -289,7 +289,7 @@ export async function updateMarketingClientAction(
  * mesma transacao: ou as duas acontecem, ou nenhuma.
  */
 export async function deleteMarketingClientAction(contractId: string): Promise<void> {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
 
   const contract = await prisma.marketingContract.findFirst({
     where: { id: contractId, organizationId: session.organizationId },
@@ -365,7 +365,7 @@ export async function addMarketingEntryAction(
     paid: boolean;
   },
 ): Promise<MarketingEntryDetail> {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
 
   const contract = await prisma.marketingContract.findFirst({
     where: { id: contractId, organizationId: session.organizationId },
@@ -408,7 +408,7 @@ export async function setMarketingEntryPaidAction(
   entryId: string,
   paid: boolean,
 ): Promise<void> {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
 
   // Vale tanto para lancamento de cliente (sourceEntityType MARKETING_CONTRACT)
   // quanto para despesa da agencia (sourceEntityType nulo) -- e a mesma
@@ -435,7 +435,7 @@ export async function setMarketingEntryPaidAction(
 }
 
 export async function deleteMarketingEntryAction(entryId: string): Promise<void> {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
 
   const entry = await prisma.financialEntry.findFirst({
     where: {
@@ -500,7 +500,7 @@ function mapFinanceEntry(
 
 /** Todas as contas do Marketing: despesas da agencia + de cada cliente, numa lista so. */
 export async function getMarketingFinanceOverviewAction(): Promise<MarketingFinanceEntry[]> {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
 
   const entries = await prisma.financialEntry.findMany({
     where: { organizationId: session.organizationId, module: "MARKETING" },
@@ -526,7 +526,7 @@ export async function addAgencyFinanceEntryAction(input: {
   date: string;
   paid: boolean;
 }): Promise<MarketingFinanceEntry> {
-  const session = await requireSession();
+  const session = await requireSession("MARKETING");
 
   const descricao = input.description.trim();
   if (!descricao) throw new Error("Descreva a conta.");

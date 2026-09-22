@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 
-import { getSession } from "@/lib/auth";
+import { getSession, hasModuleAccess } from "@/lib/auth";
 import { getModuleReportSummary } from "@/server/services/module-report-service";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
 
   // Mesmo motivo do /api/finance/summary: sem isto o CSV com os valores
   // sai pela API mesmo com a pagina de relatorio bloqueada.
-  if (session.role === "STAFF") {
+  if (session.role === "STAFF" || !hasModuleAccess(session, "REPORTS")) {
     return new Response("Sem permissao.", { status: 403 });
   }
 

@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 
 export default async function EquipePage() {
   const session = await requireSession();
-  if (session.role !== "OWNER" && session.role !== "ADMIN") {
+  if (session.role !== "OWNER") {
     return (
       <div className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/82 p-8 text-center text-sm text-[#9a958b]">
         Sem permissão para acessar esta página.

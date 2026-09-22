@@ -12,6 +12,10 @@ import { PAYMENT_METHOD_LABEL, RECEIPT_STATUS_LABEL, rotuloDeStatus } from "@/li
 import { useFormDraft } from "@/hooks/use-form-draft";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
+import {
+  formatClosingReceiptId,
+  type SavedModuleRecordResponse,
+} from "@/lib/receipt";
 import { isValidCpf } from "@/lib/validators";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { getCurrentUserNameAction } from "@/server/actions/user-actions";
@@ -91,6 +95,8 @@ type FormInput = z.input<typeof schema>;
 type FormValues = z.output<typeof schema>;
 
 type ReceiptState = {
+  receiptId?: string;
+  closedAt?: string;
   clientName: string;
   phone?: string;
   operatorName: string;
@@ -344,6 +350,7 @@ export function BxForm({
       screenPhoto ? uploadFile(screenPhoto, "PROOF") : Promise.resolve(null),
       paperPhoto ? uploadFile(paperPhoto, "PROOF") : Promise.resolve(null),
     ]);
+    let savedRecord: SavedModuleRecordResponse["record"];
 
     try {
       const response = await fetch("/api/modules/bx/records", {
@@ -378,12 +385,16 @@ export function BxForm({
       if (!response.ok) {
         throw new Error("Falha ao salvar o BX.");
       }
+      const result = (await response.json()) as SavedModuleRecordResponse;
+      savedRecord = result.record;
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }
 
     clearDraft();
     setReceipt({
+      receiptId: savedRecord?.id,
+      closedAt: savedRecord?.createdAt,
       clientName: values.clientName,
       phone: values.phone,
       operatorName,
@@ -946,17 +957,31 @@ export function BxForm({
           {receipt.notes ? <p className="mt-3 text-sm text-[#dbe6d4]/75">{receipt.notes}</p> : null}
           <WhatsAppReceiptButton
             defaultPhone={receipt.phone ?? ""}
-            autoOpen={!!receipt.phone}
+            autoOpen={!saveError && !!receipt.phone}
+            closedAt={receipt.closedAt}
+            title="Via do cliente — WhatsApp e PDF"
+            documentLabel="Via do cliente"
+            pdfButtonLabel="Gerar via do cliente em PDF"
             message={[
-              "*Comprovante BX*",
+              "*Fechamento BX*",
+              ...(receipt.receiptId
+                ? [`Comprovante: ${formatClosingReceiptId(receipt.receiptId, receipt.occurredAt)}`]
+                : []),
               `Cliente: ${receipt.clientName}`,
               `Atendido por: ${receipt.operatorName}`,
-              ...(receipt.receiptStatus === "DELIVERED"
-                ? [`Prêmio da máquina: ${formatCurrency(receipt.deliveredAmount)}`]
-                : []),
-              `Despesas e gastos: ${formatCurrency(receipt.expenseAmount)}`,
-              `Desconto: ${formatCurrency(receipt.discountAmount)}`,
+              `Data: ${new Date(receipt.occurredAt).toLocaleDateString("pt-BR")}`,
               `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
+              ...(!hideFinancials
+                ? [
+                    ...(receipt.receiptStatus === "DELIVERED"
+                      ? [`Prêmio da máquina: ${formatCurrency(receipt.deliveredAmount)}`]
+                      : []),
+                    `Despesas e gastos: ${formatCurrency(receipt.expenseAmount)}`,
+                    `Desconto: ${formatCurrency(receipt.discountAmount)}`,
+                    `*Resultado da operação: ${formatCurrency(receipt.netAmount)}*`,
+                  ]
+                : []),
+              `Situação: ${saveError ? "Não salvo — confira a conexão" : "Fechamento concluído"}`,
               `Status: ${rotuloDeStatus(receipt.receiptStatus, RECEIPT_STATUS_LABEL)}`,
             ].join("\n")}
           />

@@ -8,7 +8,6 @@ import {
   FileBarChart2,
   LayoutDashboard,
   LayoutGrid,
-  Shield,
   Users,
 } from "lucide-react";
 
@@ -28,15 +27,19 @@ const staffItems = [
   { href: "/modulos",       label: "Módulos",  icon: LayoutGrid },
 ] as const;
 
+const managerItems = [
+  { href: "/modulos", label: "Módulos", icon: LayoutGrid },
+] as const;
+
 type Role = "OWNER" | "ADMIN" | "STAFF";
 
 export function MobileNav({ role }: { role: Role }) {
   const pathname = usePathname();
-  const items = role === "STAFF" ? staffItems : ownerItems;
+  const items = role === "OWNER" ? ownerItems : role === "ADMIN" ? managerItems : staffItems;
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-[rgba(245,241,232,0.1)] bg-[#0d120f]/95 px-3 py-2 pb-[calc(env(safe-area-inset-bottom)+0.45rem)] backdrop-blur lg:hidden">
-      <div className={`mx-auto grid max-w-2xl gap-1.5 ${items.length >= 5 ? "grid-cols-5" : "grid-cols-4"}`}>
+      <div className={`mx-auto grid max-w-2xl gap-1.5 ${items.length === 1 ? "grid-cols-1" : items.length >= 5 ? "grid-cols-5" : "grid-cols-4"}`}>
         {items.map((item) => {
           const Icon = item.icon;
           const active = pathname === item.href || pathname.startsWith(item.href + "/");

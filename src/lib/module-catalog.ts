@@ -104,7 +104,7 @@ export const moduleCatalog: ModuleCatalogItem[] = [
   {
     module: "PLUSH",
     slug: "maquinas-de-pelucia",
-    title: "Máquinas de Pelúcia",
+    title: "Máquinas de Pelúcia (GRUA)",
     summary: "Gruas e comissão",
     detail: "Máquinas, pontos, duas fotos, pelúcias, noteiro, desconto e viabilidade.",
     group: "field",

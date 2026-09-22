@@ -99,7 +99,10 @@ export async function listVisits(
 
   try {
     const rows = await prisma.fieldVisit.findMany({
-      where: { organizationId: session.organizationId },
+      where: {
+        organizationId: session.organizationId,
+        ...(session.role === "STAFF" ? { createdById: session.userId } : {}),
+      },
       orderBy: { occurredAt: "desc" },
       take: limit,
       include: { client: true, createdBy: true },
@@ -341,6 +344,7 @@ export async function getTodayVisitCount(session: SessionData): Promise<number> 
     return await prisma.fieldVisit.count({
       where: {
         organizationId: session.organizationId,
+        ...(session.role === "STAFF" ? { createdById: session.userId } : {}),
         occurredAt: { gte: todayStart },
       },
     });
@@ -372,6 +376,7 @@ export async function listVisitsInRange(
     const rows = await prisma.fieldVisit.findMany({
       where: {
         organizationId: session.organizationId,
+        ...(session.role === "STAFF" ? { createdById: session.userId } : {}),
         occurredAt: { gte: fromDate, lte: toDate },
       },
       orderBy: { occurredAt: "desc" },

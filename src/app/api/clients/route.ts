@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getSession } from "@/lib/auth";
+import { getSession, hasModuleAccess } from "@/lib/auth";
 import { createClient, listClients } from "@/server/services/client-service";
 
 export async function GET() {
@@ -8,6 +8,9 @@ export async function GET() {
 
   if (!session) {
     return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+  }
+  if (!hasModuleAccess(session, "CLIENTS")) {
+    return NextResponse.json({ error: "Sem permissao." }, { status: 403 });
   }
 
   return NextResponse.json(await listClients(session));
@@ -18,6 +21,9 @@ export async function POST(request: Request) {
 
   if (!session) {
     return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
+  }
+  if (!hasModuleAccess(session, "CLIENTS")) {
+    return NextResponse.json({ error: "Sem permissao." }, { status: 403 });
   }
 
   const payload = (await request.json()) as Record<string, unknown>;

@@ -4,13 +4,13 @@ import { requireSession } from "@/lib/auth";
 import { getContactPhones, setContactPhones } from "@/server/services/settings-service";
 
 export async function getContactPhonesAction() {
-  const session = await requireSession();
+  const session = await requireSession("PLUSH");
   return getContactPhones(session);
 }
 
 export async function setContactPhonesAction(data: { ownerPhone: string; staffPhone: string }) {
   const session = await requireSession();
-  if (session.role !== "OWNER" && session.role !== "ADMIN") {
+  if (session.role !== "OWNER") {
     throw new Error("Sem permissão.");
   }
   return setContactPhones(session, data);

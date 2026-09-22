@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getSession } from "@/lib/auth";
+import { getSession, hasModuleAccess } from "@/lib/auth";
 import { getFinanceOverview } from "@/server/services/finance-service";
 
 export async function GET() {
@@ -12,7 +12,7 @@ export async function GET() {
 
   // Bloquear a pagina nao basta: sem isto o funcionario baixa o caixa
   // inteiro chamando a API direto.
-  if (session.role === "STAFF") {
+  if (session.role === "STAFF" || !hasModuleAccess(session, "FINANCE")) {
     return NextResponse.json({ error: "Sem permissao." }, { status: 403 });
   }
 

@@ -10,6 +10,10 @@ import { formatCurrency, formatShortDate } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
 import { maskCpf, maskPhone, withMask } from "@/lib/masks";
+import {
+  formatClosingReceiptId,
+  type SavedModuleRecordResponse,
+} from "@/lib/receipt";
 import { isValidCpf } from "@/lib/validators";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { getContactPhonesAction } from "@/server/actions/settings-actions";
@@ -87,6 +91,8 @@ type FormInput = z.input<typeof schema>;
 type FormValues = z.output<typeof schema>;
 
 type ReceiptState = {
+  receiptId?: string;
+  closedAt?: string;
   clientName: string;
   phone: string;
   code: string;
@@ -223,6 +229,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       coinPhoto ? uploadFile(coinPhoto, "PHOTO") : Promise.resolve(null),
       giftPhoto ? uploadFile(giftPhoto, "PHOTO") : Promise.resolve(null),
     ]);
+    let savedRecord: SavedModuleRecordResponse["record"];
 
     try {
       const response = await fetch("/api/modules/maquinas-de-pelucia/records", {
@@ -259,12 +266,16 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       if (!response.ok) {
         throw new Error("Falha ao salvar a Pelucia.");
       }
+      const result = (await response.json()) as SavedModuleRecordResponse;
+      savedRecord = result.record;
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }
 
     clearDraft();
     setReceipt({
+      receiptId: savedRecord?.id,
+      closedAt: savedRecord?.createdAt,
       clientName: values.clientName,
       phone: values.phone,
       code: values.code,
@@ -651,37 +662,54 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
 
           {(() => {
             const message = [
-              "*Comprovante Pelúcia*",
+              "*Fechamento Máquinas de Pelúcia (GRUA)*",
+              ...(receipt.receiptId
+                ? [`Comprovante: ${formatClosingReceiptId(receipt.receiptId, receipt.collectionDate)}`]
+                : []),
               `Cliente: ${receipt.clientName}`,
               `Código: ${receipt.code}`,
               `Máquina: ${receipt.name} #${receipt.machineNumber}`,
               `Data: ${formatShortDate(receipt.collectionDate)}`,
               `Pelúcias: ${receipt.plushCountOut}`,
-              `Bruto: ${formatCurrency(receipt.grossAmount)}`,
-              `*Líquido: ${formatCurrency(receipt.netAmount)}*`,
               `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
+              ...(!hideFinancials
+                ? [
+                    `Bruto: ${formatCurrency(receipt.grossAmount)}`,
+                    `*Líquido: ${formatCurrency(receipt.netAmount)}*`,
+                  ]
+                : []),
+              `Situação: ${saveError ? "Não salvo — confira a conexão" : "Fechamento concluído"}`,
             ].join("\n");
 
             return (
               <div className="mt-3 space-y-3">
                 <WhatsAppReceiptButton
-                  autoOpen
+                  autoOpen={!saveError && !!receipt.phone}
                   defaultPhone={receipt.phone}
+                  closedAt={receipt.closedAt}
                   message={message}
                   title="1ª via — Enviar pro cliente"
                   phoneLabel="Número do cliente"
+                  documentLabel="Via do cliente"
+                  pdfButtonLabel="Gerar via do cliente em PDF"
                 />
                 <WhatsAppReceiptButton
                   defaultPhone={contactPhones.ownerPhone}
+                  closedAt={receipt.closedAt}
                   message={message}
                   title="2ª via — Enviar pro dono"
                   phoneLabel="Número do dono"
+                  documentLabel="Via do dono"
+                  pdfButtonLabel="Gerar via do dono em PDF"
                 />
                 <WhatsAppReceiptButton
                   defaultPhone={contactPhones.staffPhone}
+                  closedAt={receipt.closedAt}
                   message={message}
                   title="3ª via — Enviar pra equipe"
                   phoneLabel="Número da equipe/central"
+                  documentLabel="Via da equipe"
+                  pdfButtonLabel="Gerar via da equipe em PDF"
                 />
               </div>
             );

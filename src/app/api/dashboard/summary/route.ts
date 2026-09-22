@@ -9,6 +9,9 @@ export async function GET() {
   if (!session) {
     return NextResponse.json({ error: "Nao autenticado." }, { status: 401 });
   }
+  if (session.role !== "OWNER") {
+    return NextResponse.json({ error: "Sem permissao." }, { status: 403 });
+  }
 
   return NextResponse.json(await getDashboardOverview(session));
 }

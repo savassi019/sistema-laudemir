@@ -1,5 +1,6 @@
 import { CalendarDays, ChevronRight, ClipboardCheck, MapPin, Plus, UserCheck } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { requireSession } from "@/lib/auth";
 import { formatCurrency } from "@/lib/format";
@@ -23,6 +24,10 @@ function fmtTime(iso: string) {
 
 export default async function AgendaPage() {
   const session = await requireSession("DASHBOARD");
+  if (session.role === "ADMIN") {
+    redirect("/modulos");
+  }
+  const hideFinancials = session.role === "STAFF";
 
   const now = new Date();
   const todayStr = now.toISOString().slice(0, 10);
@@ -74,7 +79,7 @@ export default async function AgendaPage() {
         </div>
 
         {/* Week stats */}
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className={`mt-4 grid gap-2 ${hideFinancials ? "grid-cols-2" : "grid-cols-3"}`}>
           <div className="rounded-xl bg-white/[0.04] p-3 text-center">
             <CalendarDays className="mx-auto mb-1 size-4 text-[#8aa17c]" />
             <p className="text-lg font-bold text-white leading-none">{totalToday}</p>
@@ -85,11 +90,13 @@ export default async function AgendaPage() {
             <p className="text-lg font-bold text-white leading-none">{totalWeek}</p>
             <p className="mt-0.5 text-[10px] text-[#9a958b]">na semana</p>
           </div>
-          <div className="rounded-xl bg-white/[0.04] p-3 text-center">
-            <MapPin className="mx-auto mb-1 size-4 text-[#60a5fa]" />
-            <p className="text-sm font-bold text-[#dbe6d4] leading-none">{formatCurrency(incomeWeek)}</p>
-            <p className="mt-0.5 text-[10px] text-[#9a958b]">resultado</p>
-          </div>
+          {!hideFinancials ? (
+            <div className="rounded-xl bg-white/[0.04] p-3 text-center">
+              <MapPin className="mx-auto mb-1 size-4 text-[#60a5fa]" />
+              <p className="text-sm font-bold text-[#dbe6d4] leading-none">{formatCurrency(incomeWeek)}</p>
+              <p className="mt-0.5 text-[10px] text-[#9a958b]">resultado</p>
+            </div>
+          ) : null}
         </div>
       </section>
 
@@ -164,9 +171,11 @@ export default async function AgendaPage() {
                     </p>
                     <p className="text-xs text-[#9a958b]">{dayVisits.length} visita{dayVisits.length !== 1 ? "s" : ""}</p>
                   </div>
-                  <span className={`shrink-0 rounded-xl px-2.5 py-1 text-xs font-bold ${today ? "bg-[#d1a04f]/20 text-[#f3dfae]" : "bg-white/[0.06] text-[#9a958b]"}`}>
-                    {formatCurrency(dayVisits.reduce((s, v) => s + v.incomeAmount - v.expenseAmount, 0))}
-                  </span>
+                  {!hideFinancials ? (
+                    <span className={`shrink-0 rounded-xl px-2.5 py-1 text-xs font-bold ${today ? "bg-[#d1a04f]/20 text-[#f3dfae]" : "bg-white/[0.06] text-[#9a958b]"}`}>
+                      {formatCurrency(dayVisits.reduce((s, v) => s + v.incomeAmount - v.expenseAmount, 0))}
+                    </span>
+                  ) : null}
                 </div>
                 <div className="divide-y divide-[rgba(255,255,255,0.04)]">
                   {dayVisits.map((v) => (
@@ -185,14 +194,16 @@ export default async function AgendaPage() {
                               : ""}
                         </p>
                       </div>
-                      <div className="shrink-0 text-right">
-                        <p className="text-sm font-semibold text-[#dbe6d4]">
-                          {formatCurrency(v.incomeAmount)}
-                        </p>
-                        {v.expenseAmount > 0 && (
-                          <p className="text-[10px] text-[#f87171]">-{formatCurrency(v.expenseAmount)}</p>
-                        )}
-                      </div>
+                      {!hideFinancials ? (
+                        <div className="shrink-0 text-right">
+                          <p className="text-sm font-semibold text-[#dbe6d4]">
+                            {formatCurrency(v.incomeAmount)}
+                          </p>
+                          {v.expenseAmount > 0 && (
+                            <p className="text-[10px] text-[#f87171]">-{formatCurrency(v.expenseAmount)}</p>
+                          )}
+                        </div>
+                      ) : null}
                     </div>
                   ))}
                 </div>

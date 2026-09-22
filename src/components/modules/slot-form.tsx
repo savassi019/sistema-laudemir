@@ -18,6 +18,7 @@ import { fetchAddressByCep } from "@/lib/cep";
 import { formatCurrency, formatMachineCounter } from "@/lib/format";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
+import { formatClosingReceiptId } from "@/lib/receipt";
 import { calculateSlotCustomerDebt } from "@/lib/slot-finance";
 import { isValidCpf } from "@/lib/validators";
 import {
@@ -61,17 +62,6 @@ function todayStr() {
 
 function isReceiptTestClient(clientName: string) {
   return clientName.trim().toLocaleLowerCase("pt-BR") === "bar do chico";
-}
-
-function formatClosingReceiptId(closingId: string, occurredAt: string) {
-  let hash = 2166136261;
-  for (const character of closingId) {
-    hash ^= character.charCodeAt(0);
-    hash = Math.imul(hash, 16777619);
-  }
-  const year = occurredAt.match(/^\d{4}/)?.[0] ?? String(new Date().getFullYear());
-  const numericId = String((hash >>> 0) % 100_000).padStart(5, "0");
-  return `FECH-${year}-${numericId}`;
 }
 
 // ──────────────────────────────────────────────────────────────────────────

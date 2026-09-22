@@ -25,6 +25,17 @@ function isRecordSlug(slug: string): slug is ModuleSlug {
   return moduleSlugs.includes(slug as ModuleSlug);
 }
 
+function currentBusinessDate() {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${value.year}-${value.month}-${value.day}`;
+}
+
 function buildFallbackRecords(
   moduleTitle: string,
   scopeSummary: Awaited<ReturnType<typeof getModuleScopeSummary>>,
@@ -71,7 +82,11 @@ export default async function ModuleDetailPage({
   }
 
   const fieldSlugs = ["bilhar-pebolim", "maquinas-de-pelucia", "bx", "h-caca-niquel", "carreta-kids", "locacao"];
+  const dailyFinanceSlugs = ["bilhar-pebolim", "maquinas-de-pelucia", "bx", "carreta-kids", "locacao"];
   const isField = fieldSlugs.includes(item.slug);
+  const initialFinanceDate = dailyFinanceSlugs.includes(item.slug)
+    ? currentBusinessDate()
+    : undefined;
   const hideFinancials = session.role === "STAFF";
   const [scopeSummary, records, visitTargets, moduleClients, financialEntries] = await Promise.all([
     getModuleScopeSummary(session, item.module, isRecordSlug(item.slug) ? item.slug : null),
@@ -107,6 +122,8 @@ export default async function ModuleDetailPage({
         overdueClients={overdueClients}
         moduleClients={moduleClients}
         financialEntries={financialEntries}
+        financeInitialFrom={initialFinanceDate}
+        financeInitialTo={initialFinanceDate}
         hideFinancials={hideFinancials}
       />
 

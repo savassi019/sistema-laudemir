@@ -1,6 +1,7 @@
 "use server";
 
-import { requireSession } from "@/lib/auth";
+import { hasModuleAccess, requireSession } from "@/lib/auth";
+import { getModuleBySlug } from "@/lib/module-catalog";
 import {
   getClientPrefillData,
   getSlotClientMachines,
@@ -12,6 +13,16 @@ import {
   type ModuleSlug,
 } from "@/server/services/module-record-service";
 
+function assertSlugAccess(session: Awaited<ReturnType<typeof requireSession>>, slug: string) {
+  if (!moduleSlugs.includes(slug as ModuleSlug)) {
+    throw new Error("Modulo invalido.");
+  }
+  const item = getModuleBySlug(slug);
+  if (!item || !hasModuleAccess(session, item.module)) {
+    throw new Error("Sem permissao para este modulo.");
+  }
+}
+
 export async function listModuleClientRecordsAction(
   slug: string,
   clientId: string,
@@ -19,16 +30,14 @@ export async function listModuleClientRecordsAction(
 ) {
   const session = await requireSession();
 
-  if (!moduleSlugs.includes(slug as ModuleSlug)) {
-    throw new Error("Modulo invalido.");
-  }
+  assertSlugAccess(session, slug);
 
   return listModuleClientRecords(session, slug as ModuleSlug, clientId, clientName);
 }
 
 export async function getClientPrefillDataAction(slug: string, id: string) {
   const session = await requireSession();
-  if (!moduleSlugs.includes(slug as ModuleSlug)) throw new Error("Modulo invalido.");
+  assertSlugAccess(session, slug);
   return getClientPrefillData(session, slug as ModuleSlug, id);
 }
 
@@ -39,7 +48,7 @@ export async function listModuleRecordsAction(
   take = 30,
 ) {
   const session = await requireSession();
-  if (!moduleSlugs.includes(slug as ModuleSlug)) throw new Error("Modulo invalido.");
+  assertSlugAccess(session, slug);
   return listModuleRecords(session, slug as ModuleSlug, take, {
     from: from ? new Date(from) : undefined,
     to:   to   ? new Date(to)   : undefined,
@@ -47,7 +56,7 @@ export async function listModuleRecordsAction(
 }
 
 export async function listBxPrizeRecordsAction() {
-  const session = await requireSession();
+  const session = await requireSession("BX");
   return listBxPrizeRecords(session);
 }
 

@@ -23,6 +23,10 @@ import { cn } from "@/lib/cn";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCnpj, maskCpf, maskPhone, withMask } from "@/lib/masks";
+import {
+  formatClosingReceiptId,
+  type SavedModuleRecordResponse,
+} from "@/lib/receipt";
 import { isValidCnpj, isValidCpf } from "@/lib/validators";
 import {
   createRoutePlanAction,
@@ -118,6 +122,8 @@ type HistoryItem = {
 };
 
 type ReceiptState = {
+  receiptId?: string;
+  closedAt?: string;
   clientName: string;
   phone: string;
   pointName: string;
@@ -518,6 +524,7 @@ export function BilliardForm({
     };
 
     let source = "local";
+    let savedRecord: SavedModuleRecordResponse["record"];
 
     try {
       const response = await fetch("/api/modules/bilhar-pebolim/records", {
@@ -532,8 +539,9 @@ export function BilliardForm({
         throw new Error("Falha ao salvar o fechamento.");
       }
 
-      const result = (await response.json()) as { source?: string };
+      const result = (await response.json()) as SavedModuleRecordResponse;
       source = result.source ?? "local";
+      savedRecord = result.record;
       if (source === "database") {
         refreshRouteData();
       }
@@ -589,6 +597,8 @@ export function BilliardForm({
     ]);
 
     setReceipt({
+      receiptId: savedRecord?.id,
+      closedAt: savedRecord?.createdAt,
       clientName: values.clientName,
       // Campos opcionais: sem o fallback viram `undefined` no comprovante.
       phone: values.phone ?? "",
@@ -1103,22 +1113,31 @@ export function BilliardForm({
                         </p>
                       ) : null}
                     </div>
-                    {!hideFinancials ? (
-                      <WhatsAppReceiptButton
-                        autoOpen
-                        defaultPhone={receipt.phone}
-                        message={[
-                          "*Comprovante Bilhar/Pebolim*",
-                          `Ponto: ${receipt.pointName}`,
-                          `Cliente: ${receipt.clientName}`,
-                          `Data: ${receipt.collectionDate}`,
-                          `Fichas: ${receipt.quantityOfChips}`,
-                          `*Bruto: ${formatCurrency(receipt.grossAmount)}*`,
-                          `Repasse cliente: ${formatCurrency(receipt.clientShare)}`,
-                          `*Resultado: ${formatCurrency(receipt.finalValue)}*`,
-                        ].join("\n")}
-                      />
-                    ) : null}
+                    <WhatsAppReceiptButton
+                      autoOpen={!saveError && !!receipt.phone}
+                      defaultPhone={receipt.phone}
+                      closedAt={receipt.closedAt}
+                      title="Via do cliente — WhatsApp e PDF"
+                      documentLabel="Via do cliente"
+                      pdfButtonLabel="Gerar via do cliente em PDF"
+                      message={[
+                        "*Fechamento Bilhar / Pebolim*",
+                        ...(receipt.receiptId
+                          ? [`Comprovante: ${formatClosingReceiptId(receipt.receiptId, receipt.collectionDate)}`]
+                          : []),
+                        `Cliente: ${receipt.clientName}`,
+                        `Ponto: ${receipt.pointName}`,
+                        `Data: ${formatShortDate(receipt.collectionDate)}`,
+                        `Fichas: ${receipt.quantityOfChips}`,
+                        ...(!hideFinancials
+                          ? [
+                              `*Repasse ao cliente: ${formatCurrency(receipt.clientShare)}*`,
+                              `*Resultado Infinity: ${formatCurrency(receipt.finalValue)}*`,
+                            ]
+                          : []),
+                        `Situação: ${saveError ? "Não salvo — confira a conexão" : "Fechamento concluído"}`,
+                      ].join("\n")}
+                    />
                   </div>
                 ) : null}
 

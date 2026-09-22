@@ -11,7 +11,6 @@ import {
   Notebook,
   Receipt,
   Shield,
-  ShoppingBag,
   Store,
   Table2,
   Ticket,
@@ -29,7 +28,7 @@ export const dynamic = "force-dynamic";
 
 const fieldModules = [
   { href: "/modulos/bilhar-pebolim",       label: "Bilhar / Pebolim",      icon: Table2,       emoji: "🎱" },
-  { href: "/modulos/maquinas-de-pelucia",  label: "Máquinas de Pelúcia",   icon: Gift,         emoji: "🧸" },
+  { href: "/modulos/maquinas-de-pelucia",  label: "Máquinas de Pelúcia (GRUA)", icon: Gift, emoji: "🧸" },
   { href: "/modulos/h-caca-niquel",        label: "H (Caça-níquel)",        icon: Wallet,       emoji: "🎰" },
   { href: "/modulos/bx",                   label: "BX",                    icon: Shield,       emoji: "📦" },
   { href: "/modulos/carreta-kids",         label: "Carreta Kids",          icon: Ticket,       emoji: "🎠" },

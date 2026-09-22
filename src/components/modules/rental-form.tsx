@@ -7,6 +7,10 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import {
+  formatClosingReceiptId,
+  type SavedModuleRecordResponse,
+} from "@/lib/receipt";
 import { FINANCIAL_STATUS_LABEL, PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
@@ -32,6 +36,8 @@ type FormInput = z.input<typeof schema>;
 type FormValues = z.output<typeof schema>;
 
 type ReceiptState = {
+  receiptId?: string;
+  closedAt?: string;
   clientName: string;
   phone: string;
   localName: string;
@@ -93,6 +99,7 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
     const signalAmount = values.signalEnabled
       ? values.totalAmount * (values.signalPercentage / 100)
       : 0;
+    let savedRecord: SavedModuleRecordResponse["record"];
 
     try {
       const response = await fetch("/api/modules/locacao/records", {
@@ -118,11 +125,15 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
       if (!response.ok) {
         throw new Error("Falha ao salvar a locacao.");
       }
+      const result = (await response.json()) as SavedModuleRecordResponse;
+      savedRecord = result.record;
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }
 
     setReceipt({
+      receiptId: savedRecord?.id,
+      closedAt: savedRecord?.createdAt,
       clientName: values.clientName,
       phone: values.phone,
       localName: values.localName,
@@ -297,18 +308,30 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
             <span>Status: {rotuloDeStatus(receipt.paymentStatus, FINANCIAL_STATUS_LABEL)}</span>
           </div>
           <WhatsAppReceiptButton
-            autoOpen
+            autoOpen={!saveError && !!receipt.phone}
             defaultPhone={receipt.phone}
+            closedAt={receipt.closedAt}
+            title="Via do cliente — WhatsApp e PDF"
+            documentLabel="Via do cliente"
+            pdfButtonLabel="Gerar via do cliente em PDF"
             message={[
-              "*Comprovante Locação*",
+              "*Fechamento Locação*",
+              ...(receipt.receiptId
+                ? [`Comprovante: ${formatClosingReceiptId(receipt.receiptId, receipt.eventDate)}`]
+                : []),
               `Cliente: ${receipt.clientName}`,
               `Local: ${receipt.localName}`,
               `Data: ${formatShortDate(receipt.eventDate)}`,
-              `*Total: ${formatCurrency(receipt.totalAmount)}*`,
-              `Sinal: ${formatCurrency(receipt.signalAmount)}`,
-              `Despesa: ${formatCurrency(receipt.expenseAmount)}`,
-              `Saldo: ${formatCurrency(receipt.balanceAmount)}`,
               `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
+              ...(!hideFinancials
+                ? [
+                    `*Total: ${formatCurrency(receipt.totalAmount)}*`,
+                    `Sinal: ${formatCurrency(receipt.signalAmount)}`,
+                    `Despesa: ${formatCurrency(receipt.expenseAmount)}`,
+                    `*Saldo: ${formatCurrency(receipt.balanceAmount)}*`,
+                  ]
+                : []),
+              `Situação: ${saveError ? "Não salvo — confira a conexão" : "Fechamento concluído"}`,
               `Status: ${rotuloDeStatus(receipt.paymentStatus, FINANCIAL_STATUS_LABEL)}`,
             ].join("\n")}
           />

@@ -114,6 +114,8 @@ export function ModuleWorkspace({
   overdueClients = [],
   moduleClients = [],
   financialEntries = [],
+  financeInitialFrom,
+  financeInitialTo,
   hideFinancials = false,
 }: {
   slug: string;
@@ -124,6 +126,8 @@ export function ModuleWorkspace({
   overdueClients?: ClientVisitSummary[];
   moduleClients?: ModuleClientItem[];
   financialEntries?: ModuleFinancialEntryItem[];
+  financeInitialFrom?: string;
+  financeInitialTo?: string;
   hideFinancials?: boolean;
 }) {
   const hasClientConcept = !slugsWithoutClientConcept.has(slug);
@@ -451,7 +455,13 @@ export function ModuleWorkspace({
         ) : null}
 
         {activeSection === "financeiro" ? (
-          <ModuleFinanceSection slug={slug} moduleTitle={moduleTitle} initialEntries={financialEntries} />
+          <ModuleFinanceSection
+            slug={slug}
+            moduleTitle={moduleTitle}
+            initialEntries={financialEntries}
+            initialFromDate={financeInitialFrom}
+            initialToDate={financeInitialTo}
+          />
         ) : null}
 
         {activeSection === "contas-pagar" ? (

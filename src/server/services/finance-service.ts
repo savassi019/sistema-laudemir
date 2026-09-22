@@ -293,6 +293,7 @@ export async function listModuleFinancialEntries(
 
 export async function updateModuleFinancialEntryStatus(
   session: SessionData,
+  module: SystemModule,
   id: string,
   status: "PENDING" | "PARTIAL" | "PAID",
 ): Promise<ModuleFinancialEntryItem> {
@@ -302,7 +303,7 @@ export async function updateModuleFinancialEntryStatus(
   }
 
   const existing = await prisma.financialEntry.findFirstOrThrow({
-    where: { id, organizationId: session.organizationId },
+    where: { id, organizationId: session.organizationId, module },
     select: {
       module: true,
       status: true,

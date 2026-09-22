@@ -27,6 +27,7 @@ export async function listStaff(session: SessionData): Promise<StaffMember[]> {
         status: "ativo",
         role: "STAFF",
         createdAt: new Date().toISOString(),
+        modules: ["BILLIARD"],
       },
       ...getLocalStaff(session),
     ];
@@ -39,7 +40,7 @@ export async function listStaff(session: SessionData): Promise<StaffMember[]> {
         role: { in: ["STAFF", "ADMIN"] },
       },
       orderBy: { createdAt: "desc" },
-      include: { modulePermissions: { select: { module: true } } },
+      include: { modulePermissions: { select: { module: true, canView: true } } },
     });
 
     return users.map((u) => ({
@@ -51,6 +52,7 @@ export async function listStaff(session: SessionData): Promise<StaffMember[]> {
       role: u.role as "STAFF" | "ADMIN",
       createdAt: u.createdAt.toISOString(),
       modules: u.modulePermissions
+        .filter((p) => p.canView)
         .map((p) => p.module as ModuleName)
         .filter((m) => m !== "DASHBOARD"),
     }));
@@ -79,6 +81,7 @@ export async function createStaff(
     status: "ativo",
     role: data.role,
     createdAt: new Date().toISOString(),
+    modules: data.modules,
   };
 
   if (process.env.DEMO_MODE !== "false") {
@@ -124,6 +127,7 @@ export async function createStaff(
       status: "ativo",
       role: user.role as "STAFF" | "ADMIN",
       createdAt: user.createdAt.toISOString(),
+      modules: data.modules,
     };
   } catch (error) {
     if (
@@ -199,16 +203,21 @@ export async function updateStaff(
         prisma.modulePermission.upsert({
           where: { userId_module: { userId, module } },
           create: { organizationId: session.organizationId, userId, module, canView: true, canCreate: true },
-          update: {},
+          // Uma permissao antiga pode existir com canView=false. Marcar o
+          // modulo novamente na tela precisa reativa-la de verdade.
+          update: { canView: true, canCreate: true },
         }),
       ),
     ]);
   } else {
     const permissoes = await prisma.modulePermission.findMany({
       where: { userId, organizationId: session.organizationId },
-      select: { module: true },
+      select: { module: true, canView: true },
     });
-    modulos = permissoes.map((p) => p.module as ModuleName).filter((m) => m !== "DASHBOARD");
+    modulos = permissoes
+      .filter((p) => p.canView)
+      .map((p) => p.module as ModuleName)
+      .filter((m) => m !== "DASHBOARD");
   }
 
   return {

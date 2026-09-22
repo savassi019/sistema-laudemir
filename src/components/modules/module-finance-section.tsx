@@ -98,6 +98,31 @@ function formatDateTime(value: string) {
   });
 }
 
+function businessDateFromTimestamp(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Sao_Paulo",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const mapped = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${mapped.year}-${mapped.month}-${mapped.day}`;
+}
+
+function entriesInPeriod(
+  entries: ModuleFinancialEntryItem[],
+  from?: string,
+  to?: string,
+) {
+  if (!from && !to) return entries;
+  return entries.filter((entry) => {
+    const date = businessDateFromTimestamp(entry.createdAt);
+    return (!from || date >= from) && (!to || date <= to);
+  });
+}
+
 function getWeekMonday(dateStr: string): Date {
   const date = new Date(dateStr);
   const day = date.getDay();
@@ -500,12 +525,18 @@ export function ModuleFinanceSection({
   slug,
   moduleTitle,
   initialEntries,
+  initialFromDate = "",
+  initialToDate = "",
 }: {
   slug: string;
   moduleTitle: string;
   initialEntries: ModuleFinancialEntryItem[];
+  initialFromDate?: string;
+  initialToDate?: string;
 }) {
-  const [entries, setEntries] = useState(initialEntries);
+  const [entries, setEntries] = useState(() =>
+    entriesInPeriod(initialEntries, initialFromDate, initialToDate),
+  );
   const [formOpen, setFormOpen] = useState(false);
   const [newStatus, setNewStatus] = useState<"PENDING" | "PARTIAL" | "PAID">("PENDING");
   const [isPending, startTransition] = useTransition();
@@ -513,8 +544,8 @@ export function ModuleFinanceSection({
   const [saved, setSaved] = useState(false);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [fromDate, setFromDate] = useState("");
-  const [toDate, setToDate] = useState("");
+  const [fromDate, setFromDate] = useState(initialFromDate);
+  const [toDate, setToDate] = useState(initialToDate);
   const [periodLoading, setPeriodLoading] = useState(false);
   const [filter, setFilter] = useState<FilterKey>("todos");
   const [viewMode, setViewMode] = useState<ViewMode>("lista");

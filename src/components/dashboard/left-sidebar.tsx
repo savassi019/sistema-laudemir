@@ -73,7 +73,7 @@ export function LeftSidebar({
   if (session.role === "OWNER") {
     items.push({ href: "/painel", label: "Painel Dono", Icon: Shield });
   }
-  if (session.role === "OWNER" || session.role === "ADMIN") {
+  if (session.role === "OWNER") {
     items.push({ href: "/equipe", label: "Equipe", Icon: Users });
     if (!isModuleDetail) {
       items.push({ href: "/relatorio", label: "Relatório", Icon: FileBarChart2 });
@@ -182,7 +182,7 @@ export function LeftSidebar({
           <div className="rounded-xl bg-white/[0.025] px-2.5 py-2">
             <p className="truncate text-xs font-medium text-white">{session.name}</p>
             <p className="text-[10px] text-[#9a958b]">
-              {session.role === "OWNER" ? "Dono" : session.role === "ADMIN" ? "Admin" : "Funcionário"}
+              {session.role === "OWNER" ? "Dono" : session.role === "ADMIN" ? "Gestor" : "Funcionário"}
             </p>
           </div>
         )}

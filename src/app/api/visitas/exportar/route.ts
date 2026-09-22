@@ -1,6 +1,6 @@
 import { type NextRequest } from "next/server";
 
-import { getSession } from "@/lib/auth";
+import { getSession, hasModuleAccess } from "@/lib/auth";
 import { listVisitsInRange } from "@/server/services/visit-service";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +27,9 @@ export async function GET(request: NextRequest) {
   const session = await getSession();
   if (!session) {
     return new Response("Não autenticado.", { status: 401 });
+  }
+  if (session.role === "STAFF" || !hasModuleAccess(session, "REPORTS")) {
+    return new Response("Sem permissão.", { status: 403 });
   }
 
   const { searchParams } = request.nextUrl;

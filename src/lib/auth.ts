@@ -44,7 +44,44 @@ export async function getSession() {
   }
 
   try {
-    return await verifySession(token);
+    const tokenSession = await verifySession(token);
+
+    // Contas de demonstracao nao existem no banco. Em producao, porem, o
+    // token nao pode ser a fonte definitiva das permissoes: um modulo
+    // removido ou um usuario desativado precisa perder o acesso na proxima
+    // requisicao, e nao apenas quando o JWT expirar (ate 12 horas depois).
+    if (env.demoMode) {
+      return tokenSession;
+    }
+
+    const user = await prisma.user.findFirst({
+      where: {
+        id: tokenSession.userId,
+        organizationId: tokenSession.organizationId,
+        status: "ACTIVE",
+      },
+      include: { modulePermissions: true },
+    });
+
+    if (!user) {
+      return null;
+    }
+
+    const modules: ModuleName[] =
+      user.role === "OWNER"
+        ? ALL_MODULES
+        : user.modulePermissions
+            .filter((permission) => permission.canView)
+            .map((permission) => permission.module as ModuleName);
+
+    return {
+      userId: user.id,
+      organizationId: user.organizationId,
+      name: user.name,
+      email: user.email,
+      role: user.role as SessionData["role"],
+      modules,
+    } satisfies SessionData;
   } catch {
     return null;
   }

@@ -12,6 +12,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
 import { NotificationPermissionBanner, PushNotifier } from "@/components/dashboard/push-notifier";
@@ -32,7 +33,10 @@ function fmtDate(d: Date) {
 
 export default async function DashboardPage() {
   const session = await requireSession("DASHBOARD");
-  const isField = session.role === "STAFF";
+  if (session.role !== "OWNER") {
+    redirect("/modulos");
+  }
+  const isField = false;
   const orgId   = session.organizationId;
 
   const now = new Date();

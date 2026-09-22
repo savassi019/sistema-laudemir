@@ -96,7 +96,7 @@ export function AppShell({
                   {session.role === "OWNER"
                     ? "Dono"
                     : session.role === "ADMIN"
-                      ? "Administrador"
+                      ? "Gestor"
                       : "Funcionário"}
                 </p>
               </div>

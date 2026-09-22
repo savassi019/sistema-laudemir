@@ -186,9 +186,12 @@ export function StaffManagement({
             <label className="block space-y-2">
               <span className={labelClass}>Perfil</span>
               <select name="role" className={selectClass} defaultValue="STAFF">
-                <option value="STAFF">Funcionário</option>
-                <option value="ADMIN">Administrador</option>
+                <option value="STAFF">Funcionário de campo — sem totais</option>
+                <option value="ADMIN">Gestor — vê cálculos liberados</option>
               </select>
+              <span className="block text-[11px] leading-4 text-[#9a958b]">
+                Funcionário registra operações, mas não vê somatórios. Gestor vê o financeiro somente dos módulos marcados.
+              </span>
             </label>
             <div className="space-y-2 sm:col-span-2">
               <label className="block space-y-2">
@@ -275,7 +278,7 @@ export function StaffManagement({
               {assignableModules.map((item) => (
                 <label
                   key={item.module}
-                  className="flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm text-slate-200 active:bg-white/[0.05]"
+                  className="flex min-h-11 items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm text-slate-200 active:bg-white/[0.05]"
                 >
                   <input
                     type="checkbox"
@@ -382,7 +385,7 @@ function StaffCard({
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">{member.name}</p>
               <p className="text-xs text-[#9a958b]">
-                {member.role === "ADMIN" ? "Administrador" : "Funcionário"}
+                {member.role === "ADMIN" ? "Gestor com cálculos" : "Funcionário de campo"}
               </p>
             </div>
           </div>
@@ -519,9 +522,12 @@ function EditStaffForm({
         <label className="block space-y-1.5">
           <span className={labelClass}>Perfil</span>
           <select value={role} onChange={(e) => setRole(e.target.value as "STAFF" | "ADMIN")} className={selectClass}>
-            <option value="STAFF">Funcionário</option>
-            <option value="ADMIN">Administrador</option>
+            <option value="STAFF">Funcionário de campo — sem totais</option>
+            <option value="ADMIN">Gestor — vê cálculos liberados</option>
           </select>
+          <span className="block text-[11px] leading-4 text-[#9a958b]">
+            Para acessar o financeiro diário com cálculos, use Gestor e marque apenas os módulos desejados.
+          </span>
         </label>
 
         <div className="space-y-2">
@@ -540,7 +546,7 @@ function EditStaffForm({
             {assignableModules.map((item) => (
               <label
                 key={item.module}
-                className="flex items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm text-slate-200 active:bg-white/[0.05]"
+                className="flex min-h-11 items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm text-slate-200 active:bg-white/[0.05]"
               >
                 <input
                   type="checkbox"
