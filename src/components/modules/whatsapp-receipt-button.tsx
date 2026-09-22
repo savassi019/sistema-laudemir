@@ -387,7 +387,7 @@ export function WhatsAppReceiptButton({
 
   function buildTextUrl(value: string) {
     const clean = value.replace(/\D/g, "");
-    const withCountry = clean.startsWith("55") ? clean : `55${clean}`;
+    const withCountry = clean.startsWith("55") && clean.length >= 12 ? clean : `55${clean}`;
     return `https://wa.me/${withCountry}?text=${encodeURIComponent(messageRef.current)}`;
   }
 
@@ -527,6 +527,12 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;ba
   }
 
   function handleSendText() {
+    setShareError(null);
+    if (!isReady) {
+      setShowText(true);
+      setShareError("Cadastre ou confira o telefone do cliente para abrir o WhatsApp.");
+      return;
+    }
     if (intervalRef.current) clearInterval(intervalRef.current);
     setCountdown(null);
     window.open(buildTextUrl(phone), "_blank", "noopener,noreferrer");
@@ -586,19 +592,28 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;ba
         <div className="space-y-3 p-4">
           <button
             type="button"
-            onClick={handleShareImage}
-            disabled={generating}
+            onClick={handleSendText}
             className="inline-flex min-h-14 w-full items-center justify-center gap-2.5 rounded-xl bg-[#25d366] px-4 py-4 text-base font-bold text-[#0a1a10] shadow-[0_6px_20px_rgba(37,211,102,0.4)] transition active:scale-[0.98] active:bg-[#22c55e] disabled:opacity-40 disabled:shadow-none"
           >
-            {generating ? (
-              <LoaderCircle className="size-5 animate-spin" />
-            ) : (
-              <ImageIcon className="size-5" />
-            )}
-            {generating ? "Gerando comprovante…" : "Compartilhar comprovante"}
+            <MessageCircle className="size-5" />
+            Enviar comprovante ao cliente
           </button>
 
           {shareError ? <p className="text-center text-xs text-[#f0a08f]">{shareError}</p> : null}
+
+          <button
+            type="button"
+            onClick={handleShareImage}
+            disabled={generating}
+            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#25d366]/20 bg-transparent px-4 py-3 text-sm font-semibold text-[#25d366]/70 transition active:bg-[#25d366]/10 active:text-[#25d366] disabled:opacity-40"
+          >
+            {generating ? (
+              <LoaderCircle className="size-4 animate-spin" />
+            ) : (
+              <ImageIcon className="size-4" />
+            )}
+            {generating ? "Gerando comprovante…" : "Compartilhar imagem do comprovante"}
+          </button>
 
           <button
             type="button"
@@ -615,7 +630,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;ba
               onClick={() => setShowText((current) => !current)}
               className="min-h-11 text-xs text-[#25d366]/50 underline-offset-2 transition active:text-[#25d366]/80"
             >
-              {showText ? "Ocultar opção de texto" : "Ou enviar como texto no WhatsApp"}
+              {showText ? "Ocultar telefone" : "Conferir ou alterar telefone"}
             </button>
           </div>
 
@@ -645,9 +660,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Arial,sans-serif;ba
           ) : null}
 
           <p className="text-center text-[11px] leading-tight text-[#25d366]/30">
-            No celular: compartilha direto para o WhatsApp.
+            O botão verde abre o WhatsApp no telefone cadastrado do cliente.
             <br />
-            No computador: baixa a imagem para enviar manualmente.
+            A imagem também pode ser compartilhada ou baixada separadamente.
           </p>
         </div>
       )}
