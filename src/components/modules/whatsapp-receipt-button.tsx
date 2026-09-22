@@ -9,6 +9,7 @@ type Props = {
   title?: string;
   phoneLabel?: string;
   autoOpen?: boolean;
+  closedAt?: string;
   documentLabel?: string;
   pdfButtonLabel?: string;
 };
@@ -123,7 +124,16 @@ function loadReceiptLogo() {
   });
 }
 
-async function generateReceiptImage(message: string, documentLabel: string): Promise<Blob> {
+function getReceiptTimestamp(closedAt?: string) {
+  const timestamp = closedAt ? new Date(closedAt) : new Date();
+  return Number.isNaN(timestamp.getTime()) ? new Date() : timestamp;
+}
+
+async function generateReceiptImage(
+  message: string,
+  documentLabel: string,
+  closedAt?: string,
+): Promise<Blob> {
   const receipt = parseReceiptMessage(message);
   const W = 620;
   const SCALE = 2;
@@ -369,12 +379,13 @@ async function generateReceiptImage(message: string, documentLabel: string): Pro
   ctx.lineTo(W - HEADER_X, footerTop + 0.5);
   ctx.stroke();
 
-  const generatedDate = new Date().toLocaleDateString("pt-BR", {
+  const receiptTimestamp = getReceiptTimestamp(closedAt);
+  const generatedDate = receiptTimestamp.toLocaleDateString("pt-BR", {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
-  const generatedTime = new Date().toLocaleTimeString("pt-BR", {
+  const generatedTime = receiptTimestamp.toLocaleTimeString("pt-BR", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -418,6 +429,7 @@ export function WhatsAppReceiptButton({
   title = "Enviar comprovante pelo WhatsApp",
   phoneLabel = "Número do cliente",
   autoOpen = false,
+  closedAt,
   documentLabel = "Comprovante",
   pdfButtonLabel = "Baixar como PDF",
 }: Props) {
@@ -446,7 +458,7 @@ export function WhatsAppReceiptButton({
     setGenerating(true);
     setShareError(null);
     try {
-      const blob = await generateReceiptImage(messageRef.current, documentLabel);
+      const blob = await generateReceiptImage(messageRef.current, documentLabel, closedAt);
       const file = new File([blob], "comprovante.png", { type: "image/png" });
       if (typeof navigator !== "undefined" && navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: "Comprovante" });
@@ -472,12 +484,13 @@ export function WhatsAppReceiptButton({
   function handleDownloadPDF() {
     const receipt = parseReceiptMessage(messageRef.current);
     const logoUrl = `${window.location.origin}/infinity-logo.png`;
-    const generatedDate = new Date().toLocaleDateString("pt-BR", {
+    const receiptTimestamp = getReceiptTimestamp(closedAt);
+    const generatedDate = receiptTimestamp.toLocaleDateString("pt-BR", {
       day: "2-digit",
       month: "2-digit",
       year: "numeric",
     });
-    const generatedTime = new Date().toLocaleTimeString("pt-BR", {
+    const generatedTime = receiptTimestamp.toLocaleTimeString("pt-BR", {
       hour: "2-digit",
       minute: "2-digit",
     });

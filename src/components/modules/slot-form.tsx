@@ -63,9 +63,9 @@ function isReceiptTestClient(clientName: string) {
   return clientName.trim().toLocaleLowerCase("pt-BR") === "bar do chico";
 }
 
-function formatClosingReceiptId(recordId: string, occurredAt: string) {
+function formatClosingReceiptId(closingId: string, occurredAt: string) {
   let hash = 2166136261;
-  for (const character of recordId) {
+  for (const character of closingId) {
     hash ^= character.charCodeAt(0);
     hash = Math.imul(hash, 16777619);
   }
@@ -437,6 +437,7 @@ function calculateAutomaticCustomerDebt(
 
 type MachineResult = {
   recordId: string;
+  closedAt: string;
   clientMachineNumber: number;
   clientShareFinal?: number;
   houseAmount?: number;
@@ -658,7 +659,12 @@ function SlotVisitForm({
   const [reviewValues, setReviewValues] = useState<ReviewedVisitValues | null>(null);
   const [results, setResults] = useState<MachineResult[] | null>(null);
   const [isReceiptPreview, setIsReceiptPreview] = useState(false);
-  const [lastSubmission, setLastSubmission] = useState<{ paymentMethod: string; occurredAt: string } | null>(null);
+  const [lastSubmission, setLastSubmission] = useState<{
+    paymentMethod: string;
+    occurredAt: string;
+    closedAt: string;
+    receiptSourceId: string | null;
+  } | null>(null);
   const savingRef = useRef(false);
   const visitKeyRef = useRef<string | null>(null);
   const uploadedPhotosRef = useRef(new Map<string, { file: File; id: string }>());
@@ -761,6 +767,7 @@ function SlotVisitForm({
       const carriesCustomerDebt = index === 0;
       return {
         recordId: `PREVIA-${machine.clientMachineNumber}`,
+        closedAt: new Date().toISOString(),
         clientMachineNumber: machine.clientMachineNumber,
         clientShareFinal:
           split.clientShareFinal -
@@ -781,6 +788,8 @@ function SlotVisitForm({
     setLastSubmission({
       paymentMethod: values.paymentMethod,
       occurredAt: values.occurredAt,
+      closedAt: previewResults[0]?.closedAt ?? new Date().toISOString(),
+      receiptSourceId: null,
     });
     setIsReceiptPreview(true);
     setResults(previewResults);
@@ -834,7 +843,7 @@ function SlotVisitForm({
         }),
       });
       const responseBody = (await response.json().catch(() => null)) as
-        | { error?: string; results?: MachineResult[] }
+        | { error?: string; visitKey?: string; results?: MachineResult[] }
         | null;
       if (!response.ok || !responseBody?.results) {
         throw new Error(responseBody?.error ?? "Não foi possível salvar a visita.");
@@ -845,6 +854,8 @@ function SlotVisitForm({
       setLastSubmission({
         paymentMethod: reviewValues.paymentMethod,
         occurredAt: reviewValues.occurredAt,
+        closedAt: responseBody.results[0]?.closedAt ?? new Date().toISOString(),
+        receiptSourceId: responseBody.visitKey ?? visitKeyRef.current,
       });
       setReviewValues(null);
     } catch (error) {
@@ -915,6 +926,7 @@ function SlotVisitForm({
             <WhatsAppReceiptButton
               defaultPhone={phone}
               autoOpen={!!phone}
+              closedAt={lastSubmission?.closedAt}
               title="Via do cliente — WhatsApp e PDF"
               documentLabel="Via do cliente"
               pdfButtonLabel="Gerar via do cliente em PDF"
@@ -922,7 +934,7 @@ function SlotVisitForm({
                 "*Fechamento H — Caça-níquel*",
                 isReceiptPreview
                   ? ""
-                  : `Comprovante: ${formatClosingReceiptId(results[0]?.recordId ?? "", lastSubmission?.occurredAt ?? todayStr())}`,
+                  : `Comprovante: ${formatClosingReceiptId(lastSubmission?.receiptSourceId ?? "", lastSubmission?.occurredAt ?? todayStr())}`,
                 `Cliente: ${clientName}`,
                 lastSubmission
                   ? `Data: ${new Date(`${lastSubmission.occurredAt}T12:00:00`).toLocaleDateString("pt-BR")}`

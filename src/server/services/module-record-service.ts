@@ -334,6 +334,7 @@ export class SlotVisitConflictError extends Error {}
 
 export type SlotVisitMachineResult = {
   recordId: string;
+  closedAt: string;
   clientMachineNumber: number;
   clientShareFinal?: number;
   houseAmount?: number;
@@ -751,6 +752,7 @@ function mapSlotVisitMachineResult(
 
   return {
     recordId: record.id,
+    closedAt: record.createdAt.toISOString(),
     clientMachineNumber: record.slotMachine.clientMachineNumber,
     ...financials,
   };
