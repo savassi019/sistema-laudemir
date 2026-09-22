@@ -931,7 +931,7 @@ function SlotVisitForm({
               documentLabel="Via do cliente"
               pdfButtonLabel="Gerar via do cliente em PDF"
               message={[
-                "*Fechamento H — Caça-níquel*",
+                "*Fechamento H*",
                 isReceiptPreview
                   ? ""
                   : `Comprovante: ${formatClosingReceiptId(lastSubmission?.receiptSourceId ?? "", lastSubmission?.occurredAt ?? todayStr())}`,
