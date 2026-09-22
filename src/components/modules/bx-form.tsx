@@ -10,6 +10,7 @@ import { fetchAddressByCep } from "@/lib/cep";
 import { formatCurrency } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL, RECEIPT_STATUS_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
+import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import {
@@ -20,6 +21,7 @@ import { isValidCpf } from "@/lib/validators";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { getCurrentUserNameAction } from "@/server/actions/user-actions";
 import { PhotoCaptureInput } from "./photo-capture-input";
+import { SaveStatusBanner, type SaveStatus } from "./save-status-banner";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -176,6 +178,8 @@ export function BxForm({
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const submission = useIdempotentSubmission();
   const [cepLoading, setCepLoading] = useState(false);
   const [cepError, setCepError] = useState<string | null>(null);
   const [loadedClient, setLoadedClient] = useState<LoadedBxClient | null>(null);
@@ -328,6 +332,7 @@ export function BxForm({
     submittingRef.current = true;
     setLoading(true);
     setSaveError(null);
+    setSaveStatus("saving");
 
     const screenPhoto = getFile(values.screenPhoto);
     const paperPhoto = getFile(values.paperPhoto);
@@ -355,7 +360,10 @@ export function BxForm({
     try {
       const response = await fetch("/api/modules/bx/records", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Idempotency-Key": submission.key(),
+        },
         body: JSON.stringify({
           clientName: values.clientName,
           phone: values.phone,
@@ -387,11 +395,18 @@ export function BxForm({
       }
       const result = (await response.json()) as SavedModuleRecordResponse;
       savedRecord = result.record;
+      submission.complete();
+      clearDraft();
+      setSaveStatus("saved");
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
+      setSaveStatus("error");
+      return;
+    } finally {
+      setLoading(false);
+      submittingRef.current = false;
     }
 
-    clearDraft();
     setReceipt({
       receiptId: savedRecord?.id,
       closedAt: savedRecord?.createdAt,
@@ -416,9 +431,6 @@ export function BxForm({
       notes: values.notes,
     });
 
-    setLoading(false);
-
-    submittingRef.current = false;
   }
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -914,11 +926,7 @@ export function BxForm({
         </button>
       </form>
 
-      {saveError ? (
-        <div className="rounded-2xl border border-[#9d6b50]/35 bg-[#2b1e19]/70 p-3 text-sm text-[#f0c9ad]">
-          {saveError}
-        </div>
-      ) : null}
+      <SaveStatusBanner status={saveStatus} />
 
       {receipt ? (
         <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">

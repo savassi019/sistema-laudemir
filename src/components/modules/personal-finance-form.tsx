@@ -12,6 +12,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
 import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
@@ -52,6 +53,7 @@ export function PersonalFinanceForm({
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
+  const submission = useIdempotentSubmission();
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const form = useForm<FormInput, unknown, FormValues>({
@@ -84,7 +86,7 @@ export function PersonalFinanceForm({
     try {
       const response = await fetch("/api/modules/financas-pessoais/records", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Idempotency-Key": submission.key() },
         body: JSON.stringify({
           title: values.title,
           category: values.category,
@@ -99,6 +101,7 @@ export function PersonalFinanceForm({
       if (!response.ok) {
         throw new Error("Falha ao salvar o lancamento.");
       }
+      submission.complete();
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }

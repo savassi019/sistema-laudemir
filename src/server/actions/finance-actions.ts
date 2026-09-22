@@ -6,6 +6,7 @@ import {
   cancelModuleFinancialEntry,
   createFinancialEntry,
   createModuleFinancialEntry,
+  listModuleFinancialAudit,
   listModuleFinancialEntries,
   registerModuleFinancialPayment,
   updateModuleFinancialEntry,
@@ -70,6 +71,11 @@ export async function listModuleFinancialEntriesAction(
       to: to ? parsePeriodDate(to, true) : undefined,
     },
   );
+}
+
+export async function listModuleFinancialAuditAction(slug: string) {
+  const { session, moduleItem } = await requireModuleFinancialAccess(slug);
+  return listModuleFinancialAudit(session, moduleItem.module);
 }
 
 export async function updateModuleFinancialEntryStatusAction(

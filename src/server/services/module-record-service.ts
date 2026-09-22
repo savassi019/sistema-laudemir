@@ -10,6 +10,14 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 
 import { formatCurrency, formatMachineCounter, formatShortDate } from "@/lib/format";
+import {
+  calculateBilliardFinancials,
+  calculateBxFinancials,
+  calculateCarretaFinancials,
+  calculatePlushFinancials,
+  calculateRentalFinancials,
+  calculateSlotMachineSplit,
+} from "@/lib/module-calculations";
 import { prisma } from "@/lib/prisma";
 import { calculateSlotCustomerDebt } from "@/lib/slot-finance";
 import {
@@ -664,37 +672,10 @@ type SlotSplitInput = {
 };
 
 function computeSlotSplit(data: SlotSplitInput) {
-  const incomeDifference = data.currentIncome - data.previousIncome;
-  const expenseDifference = data.currentExpense - data.previousExpense;
-  const netRevenue = incomeDifference - expenseDifference;
-  const finalMachineDebt = data.finalMachineDebt ?? data.negativeAmount ?? 0;
-  const machineDebtChange = finalMachineDebt - (data.previousMachineDebt ?? 0);
-  // O saldo anterior nao pode ser descontado de novo a cada visita. Somente
-  // a variacao do saldo pertence a esta conferencia.
-  const totalNegative = machineDebtChange + (data.feedingNegativeAmount ?? 0);
-  const adjustedTotal = netRevenue - totalNegative;
-  const clientShareBase = adjustedTotal * (data.percentageSplit / 100);
-  const houseShareBase = adjustedTotal - clientShareBase;
-  const greed = data.optionalGreedAmount ?? 0;
-  const clientShareAfterGreed = clientShareBase - greed;
-  const houseShareAfterGreed = houseShareBase + greed;
-  const clientShareFinal = clientShareAfterGreed - (data.customerDebtDiscounted ?? 0);
-  // Divida descontada sai do repasse do cliente e entra na Infinity. Antes o
-  // valor era tirado do cliente, mas nao era somado a lugar nenhum.
-  const houseAmount =
-    houseShareAfterGreed +
-    (data.customerDebtDiscounted ?? 0) -
-    (data.generatedDebtAmount ?? 0);
-
-  return {
-    incomeDifference,
-    expenseDifference,
-    netRevenue,
-    machineDebtChange,
-    adjustedTotal,
-    clientShareFinal,
-    houseAmount,
-  };
+  return calculateSlotMachineSplit({
+    ...data,
+    finalMachineDebt: data.finalMachineDebt ?? data.negativeAmount ?? 0,
+  });
 }
 
 type SlotCollectionWithMachine = Prisma.SlotCollectionGetPayload<{
@@ -1208,7 +1189,7 @@ async function saveWithPrisma(
     case "carreta-kids": {
       const data = createCarretaSchema.parse(payload);
       const basePrice = data.minutesCharged === "15" ? 20 : data.minutesCharged === "30" ? 30 : 40;
-      const totalAmount = Math.max(0, basePrice - (data.expenseAmount ?? 0));
+      const { totalAmount } = calculateCarretaFinancials(basePrice, data.expenseAmount ?? 0);
       const record = await prisma.carretaKidsRecord.create({
         data: {
           organizationId: session.organizationId,
@@ -1295,9 +1276,14 @@ async function saveWithPrisma(
         },
       });
 
-      const clientAmount = data.grossAmount * (data.commissionPercentage / 100);
-      const companyAmount =
-        data.grossAmount - clientAmount - (data.discountAmount ?? 0) - (data.ownerExpenseAmount ?? 0);
+      const plushTotals = calculatePlushFinancials({
+        grossAmount: data.grossAmount,
+        commissionPercentage: data.commissionPercentage,
+        discountAmount: data.discountAmount,
+        ownerExpenseAmount: data.ownerExpenseAmount,
+      });
+      const clientAmount = plushTotals.clientAmount;
+      const companyAmount = plushTotals.netAmount;
 
       const record = await prisma.plushCollection.create({
         data: {
@@ -1475,14 +1461,18 @@ async function saveWithPrisma(
         });
       }
 
-      const companyShare =
-        grossAmount * (1 - data.percentage / 100) -
-        data.employeeCost -
-        installationTotal -
-        data.maintenanceCost -
-        data.otherCost -
-        data.roofDebt -
-        (data.discountAmount ?? 0);
+      const billiardTotals = calculateBilliardFinancials({
+        quantityOfChips: data.quantityOfChips,
+        chipValue: data.chipValue,
+        percentage: data.percentage,
+        employeeCost: data.employeeCost,
+        installationCost: installationTotal,
+        maintenanceCost: data.maintenanceCost,
+        otherCost: data.otherCost,
+        roofDebt: data.roofDebt,
+        discountAmount: data.discountAmount,
+      });
+      const companyShare = billiardTotals.finalValue;
 
       await logFieldVisitForModuleRecord({
         organizationId: session.organizationId,
@@ -1521,8 +1511,13 @@ async function saveWithPrisma(
       // DELIVERED fica como codigo canonico do premio; PRIZE continua aceito para
       // compatibilidade com formularios/rascunhos antigos.
       const receiptStatus = data.receiptStatus === "PRIZE" ? "DELIVERED" : data.receiptStatus;
-      const prizeExpenseAmount = receiptStatus === "DELIVERED" ? data.deliveredAmount : 0;
-      const totalExpenseAmount = data.expenseAmount + prizeExpenseAmount;
+      const bxTotals = calculateBxFinancials({
+        incomeAmount: data.incomeAmount,
+        expenseAmount: data.expenseAmount,
+        deliveredAmount: data.deliveredAmount,
+        discountAmount: data.discountAmount,
+        receiptStatus,
+      });
       const record = await prisma.bxTransaction.create({
         data: {
           organizationId: session.organizationId,
@@ -1545,7 +1540,7 @@ async function saveWithPrisma(
           deliveredAmount: data.deliveredAmount,
           incomeAmount: data.incomeAmount,
           expenseAmount: data.expenseAmount,
-          totalAmount: data.incomeAmount - totalExpenseAmount - data.discountAmount,
+          totalAmount: bxTotals.netAmount,
           discountAmount: data.discountAmount,
           customerDebt: data.customerDebt ?? 0,
           generatedDebtAmount:
@@ -1566,7 +1561,7 @@ async function saveWithPrisma(
         visitType: "BX",
         occurredAt: record.occurredAt,
         incomeAmount: Number(record.incomeAmount),
-        expenseAmount: totalExpenseAmount,
+        expenseAmount: bxTotals.expenseAmount,
         clientName: record.clientName ?? null,
         clientPhone: record.phone ?? null,
       }).catch((e) => console.error("[module-record-service] logFieldVisit bx falhou:", e));
@@ -1982,8 +1977,12 @@ async function saveWithPrisma(
     }
     case "locacao": {
       const data = createRentalSchema.parse(payload);
-      const signalAmount = data.signalEnabled ? data.totalAmount * (data.signalPercentage / 100) : 0;
-      const balanceAmount = data.totalAmount - signalAmount - (data.expenseAmount ?? 0);
+      const { signalAmount, balanceAmount } = calculateRentalFinancials({
+        totalAmount: data.totalAmount,
+        signalEnabled: data.signalEnabled ?? false,
+        signalPercentage: data.signalPercentage,
+        expenseAmount: data.expenseAmount,
+      });
 
       const record = await prisma.rentalOrder.create({
         data: {
@@ -2106,23 +2105,13 @@ function getBxFinancialAmounts(record: {
   deliveredAmount: unknown;
   discountAmount: unknown;
 }) {
-  const incomeAmount = Number(record.incomeAmount ?? 0);
-  const operatingExpenseAmount = Number(record.expenseAmount ?? 0);
-  const prizeExpenseAmount =
-    record.receiptStatus === "DELIVERED" || record.receiptStatus === "PRIZE"
-      ? Number(record.deliveredAmount ?? 0)
-      : 0;
-  const expenseAmount = operatingExpenseAmount + prizeExpenseAmount;
-  const discountAmount = Number(record.discountAmount ?? 0);
-
-  return {
-    incomeAmount,
-    operatingExpenseAmount,
-    prizeExpenseAmount,
-    expenseAmount,
-    discountAmount,
-    netAmount: incomeAmount - expenseAmount - discountAmount,
-  };
+  return calculateBxFinancials({
+    incomeAmount: Number(record.incomeAmount ?? 0),
+    expenseAmount: Number(record.expenseAmount ?? 0),
+    deliveredAmount: Number(record.deliveredAmount ?? 0),
+    discountAmount: Number(record.discountAmount ?? 0),
+    receiptStatus: record.receiptStatus,
+  });
 }
 
 /**

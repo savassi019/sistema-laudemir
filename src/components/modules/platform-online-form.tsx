@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 import { PAYMENT_METHOD_LABEL, PLATFORM_STATUS_LABEL, rotuloDeStatus } from "@/lib/status-labels";
@@ -43,6 +44,7 @@ export function PlatformOnlineForm({
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
+  const submission = useIdempotentSubmission();
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const form = useForm<FormInput, unknown, FormValues>({
@@ -80,7 +82,7 @@ export function PlatformOnlineForm({
     try {
       const response = await fetch("/api/modules/plataforma-online/records", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Idempotency-Key": submission.key() },
         body: JSON.stringify({
           movementDate: values.movementDate,
           description: values.description,
@@ -96,6 +98,7 @@ export function PlatformOnlineForm({
       if (!response.ok) {
         throw new Error("Falha ao salvar a plataforma.");
       }
+      submission.complete();
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }

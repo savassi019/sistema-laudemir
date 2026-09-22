@@ -11,6 +11,7 @@ import {
   History,
   Inbox,
   CalendarDays,
+  FileCheck2,
   MapPin,
   Receipt,
   Route,
@@ -31,6 +32,7 @@ import { MarketingCalendar } from "@/components/modules/marketing-calendar";
 import { MarketingHome } from "@/components/modules/marketing-home";
 import { MarketingCrmView } from "@/components/modules/marketing-crm-view";
 import { ModuleAccountsPayable } from "@/components/modules/module-accounts-payable";
+import { ModuleReceiptCenter } from "@/components/modules/module-receipt-center";
 import { MarketingAccounts } from "@/components/modules/marketing-accounts";
 import { ModuleFinanceSection } from "@/components/modules/module-finance-section";
 import { ModuleHistoryOverview } from "@/components/modules/module-history-overview";
@@ -47,7 +49,7 @@ import type { ModuleClientItem, ModuleRecordItem } from "@/server/services/modul
 import type { ModuleScopeSummary } from "@/server/services/module-scope-service";
 import type { ClientListItem, ClientVisitSummary } from "@/types/app";
 
-type SectionKey = "operacao" | "visita" | "premio" | "rotas" | "calendario" | "clientes" | "financeiro" | "contas-pagar" | "historico";
+type SectionKey = "operacao" | "visita" | "premio" | "rotas" | "calendario" | "clientes" | "financeiro" | "contas-pagar" | "comprovantes" | "historico";
 
 type ModuleFormProps = {
   hideFinancials?: boolean;
@@ -89,10 +91,11 @@ const SECTION_CFG: Record<SectionKey, SectionCfg> = {
   clientes:      { label: "Clientes",   description: "Pontos cadastrados",      icon: UserPlus,      accent: "#60a5fa", accentBg: "bg-[#60a5fa]/15", accentText: "text-[#93c5fd]" },
   financeiro:    { label: "Financeiro", description: "Entradas, saídas e relatório", icon: WalletCards,   accent: "#4ade80", accentBg: "bg-[#4ade80]/15", accentText: "text-[#86efac]" },
   "contas-pagar":{ label: "Contas",     description: "A pagar e receber",       icon: Receipt,       accent: "#fb923c", accentBg: "bg-[#fb923c]/15", accentText: "text-[#fdba74]" },
+  comprovantes:  { label: "Comprovantes", description: "Reenviar ou baixar uma via", icon: FileCheck2, accent: "#38bdf8", accentBg: "bg-[#38bdf8]/15", accentText: "text-[#7dd3fc]" },
   historico:     { label: "Histórico",  description: "Registros anteriores",    icon: History,       accent: "#c8bef5", accentBg: "bg-[#c8bef5]/12", accentText: "text-[#ddd6fe]" },
 };
 
-const ALL_SECTIONS: SectionKey[] = ["operacao", "visita", "premio", "rotas", "calendario", "clientes", "financeiro", "contas-pagar", "historico"];
+const ALL_SECTIONS: SectionKey[] = ["operacao", "visita", "premio", "rotas", "calendario", "clientes", "financeiro", "contas-pagar", "comprovantes", "historico"];
 
 const slugsWithoutClientConcept = new Set(["mercado-autonomo", "plataforma-online", "financas-pessoais"]);
 // Rotas de campo hoje so existem no Bilhar (RoutePlan/BilliardPoint).
@@ -101,6 +104,9 @@ const slugsWithRoutes = new Set(["bilhar-pebolim"]);
 const slugsWithCalendar = new Set(["marketing"]);
 // O premio e registrado no proprio fechamento do BX.
 const slugsWithPremio = new Set(["bx"]);
+const slugsWithReceipts = new Set([
+  "bilhar-pebolim", "maquinas-de-pelucia", "bx", "h-caca-niquel", "carreta-kids", "locacao",
+]);
 const slugsWithVisitTracking = new Set([
   "bilhar-pebolim", "maquinas-de-pelucia", "bx", "h-caca-niquel", "carreta-kids", "locacao",
 ]);
@@ -186,6 +192,7 @@ export function ModuleWorkspace({
     // (cliente + despesas da agencia juntos), entao nao reabre o problema.
     if (k === "financeiro"    && (hideFinancials || hasCalendar)) return false;
     if (k === "contas-pagar"  && hideFinancials)                  return false;
+    if (k === "comprovantes"  && !slugsWithReceipts.has(slug))    return false;
     return true;
   });
 
@@ -472,6 +479,10 @@ export function ModuleWorkspace({
           )
         ) : null}
 
+        {activeSection === "comprovantes" ? (
+          <ModuleReceiptCenter slug={slug} />
+        ) : null}
+
         {activeSection === "historico" ? (
           slug === "bilhar-pebolim" ? (
             <BilliardHistoryOverview hideFinancials={hideFinancials} />
@@ -518,7 +529,27 @@ export function ModuleWorkspace({
         </div>
       ) : null}
 
-      {/* Alerta de pendências */}
+      {/* Pendencias financeiras ficam visiveis ja na entrada do modulo. */}
+      {pendingCount > 0 ? (
+        <button
+          type="button"
+          onClick={() => openSection("contas-pagar")}
+          className="flex min-h-16 w-full items-center gap-3 rounded-2xl border border-[#fbbf24]/30 bg-[#211a0b]/80 px-4 py-3 text-left active:scale-[0.99]"
+        >
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#fbbf24]/12 text-[#fcd34d]">
+            <Inbox className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold text-[#fde68a]">
+              {pendingCount} {pendingCount === 1 ? "conta pendente" : "contas pendentes"}
+            </p>
+            <p className="mt-0.5 text-xs text-[#c8ad68]">Abra para receber, pagar ou conferir o saldo.</p>
+          </div>
+          <ChevronRight className="size-4 shrink-0 text-[#fbbf24]/60" />
+        </button>
+      ) : null}
+
+      {/* Alerta de visitas atrasadas */}
       {hasVisitTracking && overdueClients.length > 0 ? (
         <button
           type="button"

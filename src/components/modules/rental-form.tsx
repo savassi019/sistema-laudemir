@@ -7,12 +7,14 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
 import {
   formatClosingReceiptId,
   type SavedModuleRecordResponse,
 } from "@/lib/receipt";
 import { FINANCIAL_STATUS_LABEL, PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
+import { SaveStatusBanner, type SaveStatus } from "./save-status-banner";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -57,6 +59,8 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const submission = useIdempotentSubmission();
   const [loadedClient, setLoadedClient] = useState<LoadedRentalClient | null>(null);
   const [clientLoading, setClientLoading] = useState(Boolean(initialClientId));
 
@@ -95,6 +99,7 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
     submittingRef.current = true;
     setLoading(true);
     setSaveError(null);
+    setSaveStatus("saving");
 
     const signalAmount = values.signalEnabled
       ? values.totalAmount * (values.signalPercentage / 100)
@@ -104,7 +109,10 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
     try {
       const response = await fetch("/api/modules/locacao/records", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Idempotency-Key": submission.key(),
+        },
         body: JSON.stringify({
           clientName: values.clientName,
           phone: values.phone,
@@ -127,8 +135,15 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
       }
       const result = (await response.json()) as SavedModuleRecordResponse;
       savedRecord = result.record;
+      submission.complete();
+      setSaveStatus("saved");
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
+      setSaveStatus("error");
+      return;
+    } finally {
+      setLoading(false);
+      submittingRef.current = false;
     }
 
     setReceipt({
@@ -146,9 +161,6 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
       paymentStatus: values.paymentStatus,
     });
 
-    setLoading(false);
-
-    submittingRef.current = false;
   });
 
   return (
@@ -281,11 +293,7 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
         </button>
       </form>
 
-      {saveError ? (
-        <div className="rounded-2xl border border-[#9d6b50]/35 bg-[#2b1e19]/70 p-3 text-sm text-[#f0c9ad]">
-          {saveError}
-        </div>
-      ) : null}
+      <SaveStatusBanner status={saveStatus} />
 
       {receipt ? (
         <article className="rounded-2xl border border-[#8aa17c]/25 bg-[#243528]/72 p-4">

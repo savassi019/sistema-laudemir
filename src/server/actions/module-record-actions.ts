@@ -12,6 +12,10 @@ import {
   registerSlotClient,
   type ModuleSlug,
 } from "@/server/services/module-record-service";
+import {
+  listModuleReceipts,
+  receiptModuleSlugs,
+} from "@/server/services/module-receipt-service";
 
 function assertSlugAccess(session: Awaited<ReturnType<typeof requireSession>>, slug: string) {
   if (!moduleSlugs.includes(slug as ModuleSlug)) {
@@ -53,6 +57,13 @@ export async function listModuleRecordsAction(
     from: from ? new Date(from) : undefined,
     to:   to   ? new Date(to)   : undefined,
   });
+}
+
+export async function listModuleReceiptsAction(slug: string) {
+  const session = await requireSession();
+  assertSlugAccess(session, slug);
+  if (!receiptModuleSlugs.includes(slug as ModuleSlug)) return [];
+  return listModuleReceipts(session, slug as ModuleSlug);
 }
 
 export async function listBxPrizeRecordsAction() {

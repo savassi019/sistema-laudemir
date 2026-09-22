@@ -21,6 +21,7 @@ import { z } from "zod";
 import { fetchAddressByCep } from "@/lib/cep";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCnpj, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import {
@@ -41,6 +42,7 @@ import type {
 } from "@/server/services/billiard-route-service";
 import { BilliardPointHistoryList } from "./billiard-point-history-list";
 import { PhotoCaptureInput } from "./photo-capture-input";
+import { SaveStatusBanner, type SaveStatus } from "./save-status-banner";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -245,8 +247,10 @@ export function BilliardForm({
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [stepError, setStepError] = useState<string | null>(null);
   const submittingRef = useRef(false);
+  const submission = useIdempotentSubmission();
 
   async function refreshRouteData() {
     setLoadingPoints(true);
@@ -499,6 +503,7 @@ export function BilliardForm({
     submittingRef.current = true;
     setLoading(true);
     setSaveError(null);
+    setSaveStatus("saving");
 
     const photoNames = [
       getFileName(values.photo),
@@ -531,6 +536,7 @@ export function BilliardForm({
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "X-Idempotency-Key": submission.key(),
         },
         body: JSON.stringify(payload),
       });
@@ -542,11 +548,18 @@ export function BilliardForm({
       const result = (await response.json()) as SavedModuleRecordResponse;
       source = result.source ?? "local";
       savedRecord = result.record;
+      submission.complete();
+      setSaveStatus("saved");
       if (source === "database") {
         refreshRouteData();
       }
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
+      setSaveStatus("error");
+      return;
+    } finally {
+      setLoading(false);
+      submittingRef.current = false;
     }
 
     const newStatus = totals.clothWarning
@@ -620,8 +633,6 @@ export function BilliardForm({
     });
 
     setActiveStep("resumo");
-    setLoading(false);
-    submittingRef.current = false;
   });
 
   return (
@@ -1330,11 +1341,7 @@ export function BilliardForm({
               </StepPanel>
             ) : null}
 
-            {saveError ? (
-              <div className="rounded-2xl border border-[#9d6b50]/35 bg-[#2b1e19]/70 p-3 text-sm text-[#f0c9ad]">
-                {saveError}
-              </div>
-            ) : null}
+            <SaveStatusBanner status={saveStatus} />
 
             <div className="sticky bottom-20 z-10 rounded-2xl border border-white/10 bg-[#090d0c]/92 p-2 shadow-[0_18px_50px_rgba(0,0,0,0.35)] backdrop-blur md:static md:bg-transparent md:p-0 md:shadow-none md:backdrop-blur-0">
               {stepError ? (

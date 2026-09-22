@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
 import { demoAccounts } from "@/data/demo";
+import { canAccessModule } from "@/lib/access-policy";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import type { ModuleName, SessionData } from "@/types/app";
@@ -102,7 +103,7 @@ export async function requireSession(module?: ModuleName) {
 }
 
 export function hasModuleAccess(session: SessionData, module: ModuleName) {
-  return session.role === "OWNER" || session.modules.includes(module);
+  return canAccessModule(session.role, session.modules, module);
 }
 
 export async function authenticateUser(email: string, password: string) {

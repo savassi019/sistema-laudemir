@@ -3,8 +3,15 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 
 import { demoFinance } from "@/data/demo";
+import { canViewCalculatedFinancials } from "@/lib/access-policy";
 import { formatCurrency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
+import {
+  DIRECTION_LABEL,
+  FINANCIAL_STATUS_LABEL,
+  PAYMENT_METHOD_LABEL,
+  rotuloDeStatus,
+} from "@/lib/status-labels";
 import { listModuleRecords, type ModuleSlug } from "@/server/services/module-record-service";
 import type { FinanceEntryListItem, FinanceOverview, SessionData } from "@/types/app";
 
@@ -125,8 +132,117 @@ export type ModuleFinancialEntryItem = {
   createdAt: string;
 };
 
+export type ModuleFinancialAuditItem = {
+  id: string;
+  action: string;
+  actionLabel: string;
+  entityId: string;
+  userName: string;
+  changes: string[];
+  createdAt: string;
+};
+
+const AUDIT_ACTION_LABEL: Record<string, string> = {
+  FINANCIAL_ENTRY_CREATED: "Lançamento criado",
+  FINANCIAL_PAYMENT_REGISTERED: "Pagamento registrado",
+  FINANCIAL_ENTRY_UPDATED: "Lançamento corrigido",
+  FINANCIAL_ENTRY_CANCELLED: "Lançamento estornado",
+  FINANCIAL_STATUS_PENDING: "Marcado como pendente",
+};
+
+function asAuditData(value: Prisma.JsonValue | null): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function auditMoney(value: unknown) {
+  return typeof value === "number" ? formatCurrency(value) : null;
+}
+
+function auditStatus(value: unknown) {
+  return typeof value === "string"
+    ? rotuloDeStatus(value, FINANCIAL_STATUS_LABEL)
+    : null;
+}
+
+function buildAuditChanges(
+  action: string,
+  oldValue: Prisma.JsonValue | null,
+  newValue: Prisma.JsonValue | null,
+) {
+  const before = asAuditData(oldValue);
+  const after = asAuditData(newValue);
+  const changes: string[] = [];
+
+  if (action === "FINANCIAL_ENTRY_CREATED") {
+    if (typeof after.description === "string") changes.push(`Descrição: ${after.description}`);
+    if (typeof after.direction === "string") {
+      changes.push(`Tipo: ${rotuloDeStatus(after.direction, DIRECTION_LABEL)}`);
+    }
+    const total = auditMoney(after.totalAmount);
+    if (total) changes.push(`Valor: ${total}`);
+    const status = auditStatus(after.status);
+    if (status) changes.push(`Situação: ${status}`);
+    return changes;
+  }
+
+  if (action === "FINANCIAL_PAYMENT_REGISTERED") {
+    const amount = auditMoney(after.amount);
+    if (amount) changes.push(`Pagamento: ${amount}`);
+    const oldRemaining = auditMoney(before.remainingAmount);
+    const newRemaining = auditMoney(after.remainingAmount);
+    if (oldRemaining && newRemaining) changes.push(`Saldo: ${oldRemaining} → ${newRemaining}`);
+    if (typeof after.method === "string") {
+      changes.push(`Forma: ${rotuloDeStatus(after.method, PAYMENT_METHOD_LABEL)}`);
+    }
+    return changes;
+  }
+
+  if (before.description !== after.description && typeof after.description === "string") {
+    changes.push(`Descrição: ${String(before.description ?? "-")} → ${after.description}`);
+  }
+  const oldTotal = auditMoney(before.totalAmount);
+  const newTotal = auditMoney(after.totalAmount);
+  if (oldTotal && newTotal && oldTotal !== newTotal) changes.push(`Valor: ${oldTotal} → ${newTotal}`);
+  const oldStatus = auditStatus(before.status);
+  const newStatus = auditStatus(after.status);
+  if (oldStatus && newStatus && oldStatus !== newStatus) {
+    changes.push(`Situação: ${oldStatus} → ${newStatus}`);
+  }
+  return changes.length > 0 ? changes : ["Alteração registrada com histórico preservado."];
+}
+
+export async function listModuleFinancialAudit(
+  session: SessionData,
+  module: SystemModule,
+  take = 50,
+): Promise<ModuleFinancialAuditItem[]> {
+  assertModuleFinancialAccess(session);
+  const logs = await prisma.auditLog.findMany({
+    where: {
+      organizationId: session.organizationId,
+      module,
+      action: { startsWith: "FINANCIAL_" },
+    },
+    include: { user: { select: { name: true } } },
+    orderBy: { createdAt: "desc" },
+    take: Math.min(Math.max(take, 1), 100),
+  });
+
+  return logs.map((log) => ({
+    id: log.id,
+    action: log.action,
+    actionLabel: AUDIT_ACTION_LABEL[log.action] ?? "Alteração financeira",
+    entityId: log.entityId,
+    userName: log.user?.name ?? "Sistema",
+    changes: buildAuditChanges(log.action, log.oldData, log.newData),
+    createdAt: log.createdAt.toISOString(),
+  }));
+}
+
 function assertModuleFinancialAccess(session: SessionData) {
-  if (session.role === "STAFF") {
+  if (!canViewCalculatedFinancials(session.role)) {
     throw new Error("Sem permissao para acessar valores financeiros.");
   }
 }

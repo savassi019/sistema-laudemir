@@ -30,11 +30,13 @@ import { formatCurrency, formatShortDate } from "@/lib/format";
 import {
   cancelModuleFinancialEntryAction,
   createModuleFinancialEntryAction,
+  listModuleFinancialAuditAction,
   listModuleFinancialEntriesAction,
   registerModuleFinancialPaymentAction,
   updateModuleFinancialEntryAction,
 } from "@/server/actions/finance-actions";
 import type {
+  ModuleFinancialAuditItem,
   ModuleFinancialEntryItem,
   ModuleFinancialStatus,
 } from "@/server/services/finance-service";
@@ -562,6 +564,10 @@ export function ModuleFinanceSection({
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState("");
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const [auditItems, setAuditItems] = useState<ModuleFinancialAuditItem[]>([]);
 
   const activeEntries = useMemo(
     () => entries.filter((entry) => entry.status !== "CANCELLED"),
@@ -705,6 +711,24 @@ export function ModuleFinanceSection({
     setCategoryFilter("");
     setOperatorFilter("");
     setFilter("todos");
+  }
+
+  async function loadAudit() {
+    setAuditLoading(true);
+    setAuditError(null);
+    try {
+      setAuditItems(await listModuleFinancialAuditAction(slug));
+    } catch (caught) {
+      setAuditError(getErrorMessage(caught, "Não foi possível carregar a auditoria."));
+    } finally {
+      setAuditLoading(false);
+    }
+  }
+
+  function toggleAudit() {
+    const next = !auditOpen;
+    setAuditOpen(next);
+    if (next) void loadAudit();
   }
 
   function handleDateSearch() {
@@ -1089,6 +1113,54 @@ export function ModuleFinanceSection({
             <label className="block space-y-1.5"><span className={labelClass}>Observação</span><input name="notes" className={fieldClass} placeholder="Opcional" /></label>
             <button type="submit" disabled={isPending} className="min-h-11 w-full rounded-xl bg-[#d1a04f] px-4 text-sm font-semibold text-[#0d0a05] disabled:opacity-50">{isPending ? "Salvando..." : "Salvar lançamento"}</button>
           </form>
+        ) : null}
+      </div>
+
+      <div className="rounded-2xl border border-white/[0.08] bg-[#0b0f0e]/35 p-4">
+        <button
+          type="button"
+          onClick={toggleAudit}
+          className="flex min-h-11 w-full items-center gap-3 text-left"
+        >
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-[#60a5fa]/12 text-[#93c5fd]">
+            <History className="size-4" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="text-sm font-semibold text-white">Auditoria financeira</h2>
+            <p className="mt-0.5 text-xs text-[#9a958b]">Quem alterou, quando e o que mudou.</p>
+          </div>
+          {auditLoading ? (
+            <LoaderCircle className="size-4 animate-spin text-[#9a958b]" />
+          ) : auditOpen ? (
+            <ChevronUp className="size-4 text-[#9a958b]" />
+          ) : (
+            <ChevronDown className="size-4 text-[#9a958b]" />
+          )}
+        </button>
+
+        {auditOpen ? (
+          <div className="mt-3 space-y-2 border-t border-white/[0.08] pt-3">
+            {auditError ? <p role="alert" className="text-sm text-[#fca5a5]">{auditError}</p> : null}
+            {!auditLoading && !auditError && auditItems.length === 0 ? (
+              <p className="py-4 text-center text-sm text-[#7e786d]">Nenhuma alteração financeira registrada.</p>
+            ) : null}
+            {auditItems.map((item) => (
+              <article key={item.id} className="rounded-xl border border-white/[0.08] bg-[#111513] p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-white">{item.actionLabel}</p>
+                    <p className="mt-1 text-xs text-[#a9a398]">{item.userName}</p>
+                  </div>
+                  <time className="shrink-0 text-right text-[10px] leading-4 text-[#7e786d]">
+                    {formatDateTime(item.createdAt)}
+                  </time>
+                </div>
+                <ul className="mt-2 space-y-1 text-xs leading-5 text-[#c9c2b4]">
+                  {item.changes.map((change) => <li key={change}>• {change}</li>)}
+                </ul>
+              </article>
+            ))}
+          </div>
         ) : null}
       </div>
 

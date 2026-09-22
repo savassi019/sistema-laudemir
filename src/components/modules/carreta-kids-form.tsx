@@ -9,11 +9,13 @@ import { z } from "zod";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
+import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
 import {
   formatClosingReceiptId,
   type SavedModuleRecordResponse,
 } from "@/lib/receipt";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
+import { SaveStatusBanner, type SaveStatus } from "./save-status-banner";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -82,6 +84,8 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const submission = useIdempotentSubmission();
   const tierManuallySet = useRef(false);
   const [loadedClient, setLoadedClient] = useState<LoadedCarretaClient | null>(null);
   const [clientLoading, setClientLoading] = useState(Boolean(initialClientId));
@@ -138,6 +142,7 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
     submittingRef.current = true;
     setLoading(true);
     setSaveError(null);
+    setSaveStatus("saving");
 
     const totalValue = Math.max(0, baseValue - Number(values.expenseAmount));
     let savedRecord: SavedModuleRecordResponse["record"];
@@ -145,7 +150,10 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
     try {
       const response = await fetch("/api/modules/carreta-kids/records", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Idempotency-Key": submission.key(),
+        },
         body: JSON.stringify({
           localName: values.localName,
           serviceDate: values.serviceDate,
@@ -165,11 +173,18 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
       }
       const result = (await response.json()) as SavedModuleRecordResponse;
       savedRecord = result.record;
+      submission.complete();
+      clearDraft();
+      setSaveStatus("saved");
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
+      setSaveStatus("error");
+      return;
+    } finally {
+      setLoading(false);
+      submittingRef.current = false;
     }
 
-    clearDraft();
     setReceipt({
       receiptId: savedRecord?.id,
       closedAt: savedRecord?.createdAt,
@@ -186,8 +201,6 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
       totalValue,
       notes: values.notes,
     });
-    setLoading(false);
-    submittingRef.current = false;
   });
 
   return (
@@ -380,11 +393,7 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
         </button>
       </form>
 
-      {saveError ? (
-        <div className="rounded-2xl border border-[#9d6b50]/35 bg-[#2b1e19]/70 p-3 text-sm text-[#f0c9ad]">
-          {saveError}
-        </div>
-      ) : null}
+      <SaveStatusBanner status={saveStatus} />
 
       {receipt ? (
         <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">

@@ -7,6 +7,7 @@ import { useForm, useWatch } from "react-hook-form";
 import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
 import { DIRECTION_LABEL, PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { fieldClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
@@ -39,6 +40,7 @@ export function MarketEntryForm({ hideFinancials = false }: { hideFinancials?: b
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
+  const submission = useIdempotentSubmission();
   const [saveError, setSaveError] = useState<string | null>(null);
 
   const form = useForm<FormInput, unknown, FormValues>({
@@ -75,7 +77,7 @@ export function MarketEntryForm({ hideFinancials = false }: { hideFinancials?: b
     try {
       const response = await fetch("/api/modules/mercado-autonomo/records", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", "X-Idempotency-Key": submission.key() },
         body: JSON.stringify({
           movementDate: values.movementDate,
           description: values.description,
@@ -90,6 +92,7 @@ export function MarketEntryForm({ hideFinancials = false }: { hideFinancials?: b
       if (!response.ok) {
         throw new Error("Falha ao salvar o movimento.");
       }
+      submission.complete();
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
     }

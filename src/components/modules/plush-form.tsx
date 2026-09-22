@@ -9,6 +9,7 @@ import { z } from "zod";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
+import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
 import { maskCpf, maskPhone, withMask } from "@/lib/masks";
 import {
   formatClosingReceiptId,
@@ -18,6 +19,7 @@ import { isValidCpf } from "@/lib/validators";
 import { getClientPrefillDataAction } from "@/server/actions/module-record-actions";
 import { getContactPhonesAction } from "@/server/actions/settings-actions";
 import { PhotoCaptureInput } from "./photo-capture-input";
+import { SaveStatusBanner, type SaveStatus } from "./save-status-banner";
 import { fieldClass, hintClass, labelClass, selectClass, textareaClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
@@ -138,6 +140,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
   const [loading, setLoading] = useState(false);
   const submittingRef = useRef(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
+  const submission = useIdempotentSubmission();
   const [contactPhones, setContactPhones] = useState({ ownerPhone: "", staffPhone: "" });
   const compensationManuallySet = useRef(false);
   const [loadedMachine, setLoadedMachine] = useState<LoadedMachine | null>(null);
@@ -221,6 +225,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
     submittingRef.current = true;
     setLoading(true);
     setSaveError(null);
+    setSaveStatus("saving");
 
     const coinPhoto = getFile(values.coinPhoto);
     const giftPhoto = getFile(values.giftPhoto);
@@ -234,7 +239,10 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
     try {
       const response = await fetch("/api/modules/maquinas-de-pelucia/records", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "X-Idempotency-Key": submission.key(),
+        },
         body: JSON.stringify({
           clientName: values.clientName,
           cpf: values.cpf,
@@ -268,11 +276,18 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       }
       const result = (await response.json()) as SavedModuleRecordResponse;
       savedRecord = result.record;
+      submission.complete();
+      clearDraft();
+      setSaveStatus("saved");
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
+      setSaveStatus("error");
+      return;
+    } finally {
+      setLoading(false);
+      submittingRef.current = false;
     }
 
-    clearDraft();
     setReceipt({
       receiptId: savedRecord?.id,
       closedAt: savedRecord?.createdAt,
@@ -294,9 +309,6 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       notes: values.notes,
     });
 
-    setLoading(false);
-
-    submittingRef.current = false;
   });
 
   const photoRuleText = [
@@ -626,11 +638,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
         </button>
       </form>
 
-      {saveError ? (
-        <div className="rounded-2xl border border-[#9d6b50]/35 bg-[#2b1e19]/70 p-3 text-sm text-[#f0c9ad]">
-          {saveError}
-        </div>
-      ) : null}
+      <SaveStatusBanner status={saveStatus} />
 
       {receipt ? (
         <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">
