@@ -127,17 +127,17 @@ async function generateReceiptImage(message: string, documentLabel: string): Pro
   const receipt = parseReceiptMessage(message);
   const W = 720;
   const SCALE = 2;
-  const PAD = 54;
+  const PAD = 48;
   const CONTENT_W = W - PAD * 2;
-  const INFO_GAP = 24;
+  const INFO_GAP = 28;
   const INFO_W = (CONTENT_W - INFO_GAP) / 2;
   const measureCanvas = document.createElement("canvas");
   const measure = measureCanvas.getContext("2d")!;
 
-  measure.font = "500 20px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  measure.font = "550 22px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
   const subtitleLines = wrapCanvasText(measure, receipt.title, CONTENT_W);
 
-  measure.font = "600 18px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  measure.font = "650 26px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
   const informationLayout = receipt.information.map((line) => ({
     ...line,
     valueLines: wrapCanvasText(measure, line.value ?? line.text, INFO_W),
@@ -148,32 +148,32 @@ async function generateReceiptImage(message: string, documentLabel: string): Pro
   }
   const informationHeight = informationRows.reduce((sum, row) => {
     const rowHeight = Math.max(
-      76,
-      ...row.map((item) => 30 + item.valueLines.length * 25),
+      92,
+      ...row.map((item) => 42 + item.valueLines.length * 32),
     );
     return sum + rowHeight;
   }, 0);
 
-  measure.font = "800 38px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  measure.font = "800 44px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
   const totalLayout = receipt.totals.map((line, index) => {
     const valueLines = wrapCanvasText(measure, line.value ?? line.text, CONTENT_W - 56);
     const height = index === 0
-      ? (line.key ? 28 : 0) + valueLines.length * 44 + 28
-      : 24 + (line.key ? 28 : 0) + valueLines.length * 30 + 24;
+      ? (line.key ? 32 : 0) + valueLines.length * 50 + 30
+      : 24 + (line.key ? 32 : 0) + valueLines.length * 36 + 26;
     return { ...line, valueLines, height };
   });
 
   const headerHeight =
-    220 +
-    subtitleLines.length * 26 +
-    (receipt.identifier ? 20 : 0) +
-    (receipt.status ? 50 : 0);
-  const detailsHeight = receipt.information.length > 0 ? 46 + informationHeight : 0;
+    242 +
+    subtitleLines.length * 31 +
+    (receipt.identifier ? 36 : 10) +
+    (receipt.status ? 52 : 0);
+  const detailsHeight = receipt.information.length > 0 ? 52 + informationHeight : 0;
   const summaryPanelHeight = totalLayout.length > 0
-    ? 74 + totalLayout.reduce((sum, total) => sum + total.height, 0) + 12
+    ? 84 + totalLayout.reduce((sum, total) => sum + total.height, 0) + 14
     : 0;
   const summaryHeight = summaryPanelHeight > 0 ? summaryPanelHeight + 28 : 0;
-  const footerHeight = 104;
+  const footerHeight = 112;
   const H = headerHeight + detailsHeight + summaryHeight + footerHeight;
 
   const canvas = document.createElement("canvas");
@@ -187,61 +187,61 @@ async function generateReceiptImage(message: string, documentLabel: string): Pro
   ctx.fillStyle = "#18794e";
   ctx.fillRect(0, 0, W, 8);
 
-  let y = 40;
+  let y = 36;
   const logo = await loadReceiptLogo();
   if (logo) {
-    const logoWidth = 112;
+    const logoWidth = 132;
     const logoHeight = logoWidth / (logo.naturalWidth / logo.naturalHeight);
     ctx.drawImage(logo, PAD, y, logoWidth, logoHeight);
   } else {
-    ctx.font = "800 21px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+    ctx.font = "800 24px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
     ctx.fillStyle = "#1f2937";
     ctx.fillText("INFINITY ERP", PAD, y + 28);
   }
 
   const documentText = documentLabel.toLocaleUpperCase("pt-BR");
-  ctx.font = "700 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-  const documentWidth = ctx.measureText(documentText).width + 28;
+  ctx.font = "750 14px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  const documentWidth = ctx.measureText(documentText).width + 32;
   ctx.fillStyle = "#edf7f0";
   ctx.beginPath();
-  ctx.roundRect(W - PAD - documentWidth, y + 8, documentWidth, 34, 17);
+  ctx.roundRect(W - PAD - documentWidth, y + 8, documentWidth, 38, 19);
   ctx.fill();
   ctx.fillStyle = "#17603d";
-  ctx.fillText(documentText, W - PAD - documentWidth + 14, y + 30);
+  ctx.fillText(documentText, W - PAD - documentWidth + 16, y + 33);
 
-  y += 100;
-  ctx.font = "800 30px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  y += 132;
+  ctx.font = "850 32px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
   ctx.fillStyle = "#17211a";
   ctx.fillText("COMPROVANTE DE FECHAMENTO", PAD, y);
-  y += 36;
+  y += 40;
 
-  ctx.font = "500 20px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  ctx.font = "550 22px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
   ctx.fillStyle = "#5d675f";
   for (const line of subtitleLines) {
     ctx.fillText(line, PAD, y);
-    y += 26;
+    y += 31;
   }
 
   if (receipt.identifier?.value) {
-    ctx.font = "600 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-    ctx.fillStyle = "#89918b";
-    ctx.fillText(`IDENTIFICADOR  ${receipt.identifier.value}`, PAD, y + 5);
-    y += 30;
+    ctx.font = "700 14px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+    ctx.fillStyle = "#657168";
+    ctx.fillText(`IDENTIFICADOR  ${receipt.identifier.value}`, PAD, y + 7);
+    y += 36;
   } else {
     y += 10;
   }
 
   if (receipt.status?.value) {
     const statusText = receipt.status.value.toLocaleUpperCase("pt-BR");
-    ctx.font = "700 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-    const badgeWidth = Math.min(ctx.measureText(statusText).width + 30, CONTENT_W);
+    ctx.font = "750 14px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+    const badgeWidth = Math.min(ctx.measureText(statusText).width + 34, CONTENT_W);
     ctx.fillStyle = "#e8f5ec";
     ctx.beginPath();
-    ctx.roundRect(PAD, y, badgeWidth, 34, 17);
+    ctx.roundRect(PAD, y, badgeWidth, 38, 19);
     ctx.fill();
     ctx.fillStyle = "#17603d";
-    ctx.fillText(statusText, PAD + 15, y + 22);
-    y += 50;
+    ctx.fillText(statusText, PAD + 17, y + 25);
+    y += 52;
   }
 
   ctx.strokeStyle = "#dfe5e0";
@@ -253,27 +253,27 @@ async function generateReceiptImage(message: string, documentLabel: string): Pro
   y += 34;
 
   if (receipt.information.length > 0) {
-    ctx.font = "700 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-    ctx.fillStyle = "#6d766f";
+    ctx.font = "750 15px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+    ctx.fillStyle = "#526158";
     ctx.fillText("INFORMAÇÕES DO FECHAMENTO", PAD, y);
-    y += 34;
+    y += 40;
 
     informationRows.forEach((row, rowIndex) => {
       const rowHeight = Math.max(
-        76,
-        ...row.map((item) => 30 + item.valueLines.length * 25),
+        92,
+        ...row.map((item) => 42 + item.valueLines.length * 32),
       );
       row.forEach((item, column) => {
         const x = PAD + column * (INFO_W + INFO_GAP);
         if (item.key) {
-          ctx.font = "700 11px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-          ctx.fillStyle = "#7d867f";
+          ctx.font = "750 16px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+          ctx.fillStyle = "#66736b";
           ctx.fillText(item.key.toLocaleUpperCase("pt-BR"), x, y);
         }
-        ctx.font = "600 18px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-        ctx.fillStyle = "#1d2821";
+        ctx.font = "650 26px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+        ctx.fillStyle = "#17211a";
         item.valueLines.forEach((line, lineIndex) => {
-          ctx.fillText(line, x, y + 27 + lineIndex * 25);
+          ctx.fillText(line, x, y + 34 + lineIndex * 32);
         });
       });
       y += rowHeight;
@@ -298,11 +298,11 @@ async function generateReceiptImage(message: string, documentLabel: string): Pro
     ctx.fill();
     ctx.stroke();
 
-    y += 36;
-    ctx.font = "700 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
-    ctx.fillStyle = "#587061";
+    y += 40;
+    ctx.font = "750 15px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+    ctx.fillStyle = "#496553";
     ctx.fillText("RESUMO DO FECHAMENTO", PAD + 28, y);
-    y += 38;
+    y += 44;
 
     totalLayout.forEach((total, index) => {
       const x = PAD + 28;
@@ -315,18 +315,18 @@ async function generateReceiptImage(message: string, documentLabel: string): Pro
         y += 24;
       }
       if (total.key) {
-        ctx.font = "700 11px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+        ctx.font = "750 15px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
         ctx.fillStyle = index === 0 ? "#28704b" : "#6f7c73";
         ctx.fillText(total.key.toLocaleUpperCase("pt-BR"), x, y);
-        y += 28;
+        y += 32;
       }
-      ctx.font = `${index === 0 ? "800 38px" : "700 24px"} system-ui,-apple-system,'Segoe UI',Arial,sans-serif`;
+      ctx.font = `${index === 0 ? "850 44px" : "750 30px"} system-ui,-apple-system,'Segoe UI',Arial,sans-serif`;
       ctx.fillStyle = index === 0 ? "#18794e" : "#26332b";
       total.valueLines.forEach((line, lineIndex) => {
-        ctx.fillText(line, x, y + lineIndex * (index === 0 ? 44 : 30));
+        ctx.fillText(line, x, y + lineIndex * (index === 0 ? 50 : 36));
       });
-      y += total.valueLines.length * (index === 0 ? 44 : 30);
-      y += index === 0 ? 28 : 24;
+      y += total.valueLines.length * (index === 0 ? 50 : 36);
+      y += index === 0 ? 30 : 26;
     });
     y = panelTop + summaryPanelHeight + 28;
   }
@@ -344,10 +344,10 @@ async function generateReceiptImage(message: string, documentLabel: string): Pro
     hour: "2-digit",
     minute: "2-digit",
   });
-  ctx.font = "600 12px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  ctx.font = "700 14px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
   ctx.fillStyle = "#58635b";
   ctx.fillText("Infinity ERP", PAD, H - 52);
-  ctx.font = "400 11px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
+  ctx.font = "500 13px system-ui,-apple-system,'Segoe UI',Arial,sans-serif";
   ctx.fillStyle = "#8a938c";
   ctx.fillText("Comprovante gerado automaticamente pelo sistema.", PAD, H - 29);
   const dateWidth = ctx.measureText(generatedAt).width;

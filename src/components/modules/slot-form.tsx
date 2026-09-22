@@ -909,11 +909,9 @@ function SlotVisitForm({
               pdfButtonLabel="Gerar via do cliente em PDF"
               message={[
                 "*Fechamento H — Caça-níquel*",
-                `Comprovante: ${
-                  isReceiptPreview
-                    ? "PRÉVIA — NÃO SALVO"
-                    : results[0]?.recordId.slice(0, 8).toLocaleUpperCase("pt-BR") ?? "-"
-                }`,
+                isReceiptPreview
+                  ? ""
+                  : `Comprovante: ${results[0]?.recordId.slice(0, 8).toLocaleUpperCase("pt-BR") ?? "-"}`,
                 `Cliente: ${clientName}`,
                 lastSubmission
                   ? `Data: ${new Date(`${lastSubmission.occurredAt}T12:00:00`).toLocaleDateString("pt-BR")}`
