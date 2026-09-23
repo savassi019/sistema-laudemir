@@ -59,7 +59,7 @@ try {
     }
 
     if (profile.role !== "staff") {
-      await page.getByText("Financeiro", { exact: true }).first().click();
+      await page.getByRole("button", { name: /^Financeiro/ }).click();
       if (profile.role === "admin") {
         await page.getByText("Financeiro de hoje", { exact: true }).waitFor();
         if ((await page.locator('input[type="date"]').count()) > 0) {
@@ -71,7 +71,7 @@ try {
       await page.goto(`${baseUrl}/modulos/bx`, { waitUntil: "domcontentloaded" });
     }
 
-    await page.getByText("Clientes", { exact: true }).first().click();
+    await page.getByRole("button", { name: /^Clientes/ }).click();
     await page.getByRole("button", { name: "Novo", exact: true }).click();
     await page.getByLabel("Nome do cliente", { exact: true }).waitFor();
 
