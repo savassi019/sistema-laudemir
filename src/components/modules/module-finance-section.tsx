@@ -180,6 +180,7 @@ function getErrorMessage(error: unknown, fallback: string) {
 type SummaryTotals = { income: number; expense: number; net: number; pending: number };
 type BxTotals = { prize: number; other: number; discount: number; total: number };
 type SlotHTotals = { received: number; pending: number; negative: number; net: number };
+type BilliardTotals = { received: number; pending: number; negative: number; net: number };
 type MethodTotal = { method: string; label: string; amount: number };
 
 function calculateBxTotals(entries: ModuleFinancialEntryItem[]): BxTotals {
@@ -215,6 +216,23 @@ function calculateSlotHTotals(entries: ModuleFinancialEntryItem[]): SlotHTotals 
   return { received, pending, negative, net: received + pending - negative };
 }
 
+function calculateBilliardTotals(entries: ModuleFinancialEntryItem[]): BilliardTotals {
+  const positiveResults = entries.filter(
+    (entry) =>
+      entry.status !== "CANCELLED" && entry.category === "BILLIARD_INFINITY_RESULT",
+  );
+  const received = positiveResults.reduce((sum, entry) => sum + entry.paidAmount, 0);
+  const pending = positiveResults.reduce((sum, entry) => sum + entry.remainingAmount, 0);
+  const negative = entries
+    .filter(
+      (entry) =>
+        entry.status !== "CANCELLED" && entry.category === "BILLIARD_NEGATIVE_RESULT",
+    )
+    .reduce((sum, entry) => sum + entry.totalAmount, 0);
+
+  return { received, pending, negative, net: received + pending - negative };
+}
+
 function calculateMethodTotals(entries: ModuleFinancialEntryItem[]): MethodTotal[] {
   const grouped = new Map<string, number>();
   for (const entry of entries) {
@@ -243,6 +261,7 @@ function buildPrintHtml({
   totals,
   bxTotals,
   slotHTotals,
+  billiardTotals,
   methodTotals,
 }: {
   moduleTitle: string;
@@ -252,6 +271,7 @@ function buildPrintHtml({
   totals: SummaryTotals;
   bxTotals: BxTotals | null;
   slotHTotals: SlotHTotals | null;
+  billiardTotals: BilliardTotals | null;
   methodTotals: MethodTotal[];
 }) {
   const rows = entries
@@ -299,6 +319,16 @@ function buildPrintHtml({
       </div>`
     : "";
 
+  const billiardCards = billiardTotals
+    ? `<h2>Resultado das mesas de bilhar</h2>
+      <div class="cards bx">
+        <div class="card"><span>Recebido</span><strong>${escapeHtml(formatCurrency(billiardTotals.received))}</strong></div>
+        <div class="card"><span>A receber</span><strong>${escapeHtml(formatCurrency(billiardTotals.pending))}</strong></div>
+        <div class="card"><span>Resultado negativo</span><strong>${escapeHtml(formatCurrency(billiardTotals.negative))}</strong></div>
+        <div class="card"><span>Saldo das mesas</span><strong>${escapeHtml(formatCurrency(billiardTotals.net))}</strong></div>
+      </div>`
+    : "";
+
   return `<!doctype html>
   <html lang="pt-BR"><head><meta charset="utf-8" />
   <title>${escapeHtml(moduleTitle)} — Financeiro</title>
@@ -321,6 +351,7 @@ function buildPrintHtml({
     </div>
     ${bxCards}
     ${slotHCards}
+    ${billiardCards}
     ${methodTotals.length ? `<h2>Entradas por forma de pagamento</h2><table class="methods"><tbody>${methodRows}</tbody></table>` : ""}
     <h2>Lançamentos</h2>
     <table><thead><tr><th>Data</th><th>Descrição</th><th>Cliente/local</th><th>Origem</th><th>Categoria</th><th>Funcionário</th><th>Status</th><th>Pagamento</th><th class="number">Valor</th><th class="number">Pago</th><th class="number">Restante</th></tr></thead>
@@ -597,6 +628,11 @@ export function ModuleFinanceSection({
     return calculateSlotHTotals(activeEntries);
   }, [activeEntries, slug]);
 
+  const billiardTotals = useMemo<BilliardTotals | null>(() => {
+    if (slug !== "bilhar-pebolim") return null;
+    return calculateBilliardTotals(activeEntries);
+  }, [activeEntries, slug]);
+
   const methodTotals = useMemo(() => calculateMethodTotals(activeEntries), [activeEntries]);
 
   const operators = useMemo(
@@ -858,6 +894,8 @@ export function ModuleFinanceSection({
         bxTotals: slug === "bx" ? calculateBxTotals(filtered) : null,
         slotHTotals:
           slug === "h-caca-niquel" ? calculateSlotHTotals(filtered) : null,
+        billiardTotals:
+          slug === "bilhar-pebolim" ? calculateBilliardTotals(filtered) : null,
         methodTotals: calculateMethodTotals(filtered),
       }),
     );
@@ -898,6 +936,8 @@ export function ModuleFinanceSection({
     const sharedBxTotals = slug === "bx" ? calculateBxTotals(filtered) : null;
     const sharedSlotHTotals =
       slug === "h-caca-niquel" ? calculateSlotHTotals(filtered) : null;
+    const sharedBilliardTotals =
+      slug === "bilhar-pebolim" ? calculateBilliardTotals(filtered) : null;
     const lines = visible.map((entry) => `${formatShortDate(entry.createdAt)} — ${entry.description} — ${entry.categoryLabel} — ${entry.direction === "INCOME" ? "+" : "-"}${formatCurrency(entry.totalAmount)}`);
     const text = [
       `${moduleTitle} — Financeiro`,
@@ -912,6 +952,14 @@ export function ModuleFinanceSection({
             `H a receber: ${formatCurrency(sharedSlotHTotals.pending)}`,
             `H resultado negativo: ${formatCurrency(sharedSlotHTotals.negative)}`,
             `H saldo das máquinas: ${formatCurrency(sharedSlotHTotals.net)}`,
+          ]
+        : []),
+      ...(sharedBilliardTotals
+        ? [
+            `Bilhar recebido: ${formatCurrency(sharedBilliardTotals.received)}`,
+            `Bilhar a receber: ${formatCurrency(sharedBilliardTotals.pending)}`,
+            `Bilhar resultado negativo: ${formatCurrency(sharedBilliardTotals.negative)}`,
+            `Bilhar saldo das mesas: ${formatCurrency(sharedBilliardTotals.net)}`,
           ]
         : []),
       "",
@@ -938,13 +986,13 @@ export function ModuleFinanceSection({
     { key: "pendentes", label: "Pendentes" },
   ];
   const incomeDescription =
-    slug === "h-caca-niquel"
+    slug === "h-caca-niquel" || slug === "bilhar-pebolim"
       ? "Resultado da Infinity e entradas avulsas"
       : slug === "bx"
         ? "Operações recebidas e entradas avulsas"
         : "Valores registrados como entrada";
   const expenseDescription =
-    slug === "h-caca-niquel"
+    slug === "h-caca-niquel" || slug === "bilhar-pebolim"
       ? "Resultados negativos e despesas avulsas"
       : slug === "bx"
         ? "Prêmios, gastos e descontos"
@@ -1072,6 +1120,51 @@ export function ModuleFinanceSection({
                 )}
               >
                 {formatCurrency(slotHTotals.net)}
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {billiardTotals ? (
+        <div className="rounded-2xl border border-white/10 bg-[#101412] p-4">
+          <p className="text-sm font-semibold text-white">Resultado das mesas de bilhar</p>
+          <p className="mt-1 text-xs text-[#8f9992]">
+            Somente os fechamentos das mesas; lançamentos avulsos ficam nos totais acima
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div className="rounded-xl border border-white/10 border-l-4 border-l-[#4ade80] bg-[#151a17] p-3">
+              <p className="text-xs font-medium text-[#c5cdc7]">Recebido</p>
+              <p className="mt-1 text-base font-bold text-white">
+                {formatCurrency(billiardTotals.received)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 border-l-4 border-l-[#fbbf24] bg-[#151a17] p-3">
+              <p className="text-xs font-medium text-[#c5cdc7]">A receber</p>
+              <p className="mt-1 text-base font-bold text-white">
+                {formatCurrency(billiardTotals.pending)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-white/10 border-l-4 border-l-[#fb7185] bg-[#151a17] p-3">
+              <p className="text-xs font-medium text-[#c5cdc7]">Resultado negativo</p>
+              <p className="mt-1 text-base font-bold text-white">
+                {formatCurrency(billiardTotals.negative)}
+              </p>
+            </div>
+            <div
+              className={cn(
+                "rounded-xl border border-white/10 border-l-4 bg-[#151a17] p-3",
+                billiardTotals.net >= 0 ? "border-l-[#60a5fa]" : "border-l-[#f87171]",
+              )}
+            >
+              <p className="text-xs font-semibold text-[#c5cdc7]">Saldo das mesas</p>
+              <p
+                className={cn(
+                  "mt-1 text-base font-bold",
+                  billiardTotals.net >= 0 ? "text-[#bfdbfe]" : "text-[#fca5a5]",
+                )}
+              >
+                {formatCurrency(billiardTotals.net)}
               </p>
             </div>
           </div>

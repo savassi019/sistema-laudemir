@@ -2285,36 +2285,79 @@ async function listModuleRecordsBase(
           take,
           include: { billiardPoint: true },
         });
+        const creatorNames = await resolveCreatorNames(records.map((record) => record.createdById));
 
         return records.map((record) => {
           const grossAmount = Number(record.grossAmount);
           const percentage = Number(record.percentage ?? 0);
-          const companyShare =
-            grossAmount * (1 - percentage / 100) -
-            Number(record.employeeCost ?? 0) -
-            Number(record.installationCost ?? 0) -
-            Number(record.maintenanceCost ?? 0) -
-            Number(record.otherCost ?? 0) -
-            Number(record.roofAmount ?? 0) -
+          const clientShare = grossAmount * (percentage / 100);
+          const operatingCosts =
+            Number(record.employeeCost ?? 0) +
+            Number(record.installationCost ?? 0) +
+            Number(record.maintenanceCost ?? 0) +
+            Number(record.otherCost ?? 0) +
+            Number(record.roofAmount ?? 0) +
             Number(record.discountAmount ?? 0);
+          const companyShare =
+            grossAmount - clientShare - operatingCosts;
+          const operatorName = record.createdById
+            ? (creatorNames.get(record.createdById) ?? "-")
+            : "-";
+          const financialBreakdown: ModuleFinancialBreakdownItem[] =
+            companyShare >= 0
+              ? [
+                  {
+                    direction: "INCOME",
+                    category: "BILLIARD_INFINITY_RESULT",
+                    categoryLabel: "Resultado da Infinity",
+                    amount: companyShare,
+                    status: "PAID",
+                  },
+                ]
+              : [
+                  {
+                    direction: "EXPENSE",
+                    category: "BILLIARD_NEGATIVE_RESULT",
+                    categoryLabel: "Resultado negativo da mesa",
+                    amount: Math.abs(companyShare),
+                    status: "PAID",
+                  },
+                ];
+          const commonDetails = [
+            `Cliente: ${record.billiardPoint.clientName ?? "-"}`,
+            `Cidade: ${record.billiardPoint.city ?? "-"}`,
+            `Rota: ${record.billiardPoint.routeNumber ?? "-"}`,
+            `Fichas: ${record.quantityOfChips}`,
+            `Manutencao: ${formatShortDate(record.collectionDate)}`,
+            `Funcionário: ${operatorName}`,
+          ];
+          const financialDetails = [
+            `Bruto das fichas: ${formatCurrency(grossAmount)}`,
+            `Repasse do cliente: ${formatCurrency(clientShare)}`,
+            `Custos e descontos: ${formatCurrency(operatingCosts)}`,
+            `Resultado da Infinity: ${formatCurrency(companyShare)}`,
+          ];
+          const financialData =
+            session.role === "STAFF"
+              ? {}
+              : {
+                  amount: formatCurrency(companyShare),
+                  amountValue: companyShare,
+                  incomeValue: grossAmount,
+                  expenseValue: grossAmount - companyShare,
+                  financialBreakdown,
+                };
 
           return {
             id: record.id,
             title: record.billiardPoint.name,
             summary: record.billiardPoint.tableModel ?? "Mesa de bilhar",
-            details: [
-              `Cliente: ${record.billiardPoint.clientName ?? "-"}`,
-              `Cidade: ${record.billiardPoint.city ?? "-"}`,
-              `Rota: ${record.billiardPoint.routeNumber ?? "-"}`,
-              `Fichas: ${record.quantityOfChips}`,
-              `Manutencao: ${formatShortDate(record.collectionDate)}`,
-            ],
-            amount: formatCurrency(companyShare),
-            amountValue: companyShare,
-            incomeValue: grossAmount,
-            expenseValue: grossAmount - companyShare,
+            details:
+              session.role === "STAFF" ? commonDetails : [...commonDetails, ...financialDetails],
+            operatorName,
             badge: record.quantityOfChips >= 1500 ? "Trocar pano" : "OK",
             createdAt: record.createdAt.toISOString(),
+            ...financialData,
           };
         });
       }
