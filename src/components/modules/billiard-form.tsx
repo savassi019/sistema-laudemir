@@ -251,6 +251,7 @@ export function BilliardForm({
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const [stepError, setStepError] = useState<string | null>(null);
   const submittingRef = useRef(false);
+  const savedSubmissionRef = useRef(false);
   const submission = useIdempotentSubmission();
 
   async function refreshRouteData() {
@@ -281,7 +282,9 @@ export function BilliardForm({
   }
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshRouteData();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const form = useForm<FormInput, unknown, FormValues>({
@@ -339,8 +342,6 @@ export function BilliardForm({
   const structureCost = Number(watched.structureCost ?? 0);
   const routeNumber = Number(watched.routeNumber ?? 0);
   const pointName = String(watched.pointName ?? "");
-  const collectionDate = String(watched.collectionDate ?? "");
-  const fortnight = String(watched.fortnight ?? "PRIMEIRA");
 
   const historyTotals = useMemo(() => {
     const collections = pointHistory.filter(
@@ -500,7 +501,11 @@ export function BilliardForm({
   }
 
   const onSubmit = form.handleSubmit(async (values) => {
-    if (submittingRef.current) return;
+    // O resumo continua dentro do mesmo <form>. Depois da primeira gravacao,
+    // qualquer novo submit dessa instancia e repetido e nao uma nova visita.
+    // O ref fecha tambem a pequena janela entre atualizar o ponto e renderizar
+    // o comprovante, que podia gerar uma segunda coleta com outra chave.
+    if (submittingRef.current || savedSubmissionRef.current) return;
     submittingRef.current = true;
     setLoading(true);
     setSaveError(null);
@@ -548,14 +553,19 @@ export function BilliardForm({
       });
       submission.complete();
       if (result.queued) {
+        savedSubmissionRef.current = true;
         setSaveStatus("queued");
         return;
       }
+      savedSubmissionRef.current = true;
       source = result.data.source ?? "local";
       savedRecord = result.data.record;
       setSaveStatus("saved");
       if (source === "database") {
-        refreshRouteData();
+        // Aguarda a atualizacao do ponto antes de abrir o comprovante. Quando
+        // esta chamada ficava solta, loadRoutePoint terminava depois e levava
+        // a tela de volta para a primeira etapa do fechamento.
+        await refreshRouteData();
       }
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
