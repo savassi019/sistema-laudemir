@@ -5,6 +5,7 @@ import {
   ArrowRight,
   Camera,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   ClipboardList,
   LoaderCircle,
@@ -244,6 +245,7 @@ export function BilliardForm({
   const [cepError, setCepError] = useState<string | null>(null);
   const [loadingPointHistory, setLoadingPointHistory] = useState(false);
   const [showPointHistory, setShowPointHistory] = useState(false);
+  const [showOptionalCosts, setShowOptionalCosts] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -340,6 +342,7 @@ export function BilliardForm({
   const maintenanceCost = Number(watched.maintenanceCost ?? 0);
   const otherCost = Number(watched.otherCost ?? 0);
   const structureCost = Number(watched.structureCost ?? 0);
+  const hasOptionalCosts = employeeCost + installationCost + maintenanceCost + otherCost > 0;
   const routeNumber = Number(watched.routeNumber ?? 0);
   const pointName = String(watched.pointName ?? "");
 
@@ -949,21 +952,36 @@ export function BilliardForm({
                   {/* Custos */}
                   {!hideFinancials ? (
                     <>
-                      <p className="mb-2 mt-4 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">Custos (opcional)</p>
-                      <div className="grid gap-3 sm:grid-cols-2">
-                        <Field label="Empregado (R$)">
-                          <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("employeeCost")} />
-                        </Field>
-                        <Field label="Instalação (R$)">
-                          <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("installationCost")} />
-                        </Field>
-                        <Field label="Manutenção (R$)">
-                          <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("maintenanceCost")} />
-                        </Field>
-                        <Field label="Outros (R$)">
-                          <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("otherCost")} />
-                        </Field>
-                      </div>
+                      <button
+                        type="button"
+                        aria-expanded={showOptionalCosts}
+                        onClick={() => setShowOptionalCosts((current) => !current)}
+                        className="mt-4 inline-flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-left text-sm font-medium text-[#c9c2b4] transition active:bg-white/[0.06]"
+                      >
+                        <span>Custos opcionais</span>
+                        <span className="inline-flex items-center gap-2 text-xs text-[#9a958b]">
+                          {showOptionalCosts ? "Ocultar" : hasOptionalCosts ? "Revisar custos" : "Adicionar custos"}
+                          <ChevronDown
+                            className={cn("size-4 transition-transform", showOptionalCosts && "rotate-180")}
+                          />
+                        </span>
+                      </button>
+                      {showOptionalCosts ? (
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                          <Field label="Empregado (R$)">
+                            <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("employeeCost")} />
+                          </Field>
+                          <Field label="Instalação (R$)">
+                            <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("installationCost")} />
+                          </Field>
+                          <Field label="Manutenção (R$)">
+                            <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("maintenanceCost")} />
+                          </Field>
+                          <Field label="Outros (R$)">
+                            <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("otherCost")} />
+                          </Field>
+                        </div>
+                      ) : null}
                     </>
                   ) : null}
 
