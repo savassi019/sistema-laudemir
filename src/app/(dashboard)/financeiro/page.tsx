@@ -19,6 +19,7 @@ export default async function FinancePage() {
     redirect("/dashboard?denied=1");
   }
 
+  const dailyOnly = session.role === "ADMIN";
   const finance = await getFinanceOverview(session);
 
   return (
@@ -27,15 +28,17 @@ export default async function FinancePage() {
         <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="space-y-3">
             <p className="text-xs uppercase tracking-[0.3em] text-[#9a958b]">
-              Motor financeiro central
+              {dailyOnly ? "Financeiro de hoje" : "Motor financeiro central"}
             </p>
             <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
-              Entradas, saídas, despesas, parciais e dívidas no mesmo ledger.
+              {dailyOnly
+                ? "Entradas, despesas e saldo somente do dia atual."
+                : "Entradas, saídas, despesas, parciais e dívidas no mesmo histórico."}
             </h1>
             <p className="max-w-3xl text-sm leading-7 text-[#c9c2b4] md:text-base">
-              O módulo financeiro foi pensado para consolidar dados dos demais
-              módulos, com filtros por período, anexos de comprovantes e status visual
-              por tipo de liquidação.
+              {dailyOnly
+                ? "O consolidado de outros dias e o total geral ficam disponíveis apenas para o dono."
+                : "O financeiro consolida os dados dos módulos, com histórico, comprovantes e situação de cada lançamento."}
             </p>
           </div>
 
@@ -60,8 +63,8 @@ export default async function FinancePage() {
       </section>
 
       <SectionCard
-        title="Lançamentos recentes"
-        subtitle="Lista inicial do ledger financeiro pronta para filtros por data, módulo, cliente e status."
+        title={dailyOnly ? "Lançamentos de hoje" : "Lançamentos recentes"}
+        subtitle={dailyOnly ? "Movimentações registradas no dia atual." : "Histórico financeiro por módulo, cliente e situação."}
         action={
           <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] px-4 py-2 text-xs uppercase tracking-[0.22em] text-slate-300">
             <ReceiptText className="size-4" />

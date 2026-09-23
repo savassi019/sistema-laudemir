@@ -36,11 +36,12 @@ async function main() {
   // Rodar este seed contra producao derruba o acesso do cliente.
   const owner = await prisma.user.upsert({
     where: { email: "laudemir@lmgestao.local" },
-    update: { name: "Laudemir Admin", passwordHash: hash, organizationId: org.id, role: UserRole.OWNER },
+    update: { name: "Laudemir Admin", username: "laudemir", passwordHash: hash, organizationId: org.id, role: UserRole.OWNER },
     create: {
       organizationId: org.id,
       role: UserRole.OWNER,
       name: "Laudemir Admin",
+      username: "laudemir",
       email: "laudemir@lmgestao.local",
       phone: "(11) 99000-0001",
       passwordHash: hash,
@@ -50,11 +51,12 @@ async function main() {
   // ── Funcionário para aba Equipe ──────────────────────────────────────────────
   const staff = await prisma.user.upsert({
     where: { email: "joao@lmgestao.local" },
-    update: { name: "João Silva", passwordHash: staffHash, organizationId: org.id },
+    update: { name: "João Silva", username: "joao", passwordHash: staffHash, organizationId: org.id },
     create: {
       organizationId: org.id,
       role: UserRole.STAFF,
       name: "João Silva",
+      username: "joao",
       email: "joao@lmgestao.local",
       phone: "(11) 98000-1111",
       passwordHash: staffHash,

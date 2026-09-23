@@ -7,35 +7,32 @@ import {
   EyeOff,
   LoaderCircle,
   LockKeyhole,
-  Mail,
+  UserRound,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
 const schema = z.object({
-  email: z.string().email("Informe um e-mail valido."),
+  username: z.string().trim().min(3, "Informe seu usuário."),
   password: z.string().min(6, "A senha precisa ter pelo menos 6 caracteres."),
 });
 
 type FormValues = z.infer<typeof schema>;
 
 export function LoginForm() {
+  const router = useRouter();
   const [serverError, setServerError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
-  const submittingRef = useRef(false);
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: "", password: "" },
+    defaultValues: { username: "", password: "" },
   });
 
   const onSubmit = form.handleSubmit(async (values) => {
-    if (submittingRef.current) return;
-    submittingRef.current = true;
     setServerError(null);
-    setLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
         method: "POST",
@@ -47,12 +44,10 @@ export function LoginForm() {
         setServerError(payload.error ?? "Nao foi possivel entrar.");
         return;
       }
-      window.location.href = "/dashboard";
+      router.replace("/dashboard");
+      router.refresh();
     } catch {
       setServerError("Falha de comunicacao com o servidor local.");
-    } finally {
-      setLoading(false);
-      submittingRef.current = false;
     }
   });
 
@@ -68,24 +63,28 @@ export function LoginForm() {
   return (
     <form onSubmit={onSubmit} className="space-y-5">
 
-      {/* E-mail */}
+      {/* Usuário */}
       <div className="login-form-step space-y-2" style={{ animationDelay: "500ms" }}>
-        <label className="text-[11px] font-medium uppercase tracking-[0.2em] text-white/35" htmlFor="email">
-          E-mail
+        <label className="text-[11px] font-medium uppercase tracking-[0.2em] text-white/35" htmlFor="username">
+          Usuário
         </label>
-        <div className={fieldWrap(!!form.formState.errors.email)}>
-          <Mail className="size-4 shrink-0 text-white/20" />
+        <div className={fieldWrap(!!form.formState.errors.username)}>
+          <UserRound className="size-4 shrink-0 text-white/20" />
           <input
-            id="email"
-            type="email"
-            autoComplete="email"
+            id="username"
+            type="text"
+            inputMode="text"
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
             className="login-input w-full bg-transparent text-base text-white/90 outline-none placeholder:text-white/18 md:text-sm"
-            placeholder="voce@empresa.com"
-            {...form.register("email")}
+            placeholder="seu.usuario"
+            {...form.register("username")}
           />
         </div>
-        {form.formState.errors.email ? (
-          <p className="text-[12px] text-[#d59a8b]">{form.formState.errors.email.message}</p>
+        {form.formState.errors.username ? (
+          <p className="text-[12px] text-[#d59a8b]">{form.formState.errors.username.message}</p>
         ) : null}
       </div>
 
@@ -129,13 +128,13 @@ export function LoginForm() {
       <div className="login-form-step pt-1" style={{ animationDelay: "820ms" }}>
         <button
           type="submit"
-          disabled={loading}
+          disabled={form.formState.isSubmitting}
           className="login-primary-button group relative w-full overflow-hidden rounded-xl bg-[#d1a04f] px-4 py-3.5 text-[13px] font-semibold text-[#0d0a05] shadow-[0_8px_28px_rgba(209,160,79,0.38)] transition-all duration-150 hover:bg-[#daa855] hover:shadow-[0_12px_36px_rgba(209,160,79,0.48)] active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
         >
           <span className="relative z-10 inline-flex items-center justify-center gap-2">
-            {loading ? <LoaderCircle className="size-4 animate-spin" /> : null}
+            {form.formState.isSubmitting ? <LoaderCircle className="size-4 animate-spin" /> : null}
             Entrar no painel
-            {!loading ? <ArrowRight className="size-4 transition-transform duration-150 group-hover:translate-x-0.5" /> : null}
+            {!form.formState.isSubmitting ? <ArrowRight className="size-4 transition-transform duration-150 group-hover:translate-x-0.5" /> : null}
           </span>
         </button>
       </div>

@@ -9,10 +9,12 @@ import { moduleCatalog } from "@/lib/module-catalog";
 import {
   PASSWORD_MIN,
   REQUISITOS_SENHA,
-  normalizarEmail,
-  validarEmail,
+  USERNAME_MAX,
+  USERNAME_MIN,
+  normalizarUsuario,
   validarNome,
   validarSenha,
+  validarUsuario,
 } from "@/lib/user-validation";
 import {
   createStaffAction,
@@ -59,7 +61,7 @@ export function StaffManagement({
   const formRef = useRef<HTMLFormElement>(null);
   const submittingRef = useRef(false);
   const [senhaDigitada, setSenhaDigitada] = useState("");
-  const [emailDigitado, setEmailDigitado] = useState("");
+  const [usuarioDigitado, setUsuarioDigitado] = useState("");
   const [mostrarSenha, setMostrarSenha] = useState(false);
 
   function setAllModules(checked: boolean) {
@@ -76,7 +78,7 @@ export function StaffManagement({
     const fd = new FormData(event.currentTarget);
     const data = {
       name: String(fd.get("name") ?? "").trim(),
-      email: String(fd.get("email") ?? "").trim(),
+      username: String(fd.get("username") ?? "").trim(),
       phone: String(fd.get("phone") ?? "").trim() || undefined,
       password: String(fd.get("password") ?? ""),
       role: (fd.get("role") ?? "STAFF") as "STAFF" | "ADMIN",
@@ -85,7 +87,7 @@ export function StaffManagement({
 
     const problema =
       validarNome(data.name) ??
-      validarEmail(data.email) ??
+      validarUsuario(data.username) ??
       (validarSenha(data.password) ? `Senha: ${validarSenha(data.password)}` : null);
     if (problema) {
       setError(problema);
@@ -95,7 +97,7 @@ export function StaffManagement({
       setError("Selecione ao menos um módulo para este funcionário.");
       return;
     }
-    data.email = normalizarEmail(data.email);
+    data.username = normalizarUsuario(data.username);
 
     setError(null);
     submittingRef.current = true;
@@ -103,11 +105,11 @@ export function StaffManagement({
       try {
         const member = await createStaffAction(data);
         setStaff((prev) => [member, ...prev]);
-        setMessage(`${member.name} adicionado. Login: ${member.email}`);
+        setMessage(`${member.name} adicionado. Usuário: ${member.username}`);
         setFormOpen(false);
         (event.target as HTMLFormElement).reset();
         setSenhaDigitada("");
-        setEmailDigitado("");
+        setUsuarioDigitado("");
         setMostrarSenha(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Falha ao criar funcionário.");
@@ -158,23 +160,26 @@ export function StaffManagement({
               <input name="name" required className={fieldClass} placeholder="Nome completo" />
             </label>
             <label className="block space-y-2">
-              <span className={labelClass}>E-mail de acesso</span>
+              <span className={labelClass}>Usuário de acesso</span>
               <input
-                name="email"
-                type="email"
-                inputMode="email"
+                name="username"
+                type="text"
+                inputMode="text"
+                autoComplete="username"
                 autoCapitalize="none"
                 autoCorrect="off"
                 spellCheck={false}
                 required
-                value={emailDigitado}
-                onChange={(e) => setEmailDigitado(e.target.value)}
+                minLength={USERNAME_MIN}
+                maxLength={USERNAME_MAX}
+                value={usuarioDigitado}
+                onChange={(e) => setUsuarioDigitado(e.target.value)}
                 className={fieldClass}
-                placeholder="nome@empresa.com"
+                placeholder="Ex.: joao"
               />
               <span className="block text-[11px] text-[#5a544c]">
-                É com este e-mail que a pessoa entra no sistema.
-                {emailDigitado !== emailDigitado.toLowerCase() && (
+                É com este usuário que a pessoa entra no sistema, sem e-mail.
+                {usuarioDigitado !== normalizarUsuario(usuarioDigitado) && (
                   <span className="text-[#fdba74]"> Será salvo em minúsculas.</span>
                 )}
               </span>
@@ -187,10 +192,10 @@ export function StaffManagement({
               <span className={labelClass}>Perfil</span>
               <select name="role" className={selectClass} defaultValue="STAFF">
                 <option value="STAFF">Funcionário de campo — sem totais</option>
-                <option value="ADMIN">Gestor — vê cálculos liberados</option>
+                <option value="ADMIN">Gestor — financeiro somente do dia</option>
               </select>
               <span className="block text-[11px] leading-4 text-[#9a958b]">
-                Funcionário registra operações, mas não vê somatórios. Gestor vê o financeiro somente dos módulos marcados.
+                Funcionário registra clientes e operações, mas não vê somatórios. Gestor vê somente o financeiro de hoje nos módulos marcados.
               </span>
             </label>
             <div className="space-y-2 sm:col-span-2">
@@ -385,7 +390,7 @@ function StaffCard({
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-white">{member.name}</p>
               <p className="text-xs text-[#9a958b]">
-                {member.role === "ADMIN" ? "Gestor com cálculos" : "Funcionário de campo"}
+                {member.role === "ADMIN" ? "Gestor — financeiro de hoje" : "Funcionário de campo"}
               </p>
             </div>
           </div>
@@ -399,7 +404,7 @@ function StaffCard({
           </span>
         </div>
         <div className="mt-3 space-y-1 text-xs text-[#9a958b]">
-          <p>{member.email}</p>
+          <p>Usuário: <span className="font-medium text-[#c9c2b4]">{member.username}</span></p>
           {member.phone ? <p>{member.phone}</p> : null}
         </div>
         <div className="mt-3 flex items-center gap-2 rounded-xl border border-white/8 bg-white/[0.025] px-3 py-2">
@@ -470,6 +475,7 @@ function EditStaffForm({
   onCancel: () => void;
 }) {
   const [name, setName] = useState(member.name);
+  const [username, setUsername] = useState(member.username);
   const [phone, setPhone] = useState(member.phone ?? "");
   const [role, setRole] = useState<"STAFF" | "ADMIN">(member.role);
   const [modules, setModules] = useState<Set<ModuleName>>(new Set(member.modules ?? []));
@@ -486,7 +492,7 @@ function EditStaffForm({
   }
 
   async function salvar() {
-    const problema = validarNome(name);
+    const problema = validarNome(name) ?? validarUsuario(username);
     if (problema) return setErro(problema);
     if (modules.size === 0) return setErro("Selecione ao menos um módulo para este funcionário.");
 
@@ -495,6 +501,7 @@ function EditStaffForm({
     try {
       const atualizado = await updateStaffAction(member.id, {
         name: name.trim(),
+        username: normalizarUsuario(username),
         phone: phone.trim() || null,
         role,
         modules: Array.from(modules),
@@ -516,6 +523,20 @@ function EditStaffForm({
           <input value={name} onChange={(e) => setName(e.target.value)} className={fieldClass} />
         </label>
         <label className="block space-y-1.5">
+          <span className={labelClass}>Usuário de acesso</span>
+          <input
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            minLength={USERNAME_MIN}
+            maxLength={USERNAME_MAX}
+            autoComplete="username"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            className={fieldClass}
+          />
+        </label>
+        <label className="block space-y-1.5">
           <span className={labelClass}>Telefone</span>
           <input value={phone} onChange={(e) => setPhone(e.target.value)} className={fieldClass} placeholder="(11) 99999-9999" />
         </label>
@@ -523,7 +544,7 @@ function EditStaffForm({
           <span className={labelClass}>Perfil</span>
           <select value={role} onChange={(e) => setRole(e.target.value as "STAFF" | "ADMIN")} className={selectClass}>
             <option value="STAFF">Funcionário de campo — sem totais</option>
-            <option value="ADMIN">Gestor — vê cálculos liberados</option>
+            <option value="ADMIN">Gestor — financeiro somente do dia</option>
           </select>
           <span className="block text-[11px] leading-4 text-[#9a958b]">
             Para acessar o financeiro diário com cálculos, use Gestor e marque apenas os módulos desejados.

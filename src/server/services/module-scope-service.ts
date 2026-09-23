@@ -3,6 +3,7 @@ import {
   listModuleRecords,
   type ModuleSlug,
 } from "@/server/services/module-record-service";
+import { currentBusinessDayRange } from "@/lib/business-date";
 import type { ModuleName, SessionData } from "@/types/app";
 
 export type ModuleScopeSummary = {
@@ -94,8 +95,11 @@ export async function getModuleScopeSummary(
   }
 
   try {
+    const recordsRange = session.role === "ADMIN" ? currentBusinessDayRange() : undefined;
     const [records, clients] = await Promise.all([
-      listModuleRecords(session, slug, SCOPE_RECORD_CAP),
+      session.role === "STAFF"
+        ? Promise.resolve([])
+        : listModuleRecords(session, slug, SCOPE_RECORD_CAP, recordsRange),
       listModuleClients(session, slug, SCOPE_RECORD_CAP),
     ]);
 

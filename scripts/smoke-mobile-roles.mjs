@@ -15,9 +15,9 @@ try {
 }
 
 const profiles = [
-  { role: "owner", email: `${runId}-owner@smoke.infinity.local` },
-  { role: "admin", email: `${runId}-admin@smoke.infinity.local` },
-  { role: "staff", email: `${runId}-staff@smoke.infinity.local` },
+  { role: "owner", username: `${runId}-owner` },
+  { role: "admin", username: `${runId}-admin` },
+  { role: "staff", username: `${runId}-staff` },
 ];
 
 try {
@@ -25,8 +25,9 @@ try {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
     const page = await context.newPage();
     await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
-    await page.waitForFunction(() => Boolean(document.querySelector("#email")?._valueTracker));
-    await page.locator("#email").fill(profile.email);
+    await page.waitForFunction(() => Boolean(document.querySelector("#username")?._valueTracker));
+    if ((await page.locator("#email").count()) > 0) throw new Error("Login antigo por e-mail ainda apareceu.");
+    await page.locator("#username").fill(profile.username);
     await page.locator("#password").fill(password);
     await page.getByRole("button", { name: /Entrar no painel/i }).click();
     try {
@@ -55,6 +56,33 @@ try {
     }
     if (profile.role === "staff" && (await page.getByText("Financeiro", { exact: true }).count()) > 0) {
       throw new Error("STAFF visualizou a area Financeiro do modulo.");
+    }
+
+    if (profile.role !== "staff") {
+      await page.getByText("Financeiro", { exact: true }).first().click();
+      if (profile.role === "admin") {
+        await page.getByText("Financeiro de hoje", { exact: true }).waitFor();
+        if ((await page.locator('input[type="date"]').count()) > 0) {
+          throw new Error("ADMIN recebeu filtro para consultar outro dia.");
+        }
+      } else {
+        await page.getByText("Filtrar por período", { exact: true }).waitFor();
+      }
+      await page.goto(`${baseUrl}/modulos/bx`, { waitUntil: "domcontentloaded" });
+    }
+
+    await page.getByText("Clientes", { exact: true }).first().click();
+    await page.getByRole("button", { name: "Novo", exact: true }).click();
+    await page.getByLabel("Nome do cliente", { exact: true }).waitFor();
+
+    if (profile.role === "staff") {
+      await page.goto(`${baseUrl}/modulos/bx`, { waitUntil: "domcontentloaded" });
+      if ((await page.getByText("Prêmio", { exact: true }).count()) > 0) {
+        throw new Error("STAFF visualizou os valores de premios.");
+      }
+      if ((await page.getByText("Comprovantes", { exact: true }).count()) > 0) {
+        throw new Error("STAFF visualizou comprovantes financeiros.");
+      }
     }
 
     if (profile.role !== "owner") {

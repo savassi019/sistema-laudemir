@@ -2,9 +2,10 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 
 import { authenticateUser, getAuthCookieName, signSession } from "@/lib/auth";
+import { normalizarUsuario } from "@/lib/user-validation";
 
 const schema = z.object({
-  email: z.string().email(),
+  username: z.string().trim().min(3).max(254),
   password: z.string().min(6),
 });
 
@@ -43,31 +44,31 @@ export async function POST(request: Request) {
 
   if (!parsed.success) {
     return NextResponse.json(
-      { error: "Informe e-mail e senha validos." },
+      { error: "Informe usuário e senha válidos." },
       { status: 400 },
     );
   }
 
-  const emailKey = parsed.data.email.toLowerCase();
+  const usernameKey = normalizarUsuario(parsed.data.username);
 
-  if (isRateLimited(emailKey)) {
+  if (isRateLimited(usernameKey)) {
     return NextResponse.json(
-      { error: "Muitas tentativas para este e-mail. Aguarde alguns minutos e tente de novo." },
+      { error: "Muitas tentativas para este usuário. Aguarde alguns minutos e tente de novo." },
       { status: 429 },
     );
   }
 
-  const session = await authenticateUser(parsed.data.email, parsed.data.password);
+  const session = await authenticateUser(parsed.data.username, parsed.data.password);
 
   if (!session) {
-    recordFailedAttempt(emailKey);
+    recordFailedAttempt(usernameKey);
     return NextResponse.json(
       { error: "Credenciais invalidas ou usuario inativo." },
       { status: 401 },
     );
   }
 
-  loginAttempts.delete(emailKey);
+  loginAttempts.delete(usernameKey);
 
   const token = await signSession(session);
   const response = NextResponse.json({

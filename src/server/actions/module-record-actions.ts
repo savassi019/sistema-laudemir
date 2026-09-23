@@ -13,6 +13,7 @@ import {
   listModuleClientRecords,
   listModuleRecords,
   moduleSlugs,
+  registerModuleClient,
   registerSlotClient,
   type ModuleSlug,
 } from "@/server/services/module-record-service";
@@ -68,6 +69,15 @@ export async function getClientPrefillDataAction(slug: string, id: string) {
   return getClientPrefillData(session, slug as ModuleSlug, id);
 }
 
+export async function registerModuleClientAction(
+  slug: string,
+  payload: Record<string, unknown>,
+) {
+  const session = await requireSession();
+  assertSlugAccess(session, slug);
+  return registerModuleClient(session, slug as ModuleSlug, payload);
+}
+
 export async function listModuleRecordsAction(
   slug: string,
   from?: string,
@@ -77,14 +87,17 @@ export async function listModuleRecordsAction(
   const session = await requireSession();
   assertSlugAccess(session, slug);
   return listModuleRecords(session, slug as ModuleSlug, take, {
-    from: from ? new Date(from) : undefined,
-    to:   to   ? new Date(to)   : undefined,
+    from: from ? new Date(`${from}T00:00:00-03:00`) : undefined,
+    to: to ? new Date(`${to}T23:59:59.999-03:00`) : undefined,
   });
 }
 
 export async function listModuleReceiptsAction(slug: string) {
   const session = await requireSession();
   assertSlugAccess(session, slug);
+  if (session.role === "STAFF") {
+    throw new Error("Sem permissao para acessar valores de comprovantes.");
+  }
   if (!receiptModuleSlugs.includes(slug as ModuleSlug)) return [];
   return listModuleReceipts(session, slug as ModuleSlug);
 }
@@ -186,6 +199,9 @@ export async function reviewModuleOperationAction(
 
 export async function listBxPrizeRecordsAction() {
   const session = await requireSession("BX");
+  if (session.role === "STAFF") {
+    throw new Error("Sem permissao para acessar valores de premios.");
+  }
   return listBxPrizeRecords(session);
 }
 

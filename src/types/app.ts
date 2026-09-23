@@ -142,7 +142,7 @@ export type ClientVisitSummary = {
 export type StaffMember = {
   id: string;
   name: string;
-  email: string;
+  username: string;
   phone?: string;
   status: "ativo" | "inativo";
   role: "STAFF" | "ADMIN";

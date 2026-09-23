@@ -560,12 +560,14 @@ export function ModuleFinanceSection({
   initialEntries,
   initialFromDate = "",
   initialToDate = "",
+  dailyOnly = false,
 }: {
   slug: string;
   moduleTitle: string;
   initialEntries: ModuleFinancialEntryItem[];
   initialFromDate?: string;
   initialToDate?: string;
+  dailyOnly?: boolean;
 }) {
   const [entries, setEntries] = useState(() =>
     entriesInPeriod(initialEntries, initialFromDate, initialToDate),
@@ -1009,7 +1011,9 @@ export function ModuleFinanceSection({
       <div className="rounded-2xl border border-white/[0.08] bg-[#0b0f0e]/35 p-3.5">
         <div className="flex flex-wrap items-center gap-2">
           <CalendarDays className="size-4 text-[#9a958b]" />
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#9a958b]">Filtrar por período</p>
+          <p className="text-xs font-semibold uppercase tracking-wide text-[#9a958b]">
+            {dailyOnly ? "Financeiro de hoje" : "Filtrar por período"}
+          </p>
           <div className="ml-auto flex gap-1.5">
             <button type="button" onClick={handlePrint} disabled={filtered.length === 0} className="flex min-h-11 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-xs font-semibold text-[#c9c2b4] disabled:opacity-40">
               <Printer className="size-4" /> PDF
@@ -1022,16 +1026,24 @@ export function ModuleFinanceSection({
             </button>
           </div>
         </div>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          <input type="date" value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} className={`${fieldClass} [color-scheme:dark]`} />
-          <input type="date" value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} className={`${fieldClass} [color-scheme:dark]`} />
-        </div>
-        <div className="mt-2 flex gap-2">
-          <button type="button" onClick={handleDateSearch} disabled={periodLoading} className="min-h-11 flex-1 rounded-xl bg-[#d1a04f] px-4 text-sm font-semibold text-[#0d0a05] disabled:opacity-50">
-            {periodLoading ? <LoaderCircle className="mx-auto size-4 animate-spin" /> : "Buscar"}
-          </button>
-          {fromDate || toDate ? <button type="button" onClick={clearDates} className="min-h-11 rounded-xl border border-white/10 px-4 text-sm text-[#c9c2b4]">Limpar</button> : null}
-        </div>
+        {dailyOnly ? (
+          <p className="mt-3 rounded-xl border border-[#60a5fa]/20 bg-[#60a5fa]/10 px-3 py-2.5 text-sm text-[#bfdbfe]">
+            Este acesso mostra somente os lançamentos do dia atual. O consolidado completo fica disponível apenas para o dono.
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <input type="date" value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} className={`${fieldClass} [color-scheme:dark]`} />
+              <input type="date" value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} className={`${fieldClass} [color-scheme:dark]`} />
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button type="button" onClick={handleDateSearch} disabled={periodLoading} className="min-h-11 flex-1 rounded-xl bg-[#d1a04f] px-4 text-sm font-semibold text-[#0d0a05] disabled:opacity-50">
+                {periodLoading ? <LoaderCircle className="mx-auto size-4 animate-spin" /> : "Buscar"}
+              </button>
+              {fromDate || toDate ? <button type="button" onClick={clearDates} className="min-h-11 rounded-xl border border-white/10 px-4 text-sm text-[#c9c2b4]">Limpar</button> : null}
+            </div>
+          </>
+        )}
         {error ? <p className="mt-2 text-xs text-[#f0a08f]">{error}</p> : null}
       </div>
 

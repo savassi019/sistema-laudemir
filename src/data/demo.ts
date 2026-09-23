@@ -8,6 +8,7 @@ import type {
 type DemoAccount = {
   label: string;
   helper: string;
+  username: string;
   email: string;
   password: string;
   session: SessionData;
@@ -17,6 +18,7 @@ export const demoAccounts: DemoAccount[] = [
   {
     label: "Administrador",
     helper: "Acesso completo ao sistema",
+    username: "laudemir",
     email: "laudemir@lmgestao.local",
     password: "Admin@12345",
     session: {
@@ -49,6 +51,7 @@ export const demoAccounts: DemoAccount[] = [
   {
     label: "Demo",
     helper: "Conta de demonstração",
+    username: "admin",
     email: "admin@svs-demo.local",
     password: "Admin@12345",
     session: {

@@ -157,10 +157,11 @@ function SlotRegisterForm({
         city: values.city,
         state: values.state,
         machineCount: Number(values.machineCount),
+        allowExisting: Boolean(addingToClientName),
       });
       onRegistered(result.clientName);
-    } catch {
-      setSaveError("Não foi possível cadastrar. Confira os campos e tente novamente.");
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : "Não foi possível cadastrar. Confira os campos e tente novamente.");
       setSaving(false);
     }
   });

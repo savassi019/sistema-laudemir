@@ -4,15 +4,13 @@ import { ArrowLeft } from "lucide-react";
 
 import { ModuleWorkspace } from "@/components/modules/module-workspace";
 import { requireSession } from "@/lib/auth";
-import { formatCurrency } from "@/lib/format";
+import { currentBusinessDate } from "@/lib/business-date";
 import { getModuleBySlug } from "@/lib/module-catalog";
 import { listModuleFinancialEntries } from "@/server/services/finance-service";
 import {
   listModuleClients,
-  listModuleRecords,
   listModuleVisitTargets,
   moduleSlugs,
-  type ModuleRecordItem,
   type ModuleSlug,
 } from "@/server/services/module-record-service";
 import { getModuleScopeSummary } from "@/server/services/module-scope-service";
@@ -23,45 +21,6 @@ export const dynamic = "force-dynamic";
 
 function isRecordSlug(slug: string): slug is ModuleSlug {
   return moduleSlugs.includes(slug as ModuleSlug);
-}
-
-function currentBusinessDate() {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Sao_Paulo",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(new Date());
-  const value = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${value.year}-${value.month}-${value.day}`;
-}
-
-function buildFallbackRecords(
-  moduleTitle: string,
-  scopeSummary: Awaited<ReturnType<typeof getModuleScopeSummary>>,
-): ModuleRecordItem[] {
-  return [
-    {
-      id: `${moduleTitle}-demo-1`,
-      title: "Ultimo fechamento",
-      summary: `Historico de ${moduleTitle}`,
-      details: [
-        `Entradas: ${formatCurrency(scopeSummary.incomeAmount)}`,
-        `Despesas: ${formatCurrency(scopeSummary.expenseAmount)}`,
-      ],
-      amount: formatCurrency(scopeSummary.balanceAmount),
-      badge: "Demo",
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: `${moduleTitle}-demo-2`,
-      title: "Cliente vinculado",
-      summary: "Cadastro do modulo",
-      details: [`Clientes ativos: ${scopeSummary.clientsCount}`],
-      badge: "Modulo",
-      createdAt: new Date(Date.now() - 86_400_000).toISOString(),
-    },
-  ];
 }
 
 export default async function ModuleDetailPage({
@@ -84,15 +43,14 @@ export default async function ModuleDetailPage({
   }
 
   const fieldSlugs = ["bilhar-pebolim", "maquinas-de-pelucia", "bx", "h-caca-niquel", "carreta-kids", "locacao"];
-  const dailyFinanceSlugs = ["bilhar-pebolim", "maquinas-de-pelucia", "bx", "carreta-kids", "locacao"];
   const isField = fieldSlugs.includes(item.slug);
-  const initialFinanceDate = dailyFinanceSlugs.includes(item.slug)
+  const financeDailyOnly = session.role === "ADMIN";
+  const initialFinanceDate = financeDailyOnly
     ? currentBusinessDate()
     : undefined;
   const hideFinancials = session.role === "STAFF";
-  const [scopeSummary, records, visitTargets, moduleClients, financialEntries] = await Promise.all([
+  const [scopeSummary, visitTargets, moduleClients, financialEntries] = await Promise.all([
     getModuleScopeSummary(session, item.module, isRecordSlug(item.slug) ? item.slug : null),
-    isRecordSlug(item.slug) ? listModuleRecords(session, item.slug, 6) : Promise.resolve([]),
     isField && isRecordSlug(item.slug) ? listModuleVisitTargets(session, item.slug) : Promise.resolve([]),
     isRecordSlug(item.slug) ? listModuleClients(session, item.slug) : Promise.resolve([]),
     hideFinancials
@@ -102,9 +60,6 @@ export default async function ModuleDetailPage({
   const overdueClients: ClientVisitSummary[] = isField
     ? await getModuleUnvisitedTargets(session, visitTargets, 15)
     : [];
-  const recentRecords =
-    records.length > 0 ? records : buildFallbackRecords(item.title, scopeSummary);
-
   return (
     <div className="space-y-3 md:space-y-4">
       <Link
@@ -119,13 +74,13 @@ export default async function ModuleDetailPage({
         slug={item.slug}
         moduleTitle={item.title}
         summary={scopeSummary}
-        recentRecords={recentRecords}
         clients={visitTargets}
         overdueClients={overdueClients}
         moduleClients={moduleClients}
         financialEntries={financialEntries}
         financeInitialFrom={initialFinanceDate}
         financeInitialTo={initialFinanceDate}
+        financeDailyOnly={financeDailyOnly}
         hideFinancials={hideFinancials}
       />
 

@@ -17,6 +17,11 @@ const emails = {
   admin: `${runId}-admin@smoke.infinity.local`,
   staff: `${runId}-staff@smoke.infinity.local`,
 };
+const usernames = {
+  owner: `${runId}-owner`,
+  admin: `${runId}-admin`,
+  staff: `${runId}-staff`,
+};
 
 async function main() {
   if (command === "cleanup") {
@@ -41,17 +46,19 @@ async function main() {
         role: "OWNER",
         status: "ACTIVE",
         name: "Teste Mobile Dono",
+        username: usernames.owner,
         email: emails.owner,
         passwordHash,
       },
     });
-    for (const [role, email] of [["ADMIN", emails.admin], ["STAFF", emails.staff]] as const) {
+    for (const [role, email, username] of [["ADMIN", emails.admin, usernames.admin], ["STAFF", emails.staff, usernames.staff]] as const) {
       await tx.user.create({
         data: {
           organizationId: organization.id,
           role,
           status: "ACTIVE",
           name: `Teste Mobile ${role}`,
+          username,
           email,
           passwordHash,
           modulePermissions: {
@@ -71,7 +78,7 @@ async function main() {
     }
   });
 
-  console.log(JSON.stringify({ created: 3, organizationId: organization.id, emails }));
+  console.log(JSON.stringify({ created: 3, organizationId: organization.id, usernames }));
 }
 
 main()

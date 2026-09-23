@@ -3,10 +3,10 @@
 import { requireSession } from "@/lib/auth";
 import { moduleCatalog } from "@/lib/module-catalog";
 import {
-  normalizarEmail,
-  validarEmail,
   validarNome,
   validarSenha,
+  normalizarUsuario,
+  validarUsuario,
 } from "@/lib/user-validation";
 import {
   createStaff,
@@ -34,7 +34,7 @@ function validateAccessSelection(role: unknown, modules: unknown): asserts modul
 
 export async function createStaffAction(data: {
   name: string;
-  email: string;
+  username: string;
   phone?: string;
   password: string;
   role: "STAFF" | "ADMIN";
@@ -48,7 +48,7 @@ export async function createStaffAction(data: {
   // Server action e endpoint publico: revalidar aqui, nao confiar no form.
   const erro =
     validarNome(data.name) ??
-    validarEmail(data.email) ??
+    validarUsuario(data.username) ??
     (validarSenha(data.password) ? `Senha: ${validarSenha(data.password)}` : null);
   if (erro) throw new Error(erro);
 
@@ -57,7 +57,7 @@ export async function createStaffAction(data: {
   return createStaff(session, {
     ...data,
     name: data.name.trim(),
-    email: normalizarEmail(data.email),
+    username: normalizarUsuario(data.username),
   });
 }
 
@@ -65,6 +65,7 @@ export async function updateStaffAction(
   userId: string,
   data: {
     name?: string;
+    username?: string;
     phone?: string | null;
     role?: "STAFF" | "ADMIN";
     modules?: ModuleName[];
@@ -78,6 +79,11 @@ export async function updateStaffAction(
   if (data.name !== undefined) {
     const erroNome = validarNome(data.name);
     if (erroNome) throw new Error(erroNome);
+  }
+  if (data.username !== undefined) {
+    const erroUsuario = validarUsuario(data.username);
+    if (erroUsuario) throw new Error(erroUsuario);
+    data.username = normalizarUsuario(data.username);
   }
   if (data.role !== undefined && data.role !== "STAFF" && data.role !== "ADMIN") {
     throw new Error("Perfil de acesso invalido.");

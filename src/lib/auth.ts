@@ -7,6 +7,7 @@ import { demoAccounts } from "@/data/demo";
 import { canAccessModule } from "@/lib/access-policy";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { normalizarUsuario } from "@/lib/user-validation";
 import type { ModuleName, SessionData } from "@/types/app";
 
 const ALL_MODULES: ModuleName[] = [
@@ -106,21 +107,41 @@ export function hasModuleAccess(session: SessionData, module: ModuleName) {
   return canAccessModule(session.role, session.modules, module);
 }
 
-export async function authenticateUser(email: string, password: string) {
+export async function authenticateUser(identifier: string, password: string) {
+  const normalizedIdentifier = normalizarUsuario(identifier);
+
   if (env.demoMode) {
     const account = demoAccounts.find(
       (item) =>
-        item.email.toLowerCase() === email.toLowerCase() &&
+        (item.username === normalizedIdentifier ||
+          item.email.toLowerCase() === normalizedIdentifier) &&
         item.password === password,
     );
 
     return account?.session ?? null;
   }
 
-  const user = await prisma.user.findUnique({
-    where: { email: email.toLowerCase() },
+  let user = await prisma.user.findUnique({
+    where: { username: normalizedIdentifier },
     include: { modulePermissions: true },
   });
+
+  // Compatibilidade de transição: contas antigas continuam entrando pelo
+  // nome antes do @, e o e-mail completo ainda funciona sem aparecer na UI.
+  if (!user && identifier.includes("@")) {
+    user = await prisma.user.findUnique({
+      where: { email: identifier.trim().toLowerCase() },
+      include: { modulePermissions: true },
+    });
+  }
+  if (!user && !identifier.includes("@")) {
+    const legacyMatches = await prisma.user.findMany({
+      where: { email: { startsWith: `${normalizedIdentifier}@`, mode: "insensitive" } },
+      include: { modulePermissions: true },
+      take: 2,
+    });
+    if (legacyMatches.length === 1) user = legacyMatches[0];
+  }
 
   if (!user || user.status !== "ACTIVE") {
     return null;

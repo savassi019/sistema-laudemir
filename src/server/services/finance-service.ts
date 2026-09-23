@@ -4,6 +4,7 @@ import { z } from "zod";
 
 import { demoFinance } from "@/data/demo";
 import { canViewCalculatedFinancials } from "@/lib/access-policy";
+import { currentBusinessDayRange } from "@/lib/business-date";
 import { formatCurrency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import {
@@ -224,6 +225,7 @@ export async function listModuleFinancialAudit(
       organizationId: session.organizationId,
       module,
       action: { startsWith: "FINANCIAL_" },
+      ...financialEntryDateScope(session),
     },
     include: { user: { select: { name: true } } },
     orderBy: { createdAt: "desc" },
@@ -245,6 +247,19 @@ function assertModuleFinancialAccess(session: SessionData) {
   if (!canViewCalculatedFinancials(session.role)) {
     throw new Error("Sem permissao para acessar valores financeiros.");
   }
+}
+
+function effectiveFinanceRange(
+  session: SessionData,
+  requested?: { from?: Date; to?: Date },
+) {
+  return session.role === "ADMIN" ? currentBusinessDayRange() : requested;
+}
+
+function financialEntryDateScope(session: SessionData) {
+  if (session.role !== "ADMIN") return {};
+  const { from, to } = currentBusinessDayRange();
+  return { createdAt: { gte: from, lte: to } };
 }
 
 function mapManualFinancialEntry(
@@ -287,7 +302,11 @@ async function getManualFinancialEntryItem(
   id: string,
 ): Promise<ModuleFinancialEntryItem> {
   const entry = await prisma.financialEntry.findFirstOrThrow({
-    where: { id, organizationId: session.organizationId },
+    where: {
+      id,
+      organizationId: session.organizationId,
+      ...financialEntryDateScope(session),
+    },
     include: financialEntryInclude,
   });
   const operator = entry.createdById
@@ -303,12 +322,13 @@ export async function listModuleFinancialEntries(
   range?: { from?: Date; to?: Date },
 ): Promise<ModuleFinancialEntryItem[]> {
   assertModuleFinancialAccess(session);
+  const effectiveRange = effectiveFinanceRange(session, range);
   const dateWhere =
-    range?.from || range?.to
+    effectiveRange?.from || effectiveRange?.to
       ? {
           createdAt: {
-            ...(range.from ? { gte: range.from } : {}),
-            ...(range.to ? { lte: range.to } : {}),
+            ...(effectiveRange.from ? { gte: effectiveRange.from } : {}),
+            ...(effectiveRange.to ? { lte: effectiveRange.to } : {}),
           },
         }
       : {};
@@ -319,7 +339,7 @@ export async function listModuleFinancialEntries(
       include: financialEntryInclude,
       orderBy: { createdAt: "desc" },
     }),
-    slug ? listModuleRecords(session, slug, 5000, range) : Promise.resolve([]),
+    slug ? listModuleRecords(session, slug, 5000, effectiveRange) : Promise.resolve([]),
   ]);
 
   const creatorIds = [...new Set(entries.map((entry) => entry.createdById).filter(Boolean))] as string[];
@@ -419,7 +439,12 @@ export async function updateModuleFinancialEntryStatus(
   }
 
   const existing = await prisma.financialEntry.findFirstOrThrow({
-    where: { id, organizationId: session.organizationId, module },
+    where: {
+      id,
+      organizationId: session.organizationId,
+      module,
+      ...financialEntryDateScope(session),
+    },
     select: {
       module: true,
       status: true,
@@ -550,7 +575,12 @@ export async function registerModuleFinancialPayment(
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.financialEntry.findFirstOrThrow({
-      where: { id, organizationId: session.organizationId, module },
+      where: {
+        id,
+        organizationId: session.organizationId,
+        module,
+        ...financialEntryDateScope(session),
+      },
     });
     if (existing.status === "CANCELLED") throw new Error("Lancamento cancelado.");
 
@@ -611,7 +641,12 @@ export async function updateModuleFinancialEntry(
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.financialEntry.findFirstOrThrow({
-      where: { id, organizationId: session.organizationId, module },
+      where: {
+        id,
+        organizationId: session.organizationId,
+        module,
+        ...financialEntryDateScope(session),
+      },
     });
     if (existing.status === "CANCELLED") throw new Error("Lancamento cancelado.");
 
@@ -667,7 +702,12 @@ export async function cancelModuleFinancialEntry(
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.financialEntry.findFirstOrThrow({
-      where: { id, organizationId: session.organizationId, module },
+      where: {
+        id,
+        organizationId: session.organizationId,
+        module,
+        ...financialEntryDateScope(session),
+      },
     });
     if (existing.status === "CANCELLED") return;
 
@@ -699,17 +739,18 @@ export async function getFinanceOverview(session: SessionData): Promise<FinanceO
 
   try {
     const organizationId = session.organizationId;
+    const dateWhere = financialEntryDateScope(session);
 
     const [totalsAgg, entries] = await Promise.all([
       Promise.all([
-        prisma.financialEntry.aggregate({ where: { organizationId, status: "PAID" }, _sum: { paidAmount: true, totalAmount: true } }),
-        prisma.financialEntry.aggregate({ where: { organizationId, direction: "EXPENSE", status: { not: "PAID" } }, _sum: { remainingAmount: true } }),
-        prisma.financialEntry.aggregate({ where: { organizationId, status: "PARTIAL" }, _sum: { remainingAmount: true } }),
-        prisma.financialEntry.aggregate({ where: { organizationId, direction: "INCOME" }, _sum: { paidAmount: true, totalAmount: true } }),
-        prisma.financialEntry.aggregate({ where: { organizationId, direction: "EXPENSE" }, _sum: { paidAmount: true, totalAmount: true } }),
+        prisma.financialEntry.aggregate({ where: { organizationId, direction: "INCOME", status: "PAID", ...dateWhere }, _sum: { paidAmount: true, totalAmount: true } }),
+        prisma.financialEntry.aggregate({ where: { organizationId, direction: "EXPENSE", status: { not: "PAID" }, ...dateWhere }, _sum: { remainingAmount: true } }),
+        prisma.financialEntry.aggregate({ where: { organizationId, status: "PARTIAL", ...dateWhere }, _sum: { remainingAmount: true } }),
+        prisma.financialEntry.aggregate({ where: { organizationId, direction: "INCOME", ...dateWhere }, _sum: { paidAmount: true, totalAmount: true } }),
+        prisma.financialEntry.aggregate({ where: { organizationId, direction: "EXPENSE", ...dateWhere }, _sum: { paidAmount: true, totalAmount: true } }),
       ]),
       prisma.financialEntry.findMany({
-        where: { organizationId },
+        where: { organizationId, ...dateWhere },
         orderBy: [{ dueDate: "desc" }, { createdAt: "desc" }],
         include: { client: true },
       }),

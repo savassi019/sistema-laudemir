@@ -362,7 +362,7 @@ export type SlotVisitSaveResult = {
 };
 
 const registerSlotClientSchema = z.object({
-  clientName: z.string().min(1, "Informe o cliente."),
+  clientName: z.string().trim().min(1, "Informe o cliente."),
   phone: z.string().optional(),
   cpf: z.string().optional(),
   cep: z.string().optional(),
@@ -371,6 +371,7 @@ const registerSlotClientSchema = z.object({
   city: z.string().optional(),
   state: z.string().optional(),
   machineCount: z.number().int().min(1).max(999),
+  allowExisting: z.boolean().optional(),
 });
 
 /**
@@ -384,8 +385,21 @@ export async function registerSlotClient(
   payload: Record<string, unknown>,
 ): Promise<{ clientName: string; created: number }> {
   const data = registerSlotClientSchema.parse(payload);
+  const existingClient = await prisma.slotMachine.findFirst({
+    where: {
+      organizationId: session.organizationId,
+      clientName: { equals: data.clientName, mode: "insensitive" },
+    },
+    orderBy: { clientMachineNumber: "asc" },
+  });
+
+  if (existingClient && !data.allowExisting) {
+    throw new Error("Este cliente já está cadastrado. Abra o cliente para adicionar novas máquinas.");
+  }
+
+  const clientName = existingClient?.clientName ?? data.clientName;
   const existentes = await prisma.slotMachine.count({
-    where: { organizationId: session.organizationId, clientName: data.clientName },
+    where: { organizationId: session.organizationId, clientName },
   });
 
   await prisma.slotMachine.createMany({
@@ -394,14 +408,14 @@ export async function registerSlotClient(
       uniqueMachineNumber: randomUUID(),
       clientMachineNumber: existentes + i + 1,
       clientSequenceNumber: "1",
-      clientName: data.clientName,
-      phone: data.phone,
-      cpf: data.cpf,
-      cep: data.cep,
-      street: data.street,
-      neighborhood: data.neighborhood,
-      city: data.city,
-      state: data.state,
+      clientName,
+      phone: data.phone ?? existingClient?.phone,
+      cpf: data.cpf ?? existingClient?.cpf,
+      cep: data.cep ?? existingClient?.cep,
+      street: data.street ?? existingClient?.street,
+      neighborhood: data.neighborhood ?? existingClient?.neighborhood,
+      city: data.city ?? existingClient?.city,
+      state: data.state ?? existingClient?.state,
       customerDebt: 0,
       machineDebt: 0,
       ppValue: 0,
@@ -412,7 +426,183 @@ export async function registerSlotClient(
     })),
   });
 
-  return { clientName: data.clientName, created: data.machineCount };
+  return { clientName, created: data.machineCount };
+}
+
+const registerModuleClientSchema = z.object({
+  clientName: z.string().trim().min(2, "Informe o nome do cliente."),
+  phone: z.string().trim().optional(),
+  document: z.string().trim().optional(),
+  cpf: z.string().trim().optional(),
+  cep: z.string().trim().optional(),
+  street: z.string().trim().optional(),
+  neighborhood: z.string().trim().optional(),
+  city: z.string().trim().optional(),
+  state: z.string().trim().optional(),
+  localName: z.string().trim().optional(),
+  code: z.string().trim().optional(),
+  machineName: z.string().trim().optional(),
+  machineNumber: z.string().trim().optional(),
+  tableModel: z.string().trim().optional(),
+  routeNumber: z.coerce.number().int().min(1).optional(),
+  chipValue: z.coerce.number().min(0).optional(),
+  machineCount: z.coerce.number().int().min(1).max(100).optional(),
+  exceptionClient: z.boolean().optional(),
+});
+
+function moduleClientKey(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim()
+    .toLocaleLowerCase("pt-BR")
+    .replace(/\s+/g, " ");
+}
+
+function generatedAssetCode(prefix: string, value: string) {
+  const normalized = value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 18)
+    .toUpperCase();
+  return `${prefix}-${normalized || randomUUID().slice(0, 8).toUpperCase()}`;
+}
+
+/** Cadastro isolado: cria cliente/ativo sem inventar um fechamento financeiro. */
+export async function registerModuleClient(
+  session: SessionData,
+  slug: ModuleSlug,
+  payload: Record<string, unknown>,
+): Promise<{ id: string; name: string }> {
+  const data = registerModuleClientSchema.parse(payload);
+  const organizationId = session.organizationId;
+  const nameKey = moduleClientKey(data.clientName);
+
+  try {
+    switch (slug) {
+      case "bilhar-pebolim": {
+        const pointName = data.localName || data.clientName;
+        const routeNumber = data.routeNumber ?? 1;
+        const code = data.code || generatedAssetCode(`R${String(routeNumber).padStart(2, "0")}`, pointName);
+        const result = await prisma.$queryRaw<[{ next: number }]>`
+          SELECT COALESCE(MAX("registrationNumber"), 0) + 1 AS next
+          FROM "BilliardPoint"
+          WHERE "organizationId" = ${organizationId}
+        `;
+        const point = await prisma.billiardPoint.create({
+          data: {
+            organizationId,
+            createdById: session.userId,
+            registrationNumber: result[0]?.next ?? 1,
+            code,
+            name: pointName,
+            clientName: data.clientName,
+            phone: data.phone,
+            cpf: data.cpf || data.document,
+            city: data.city,
+            tableModel: data.tableModel,
+            chipValue: data.chipValue ?? 0,
+            routeNumber,
+            accumulatedChips: 0,
+          },
+        });
+        return { id: point.id, name: data.clientName };
+      }
+      case "maquinas-de-pelucia": {
+        const machineName = data.machineName || data.localName || "GRUA";
+        const machineNumber = data.machineNumber || "1";
+        const code = data.code || generatedAssetCode("GRUA", `${data.clientName}-${machineNumber}`);
+        const machine = await prisma.plushMachine.create({
+          data: {
+            organizationId,
+            clientName: data.clientName,
+            phone: data.phone,
+            cpf: data.cpf || data.document,
+            code,
+            name: machineName,
+            machineNumber,
+            coinPhotoRule: true,
+            giftPhotoRule: true,
+            active: true,
+          },
+        });
+        return { id: machine.id, name: data.clientName };
+      }
+      case "h-caca-niquel": {
+        await registerSlotClient(session, {
+          clientName: data.clientName,
+          phone: data.phone,
+          cpf: data.cpf || data.document,
+          cep: data.cep,
+          street: data.street,
+          neighborhood: data.neighborhood,
+          city: data.city,
+          state: data.state,
+          machineCount: data.machineCount ?? 1,
+        });
+        const first = await prisma.slotMachine.findFirstOrThrow({
+          where: { organizationId, clientName: data.clientName },
+          orderBy: { clientMachineNumber: "asc" },
+        });
+        return { id: first.id, name: data.clientName };
+      }
+      case "bx": {
+        const client = await prisma.bxClient.create({
+          data: {
+            organizationId,
+            createdById: session.userId,
+            nameKey,
+            clientName: data.clientName,
+            phone: data.phone,
+            cpf: data.cpf || data.document,
+            cep: data.cep,
+            street: data.street,
+            neighborhood: data.neighborhood,
+            city: data.city,
+            state: data.state,
+            exceptionClient: data.exceptionClient ?? false,
+          },
+        });
+        return { id: client.id, name: client.clientName };
+      }
+      case "carreta-kids": {
+        const client = await prisma.carretaKidsClient.create({
+          data: {
+            organizationId,
+            createdById: session.userId,
+            nameKey,
+            locationName: data.localName || data.clientName,
+            sheetName: data.clientName,
+            phone: data.phone,
+          },
+        });
+        return { id: client.id, name: client.sheetName };
+      }
+      case "locacao": {
+        const client = await prisma.rentalClient.create({
+          data: {
+            organizationId,
+            createdById: session.userId,
+            nameKey,
+            clientName: data.clientName,
+            phone: data.phone,
+            document: data.document || data.cpf,
+            localName: data.localName,
+          },
+        });
+        return { id: client.id, name: client.clientName };
+      }
+      default:
+        throw new Error("Este módulo não usa o cadastro rápido de clientes.");
+    }
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new Error("Este cliente, código ou número de máquina já está cadastrado neste módulo.");
+    }
+    throw error;
+  }
 }
 
 export type SlotClientMachine = {
@@ -1192,6 +1382,19 @@ async function saveWithPrisma(
       const data = createCarretaSchema.parse(payload);
       const basePrice = data.minutesCharged === "15" ? 20 : data.minutesCharged === "30" ? 30 : 40;
       const { totalAmount } = calculateCarretaFinancials(basePrice, data.expenseAmount ?? 0);
+      const nameKey = moduleClientKey(data.sheetName);
+      await prisma.carretaKidsClient.upsert({
+        where: { organizationId_nameKey: { organizationId: session.organizationId, nameKey } },
+        create: {
+          organizationId: session.organizationId,
+          createdById: session.userId,
+          nameKey,
+          locationName: data.localName,
+          sheetName: data.sheetName,
+          phone: data.phone,
+        },
+        update: { locationName: data.localName, sheetName: data.sheetName, phone: data.phone },
+      });
       const record = await prisma.carretaKidsRecord.create({
         data: {
           organizationId: session.organizationId,
@@ -1519,6 +1722,35 @@ async function saveWithPrisma(
         deliveredAmount: data.deliveredAmount,
         discountAmount: data.discountAmount,
         receiptStatus,
+      });
+      const nameKey = moduleClientKey(data.clientName);
+      await prisma.bxClient.upsert({
+        where: { organizationId_nameKey: { organizationId: session.organizationId, nameKey } },
+        create: {
+          organizationId: session.organizationId,
+          createdById: session.userId,
+          nameKey,
+          clientName: data.clientName,
+          phone: data.phone,
+          cpf: data.cpf,
+          cep: data.cep,
+          street: data.street,
+          neighborhood: data.neighborhood,
+          city: data.city,
+          state: data.state,
+          exceptionClient: data.exceptionClient,
+        },
+        update: {
+          clientName: data.clientName,
+          phone: data.phone,
+          cpf: data.cpf,
+          cep: data.cep,
+          street: data.street,
+          neighborhood: data.neighborhood,
+          city: data.city,
+          state: data.state,
+          exceptionClient: data.exceptionClient,
+        },
       });
       const record = await prisma.bxTransaction.create({
         data: {
@@ -1984,6 +2216,26 @@ async function saveWithPrisma(
         signalEnabled: data.signalEnabled ?? false,
         signalPercentage: data.signalPercentage,
         expenseAmount: data.expenseAmount,
+      });
+
+      const nameKey = moduleClientKey(data.clientName);
+      await prisma.rentalClient.upsert({
+        where: { organizationId_nameKey: { organizationId: session.organizationId, nameKey } },
+        create: {
+          organizationId: session.organizationId,
+          createdById: session.userId,
+          nameKey,
+          clientName: data.clientName,
+          phone: data.phone,
+          document: data.document,
+          localName: data.localName,
+        },
+        update: {
+          clientName: data.clientName,
+          phone: data.phone,
+          document: data.document,
+          localName: data.localName,
+        },
       });
 
       const record = await prisma.rentalOrder.create({
@@ -2802,7 +3054,26 @@ export async function listModuleRecords(
   take = 5,
   range?: DateRange,
 ): Promise<ModuleRecordItem[]> {
-  return applyOperationReviews(session, slug, await listModuleRecordsBase(session, slug, take, range));
+  const records = await applyOperationReviews(
+    session,
+    slug,
+    await listModuleRecordsBase(session, slug, take, range),
+  );
+  return recordsVisibleToSession(session, records);
+}
+
+function recordsVisibleToSession(session: SessionData, records: ModuleRecordItem[]) {
+  if (session.role !== "STAFF") return records;
+
+  return records.map((record) => ({
+    ...record,
+    amount: undefined,
+    amountValue: undefined,
+    incomeValue: undefined,
+    expenseValue: undefined,
+    financialBreakdown: [],
+    details: record.details.filter((detail) => !detail.includes("R$")),
+  }));
 }
 
 export type ModuleClientItem = {
@@ -2857,44 +3128,36 @@ export async function listModuleClients(
         }));
       }
       case "bx": {
-        const records = await prisma.bxTransaction.findMany({
+        const clients = await prisma.bxClient.findMany({
           where: { organizationId: session.organizationId },
-          orderBy: { createdAt: "desc" },
-          take: take * 5,
+          orderBy: { updatedAt: "desc" },
+          take,
         });
-        const nomePorCriadorBx = await resolveCreatorNames(records.map((r) => r.createdById));
 
-        return dedupeByKey(records, (r) => r.clientName)
-          .slice(0, take)
-          .map((record) => {
-            const amounts = getBxFinancialAmounts(record);
-            return {
-              id: record.id,
-              name: record.clientName,
-              subtitle: `Funcionário: ${record.createdById ? (nomePorCriadorBx.get(record.createdById) ?? "-") : "-"}`,
-              tags: [record.phone, record.cpf].filter(Boolean) as string[],
-              badge: formatCurrency(amounts.netAmount),
-              phone: record.phone ?? undefined,
-            };
-          });
+        return clients.map((client) => ({
+          id: client.id,
+          name: client.clientName,
+          subtitle: client.city || "Cliente BX",
+          tags: [client.phone, client.cpf].filter(Boolean) as string[],
+          badge: client.exceptionClient ? "Exceção" : "Ativo",
+          phone: client.phone ?? undefined,
+        }));
       }
       case "carreta-kids": {
-        const records = await prisma.carretaKidsRecord.findMany({
+        const clients = await prisma.carretaKidsClient.findMany({
           where: { organizationId: session.organizationId },
-          orderBy: { createdAt: "desc" },
-          take: take * 5,
+          orderBy: { updatedAt: "desc" },
+          take,
         });
 
-        return dedupeByKey(records, (r) => `${r.sheetName}-${r.phone ?? ""}`)
-          .slice(0, take)
-          .map((record) => ({
-            id: record.id,
-            name: record.sheetName,
-            subtitle: record.locationName,
-            tags: [record.phone].filter(Boolean) as string[],
-            badge: formatCurrency(Number(record.totalAmount)),
-            phone: record.phone ?? undefined,
-          }));
+        return clients.map((client) => ({
+          id: client.id,
+          name: client.sheetName,
+          subtitle: client.locationName,
+          tags: [client.phone].filter(Boolean) as string[],
+          badge: "Ativo",
+          phone: client.phone ?? undefined,
+        }));
       }
       case "maquinas-de-pelucia": {
         const machines = await prisma.plushMachine.findMany({
@@ -2971,22 +3234,20 @@ export async function listModuleClients(
           }));
       }
       case "locacao": {
-        const records = await prisma.rentalOrder.findMany({
+        const clients = await prisma.rentalClient.findMany({
           where: { organizationId: session.organizationId },
-          orderBy: { createdAt: "desc" },
-          take: take * 5,
+          orderBy: { updatedAt: "desc" },
+          take,
         });
 
-        return dedupeByKey(records, (r) => r.clientName ?? r.id)
-          .slice(0, take)
-          .map((record) => ({
-            id: record.id,
-            name: record.clientName ?? record.localName,
-            subtitle: record.localName,
-            tags: [record.phone, record.document].filter(Boolean) as string[],
-            badge: rotuloDeStatus(record.paymentStatus, FINANCIAL_STATUS_LABEL),
-            phone: record.phone ?? undefined,
-          }));
+        return clients.map((client) => ({
+          id: client.id,
+          name: client.clientName,
+          subtitle: client.localName || "Cliente de locação",
+          tags: [client.phone, client.document].filter(Boolean) as string[],
+          badge: "Ativo",
+          phone: client.phone ?? undefined,
+        }));
       }
       default:
         return [];
@@ -3213,11 +3474,12 @@ export async function listModuleClientRecords(
   clientId: string,
   clientName: string,
 ): Promise<ModuleRecordItem[]> {
-  return applyOperationReviews(
+  const records = await applyOperationReviews(
     session,
     slug,
     await listModuleClientRecordsBase(session, slug, clientId, clientName),
   );
+  return recordsVisibleToSession(session, records);
 }
 
 export async function listModuleVisitTargets(
@@ -3305,20 +3567,20 @@ export async function getClientPrefillData(
       return { kind: "slot-machine", clientName: m.clientName ?? "", phone: m.phone ?? "", cpf: m.cpf ?? "", cep: m.cep ?? "", street: m.street ?? "", neighborhood: m.neighborhood ?? "", city: m.city ?? "", state: m.state ?? "", clientMachineNumber: m.clientMachineNumber, customerDebt: Number(m.customerDebt ?? 0), ppValue: Number(m.ppValue ?? 0), initialAmount: Number(m.initialAmount ?? 0), initialAmountMode: m.initialAmountMode, optionalGreedAmount: Number(m.optionalGreedAmount ?? 0), active: m.active, previousIncome: Number(ultimaColeta?.currentIncome ?? 0), previousExpense: Number(ultimaColeta?.currentExpense ?? 0) };
     }
     case "bx": {
-      const r = await prisma.bxTransaction.findFirst({ where: { id, organizationId: org } });
+      const r = await prisma.bxClient.findFirst({ where: { id, organizationId: org } });
       if (!r) return null;
       const debt = await resolveBxClientDebt(org, r.clientName);
       return { kind: "bx-transaction", clientName: r.clientName, phone: r.phone ?? "", cpf: r.cpf ?? "", cep: r.cep ?? "", street: r.street ?? "", neighborhood: r.neighborhood ?? "", city: r.city ?? "", state: r.state ?? "", exceptionClient: r.exceptionClient, debt };
     }
     case "carreta-kids": {
-      const r = await prisma.carretaKidsRecord.findFirst({ where: { id, organizationId: org } });
+      const r = await prisma.carretaKidsClient.findFirst({ where: { id, organizationId: org } });
       if (!r) return null;
       return { kind: "carreta-kids-record", localName: r.locationName, sheetName: r.sheetName, phone: r.phone ?? "" };
     }
     case "locacao": {
-      const r = await prisma.rentalOrder.findFirst({ where: { id, organizationId: org } });
+      const r = await prisma.rentalClient.findFirst({ where: { id, organizationId: org } });
       if (!r) return null;
-      return { kind: "rental-order", clientName: r.clientName ?? "", phone: r.phone ?? "", localName: r.localName, document: r.document ?? "" };
+      return { kind: "rental-order", clientName: r.clientName, phone: r.phone ?? "", localName: r.localName ?? "", document: r.document ?? "" };
     }
     default:
       return null;

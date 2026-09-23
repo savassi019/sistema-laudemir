@@ -42,22 +42,28 @@ export function validarSenha(senha: string): string | null {
   return falhou ? falhou.label : null;
 }
 
-/**
- * O login busca por email.toLowerCase(), entao o cadastro precisa gravar
- * normalizado — senao um e-mail com maiuscula nunca casa e o funcionario
- * fica trancado do lado de fora sem entender por que.
- */
-export function normalizarEmail(email: string): string {
-  return email.trim().toLowerCase();
+export const USERNAME_MIN = 3;
+export const USERNAME_MAX = 32;
+
+/** O usuário de acesso é sempre sem espaços e sem diferença entre maiúsculas/minúsculas. */
+export function normalizarUsuario(username: string): string {
+  return username.trim().toLowerCase();
 }
 
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-
-export function validarEmail(email: string): string | null {
-  const e = normalizarEmail(email);
-  if (!e) return "Informe o e-mail de acesso.";
-  if (!EMAIL_RE.test(e)) return "E-mail inválido. Use o formato nome@dominio.com";
+export function validarUsuario(username: string): string | null {
+  const value = normalizarUsuario(username);
+  if (!value) return "Informe o usuário de acesso.";
+  if (value.length < USERNAME_MIN) return `O usuário precisa ter pelo menos ${USERNAME_MIN} caracteres.`;
+  if (value.length > USERNAME_MAX) return `O usuário pode ter no máximo ${USERNAME_MAX} caracteres.`;
+  if (!/^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?$/.test(value)) {
+    return "Use somente letras sem acento, números, ponto, traço ou sublinhado.";
+  }
   return null;
+}
+
+/** Compatibilidade para contas antigas até todas receberem um username próprio. */
+export function usuarioLegadoDoEmail(email: string): string {
+  return normalizarUsuario(email.split("@")[0] ?? email);
 }
 
 export function validarNome(nome: string): string | null {

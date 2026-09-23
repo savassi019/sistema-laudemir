@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
-import { normalizarEmail } from "@/lib/user-validation";
+import { normalizarUsuario, usuarioLegadoDoEmail } from "@/lib/user-validation";
 import type { ModuleName, SessionData, StaffMember } from "@/types/app";
 
 const globalForUsers = globalThis as unknown as {
@@ -23,7 +23,7 @@ export async function listStaff(session: SessionData): Promise<StaffMember[]> {
       {
         id: "demo-user-2",
         name: "Equipe Campo Demo",
-        email: "funcionario@svs-demo.local",
+        username: "funcionario",
         status: "ativo",
         role: "STAFF",
         createdAt: new Date().toISOString(),
@@ -46,7 +46,7 @@ export async function listStaff(session: SessionData): Promise<StaffMember[]> {
     return users.map((u) => ({
       id: u.id,
       name: u.name,
-      email: u.email,
+      username: u.username ?? usuarioLegadoDoEmail(u.email),
       phone: u.phone ?? undefined,
       status: u.status === "ACTIVE" ? "ativo" : "inativo",
       role: u.role as "STAFF" | "ADMIN",
@@ -66,7 +66,7 @@ export async function createStaff(
   session: SessionData,
   data: {
     name: string;
-    email: string;
+    username: string;
     phone?: string;
     password: string;
     role: "STAFF" | "ADMIN";
@@ -76,7 +76,7 @@ export async function createStaff(
   const member: StaffMember = {
     id: randomUUID(),
     name: data.name,
-    email: data.email,
+    username: data.username,
     phone: data.phone,
     status: "ativo",
     role: data.role,
@@ -96,14 +96,16 @@ export async function createStaff(
     const passwordHash = await bcrypt.hash(data.password, 10);
     const grantedModules = Array.from(new Set<ModuleName>(["DASHBOARD", ...data.modules]));
 
-    // authenticateUser busca por email.toLowerCase(): gravar com maiuscula
-    // deixaria o funcionario sem conseguir entrar, sem mensagem que explique.
-    const email = normalizarEmail(data.email);
+    const username = normalizarUsuario(data.username);
+    // O campo e-mail continua no banco apenas por compatibilidade estrutural.
+    // Nenhum e-mail real é pedido nem mostrado para novas contas.
+    const email = `${username}@login.erpinfinity.local`;
 
     const user = await prisma.user.create({
       data: {
         organizationId: session.organizationId,
         name: data.name,
+        username,
         email,
         phone: data.phone || undefined,
         passwordHash,
@@ -122,7 +124,7 @@ export async function createStaff(
     return {
       id: user.id,
       name: user.name,
-      email: user.email,
+      username: user.username ?? username,
       phone: user.phone ?? undefined,
       status: "ativo",
       role: user.role as "STAFF" | "ADMIN",
@@ -134,7 +136,7 @@ export async function createStaff(
       error instanceof Prisma.PrismaClientKnownRequestError &&
       error.code === "P2002"
     ) {
-      throw new Error("Email já cadastrado.");
+      throw new Error("Usuário já cadastrado.");
     }
 
     console.error("[user-service] createStaff falhou ao gravar no banco:", error);
@@ -154,6 +156,7 @@ export async function updateStaff(
   userId: string,
   data: {
     name?: string;
+    username?: string;
     phone?: string | null;
     role?: "STAFF" | "ADMIN";
     modules?: ModuleName[];
@@ -167,6 +170,7 @@ export async function updateStaff(
     const atualizado: StaffMember = {
       ...atual,
       ...(data.name !== undefined && { name: data.name }),
+      ...(data.username !== undefined && { username: normalizarUsuario(data.username) }),
       ...(data.phone !== undefined && { phone: data.phone ?? undefined }),
       ...(data.role !== undefined && { role: data.role }),
       ...(data.modules !== undefined && { modules: data.modules }),
@@ -183,14 +187,23 @@ export async function updateStaff(
   if (!alvo) throw new Error("Funcionário não encontrado.");
   if (alvo.role === "OWNER") throw new Error("Não é possível editar o Dono por aqui.");
 
-  const updated = await prisma.user.update({
-    where: { id: userId },
-    data: {
-      ...(data.name !== undefined && { name: data.name }),
-      ...(data.phone !== undefined && { phone: data.phone || null }),
-      ...(data.role !== undefined && { role: data.role }),
-    },
-  });
+  let updated;
+  try {
+    updated = await prisma.user.update({
+      where: { id: userId },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.username !== undefined && { username: normalizarUsuario(data.username) }),
+        ...(data.phone !== undefined && { phone: data.phone || null }),
+        ...(data.role !== undefined && { role: data.role }),
+      },
+    });
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      throw new Error("Usuário já cadastrado.");
+    }
+    throw error;
+  }
 
   let modulos = data.modules;
   if (data.modules) {
@@ -223,7 +236,7 @@ export async function updateStaff(
   return {
     id: updated.id,
     name: updated.name,
-    email: updated.email,
+    username: updated.username ?? usuarioLegadoDoEmail(updated.email),
     phone: updated.phone ?? undefined,
     status: updated.status === "ACTIVE" ? "ativo" : "inativo",
     role: updated.role as "STAFF" | "ADMIN",

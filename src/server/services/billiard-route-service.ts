@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import { prisma } from "@/lib/prisma";
+import { currentBusinessDayRange } from "@/lib/business-date";
 import type { SessionData } from "@/types/app";
 
 export type RoutePlanItem = {
@@ -106,6 +107,7 @@ export async function listBilliardPoints(
   return points.map((point) => {
     const lastCollection = point.collections[0];
     const roofOpenDebt = Number(point.roofOpenDebt ?? 0);
+    const adminDay = session.role === "ADMIN" ? currentBusinessDayRange() : null;
 
     let status: BilliardPointItem["status"] = "Pendente";
     if (point.accumulatedChips >= point.clothChangeAlertAt) {
@@ -130,6 +132,14 @@ export async function listBilliardPoints(
         Number(lastCollection.discountAmount ?? 0);
     }
 
+    const canReturnLastResult =
+      session.role === "OWNER" ||
+      (session.role === "ADMIN" &&
+        lastCollection &&
+        adminDay &&
+        lastCollection.collectionDate >= adminDay.from &&
+        lastCollection.collectionDate <= adminDay.to);
+
     return {
       id: point.id,
       registrationNumber: point.registrationNumber,
@@ -150,10 +160,10 @@ export async function listBilliardPoints(
       partialRoute: point.partialRoute,
       accumulatedChips: point.accumulatedChips,
       clothChangeAlertAt: point.clothChangeAlertAt,
-      roofOpenDebt,
+      roofOpenDebt: session.role === "STAFF" ? 0 : roofOpenDebt,
       status,
       lastCollectionAt: lastCollection ? lastCollection.collectionDate.toISOString() : null,
-      lastResultAmount,
+      lastResultAmount: canReturnLastResult ? lastResultAmount : null,
     };
   });
 }
@@ -288,10 +298,14 @@ export type BilliardClientOverviewItem = {
 export async function listBilliardClientsOverview(
   session: SessionData,
 ): Promise<BilliardClientOverviewItem[]> {
+  const adminDay = session.role === "ADMIN" ? currentBusinessDayRange() : null;
   const points = await prisma.billiardPoint.findMany({
     where: { organizationId: session.organizationId },
     include: {
       collections: {
+        ...(adminDay
+          ? { where: { collectionDate: { gte: adminDay.from, lte: adminDay.to } } }
+          : {}),
         select: {
           collectionDate: true,
           employeeCost: true,
@@ -306,7 +320,7 @@ export async function listBilliardClientsOverview(
   });
 
   return points.map((point) => {
-    const accountsPayable = point.collections.reduce(
+    const accountsPayable = session.role === "STAFF" ? 0 : point.collections.reduce(
       (total, c) =>
         total +
         Number(c.employeeCost ?? 0) +
@@ -323,7 +337,7 @@ export async function listBilliardClientsOverview(
       name: point.name,
       clientName: point.clientName,
       phone: point.phone,
-      roofOpenDebt: Number(point.roofOpenDebt ?? 0),
+      roofOpenDebt: session.role === "OWNER" ? Number(point.roofOpenDebt ?? 0) : 0,
       accountsPayable,
       lastCollectionAt: point.collections[0]?.collectionDate.toISOString() ?? null,
     };
@@ -364,9 +378,16 @@ export async function listBilliardPointHistory(
   session: SessionData,
   pointId: string,
 ): Promise<BilliardPointHistoryEntry[]> {
+  const adminDay = session.role === "ADMIN" ? currentBusinessDayRange() : null;
   const [collections, maintenances] = await Promise.all([
     prisma.billiardCollection.findMany({
-      where: { organizationId: session.organizationId, billiardPointId: pointId },
+      where: {
+        organizationId: session.organizationId,
+        billiardPointId: pointId,
+        ...(adminDay
+          ? { collectionDate: { gte: adminDay.from, lte: adminDay.to } }
+          : {}),
+      },
       orderBy: { collectionDate: "desc" },
     }),
     prisma.billiardMaintenance.findMany({
@@ -400,6 +421,7 @@ export async function listBilliardPointHistory(
   const userNameById = new Map(users.map((u) => [u.id, u.name]));
 
   const collectionEntries: BilliardPointHistoryEntry[] = collections.map((c) => {
+    const showFinancials = session.role !== "STAFF";
     const grossAmount = Number(c.grossAmount);
     const percentage = Number(c.percentage ?? 0);
     const discountAmount = Number(c.discountAmount ?? 0);
@@ -422,16 +444,16 @@ export async function listBilliardPointHistory(
       id: c.id,
       date: c.collectionDate.toISOString(),
       quantityOfChips: c.quantityOfChips,
-      grossAmount,
-      percentage,
-      discountAmount,
-      roofAmount,
-      roofPaymentMethod: c.roofPaymentMethod,
-      employeeCost,
-      installationCost,
-      maintenanceCost,
-      otherCost,
-      finalValue,
+      grossAmount: showFinancials ? grossAmount : 0,
+      percentage: showFinancials ? percentage : 0,
+      discountAmount: showFinancials ? discountAmount : 0,
+      roofAmount: showFinancials ? roofAmount : 0,
+      roofPaymentMethod: showFinancials ? c.roofPaymentMethod : null,
+      employeeCost: showFinancials ? employeeCost : 0,
+      installationCost: showFinancials ? installationCost : 0,
+      maintenanceCost: showFinancials ? maintenanceCost : 0,
+      otherCost: showFinancials ? otherCost : 0,
+      finalValue: showFinancials ? finalValue : 0,
       registerNumber: c.registerNumber,
       photos: photos
         .filter((p) => p.entityId === c.id)

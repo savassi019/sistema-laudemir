@@ -32,6 +32,7 @@ import { MarketingCalendar } from "@/components/modules/marketing-calendar";
 import { MarketingHome } from "@/components/modules/marketing-home";
 import { MarketingCrmView } from "@/components/modules/marketing-crm-view";
 import { ModuleAccountsPayable } from "@/components/modules/module-accounts-payable";
+import { ModuleClientRegistrationForm } from "@/components/modules/module-client-registration-form";
 import { ModuleReceiptCenter } from "@/components/modules/module-receipt-center";
 import { MarketingAccounts } from "@/components/modules/marketing-accounts";
 import { ModuleFinanceSection } from "@/components/modules/module-finance-section";
@@ -45,7 +46,7 @@ import { SlotForm } from "@/components/modules/slot-form";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
 import type { ModuleFinancialEntryItem } from "@/server/services/finance-service";
-import type { ModuleClientItem, ModuleRecordItem } from "@/server/services/module-record-service";
+import type { ModuleClientItem } from "@/server/services/module-record-service";
 import type { ModuleScopeSummary } from "@/server/services/module-scope-service";
 import type { ClientListItem, ClientVisitSummary } from "@/types/app";
 
@@ -115,25 +116,25 @@ export function ModuleWorkspace({
   slug,
   moduleTitle,
   summary,
-  recentRecords: _recentRecords,
   clients = [],
   overdueClients = [],
   moduleClients = [],
   financialEntries = [],
   financeInitialFrom,
   financeInitialTo,
+  financeDailyOnly = false,
   hideFinancials = false,
 }: {
   slug: string;
   moduleTitle: string;
   summary: ModuleScopeSummary;
-  recentRecords: ModuleRecordItem[];
   clients?: ClientListItem[];
   overdueClients?: ClientVisitSummary[];
   moduleClients?: ModuleClientItem[];
   financialEntries?: ModuleFinancialEntryItem[];
   financeInitialFrom?: string;
   financeInitialTo?: string;
+  financeDailyOnly?: boolean;
   hideFinancials?: boolean;
 }) {
   const hasClientConcept = !slugsWithoutClientConcept.has(slug);
@@ -173,7 +174,7 @@ export function ModuleWorkspace({
   const visibleSections = ALL_SECTIONS.filter((k) => {
     if (k === "operacao"      && hasVisitTracking)    return false; // Visita absorve o fechamento
     if (k === "visita"        && !hasVisitTracking)   return false;
-    if (k === "premio"        && !hasPremio)          return false;
+    if (k === "premio"        && (!hasPremio || hideFinancials)) return false;
     if (k === "rotas"         && !hasRoutes)          return false;
     if (k === "calendario"    && !hasCalendar)        return false;
     // "Contratos" e uma lista generica compartilhada com os outros modulos:
@@ -192,7 +193,7 @@ export function ModuleWorkspace({
     // (cliente + despesas da agencia juntos), entao nao reabre o problema.
     if (k === "financeiro"    && (hideFinancials || hasCalendar)) return false;
     if (k === "contas-pagar"  && hideFinancials)                  return false;
-    if (k === "comprovantes"  && !slugsWithReceipts.has(slug))    return false;
+    if (k === "comprovantes"  && (!slugsWithReceipts.has(slug) || hideFinancials)) return false;
     return true;
   });
 
@@ -453,10 +454,10 @@ export function ModuleWorkspace({
 
         {activeSection === "clientes" ? (
           <ClientesSection
+            slug={slug}
             moduleClients={moduleClients}
             showRegisterForm={showRegisterForm}
             setShowRegisterForm={setShowRegisterForm}
-            Form={Form}
             hideFinancials={hideFinancials}
           />
         ) : null}
@@ -468,6 +469,7 @@ export function ModuleWorkspace({
             initialEntries={financialEntries}
             initialFromDate={financeInitialFrom}
             initialToDate={financeInitialTo}
+            dailyOnly={financeDailyOnly}
           />
         ) : null}
 
@@ -513,9 +515,9 @@ export function ModuleWorkspace({
       {!hasCalendar && !hideFinancials ? (
         <div className="grid grid-cols-3 gap-2">
           {[
-            { label: "Entradas",  value: formatCurrency(Number(summary.incomeAmount)),  accent: "#4ade80", dim: "text-[#86efac]" },
-            { label: "Despesas",  value: formatCurrency(Number(summary.expenseAmount)), accent: "#f87171", dim: "text-[#fca5a5]" },
-            { label: "Resultado", value: formatCurrency(Number(summary.balanceAmount)), accent: "#60a5fa", dim: "text-[#93c5fd]" },
+            { label: financeDailyOnly ? "Entradas hoje" : "Entradas",  value: formatCurrency(Number(summary.incomeAmount)),  accent: "#4ade80", dim: "text-[#86efac]" },
+            { label: financeDailyOnly ? "Despesas hoje" : "Despesas",  value: formatCurrency(Number(summary.expenseAmount)), accent: "#f87171", dim: "text-[#fca5a5]" },
+            { label: financeDailyOnly ? "Resultado hoje" : "Resultado", value: formatCurrency(Number(summary.balanceAmount)), accent: "#60a5fa", dim: "text-[#93c5fd]" },
           ].map((s) => (
             <div
               key={s.label}
@@ -632,16 +634,16 @@ export function ModuleWorkspace({
 // ── Aba Clientes com busca ────────────────────────────────────────────────────
 
 function ClientesSection({
+  slug,
   moduleClients,
   showRegisterForm,
   setShowRegisterForm,
-  Form,
   hideFinancials,
 }: {
+  slug: string;
   moduleClients: ModuleClientItem[];
   showRegisterForm: boolean;
   setShowRegisterForm: (fn: (x: boolean) => boolean) => void;
-  Form: ComponentType<{ hideFinancials?: boolean; startAtRegistration?: boolean }> | null;
   hideFinancials: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -682,9 +684,12 @@ function ClientesSection({
             {showRegisterForm ? "Ocultar" : "Novo"}
           </button>
         </div>
-        {showRegisterForm && Form ? (
+        {showRegisterForm ? (
           <div className="mt-4 border-t border-[rgba(245,241,232,0.08)] pt-4">
-            <Form hideFinancials={hideFinancials} startAtRegistration />
+            <ModuleClientRegistrationForm
+              slug={slug}
+              onSaved={() => setShowRegisterForm(() => false)}
+            />
           </div>
         ) : null}
       </div>
@@ -725,7 +730,7 @@ function ClientesSection({
                     <span className="shrink-0 rounded-full border border-[#d1a04f]/25 bg-[#d1a04f]/10 px-2 py-1 text-[11px] font-medium text-[#f3dfae]">
                       {items.length} máquinas
                     </span>
-                  ) : first.badge ? (
+                  ) : first.badge && !hideFinancials ? (
                     <span className="shrink-0 rounded-full border border-[#d1a04f]/25 bg-[#d1a04f]/10 px-2 py-1 text-[11px] font-medium text-[#f3dfae]">
                       {first.badge}
                     </span>

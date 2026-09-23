@@ -270,7 +270,9 @@ model Organization {
   notifications            Notification[]
   auditLogs                AuditLog[]
   moduleClients            ModuleClient[]
+  carretaKidsClients       CarretaKidsClient[]
   carretaKidsRecords       CarretaKidsRecord[]
+  rentalClients            RentalClient[]
   rentalOrders             RentalOrder[]
   plushMachines            PlushMachine[]
   plushCollections         PlushCollection[]
@@ -286,6 +288,7 @@ model Organization {
   marketingContents        MarketingContent[]
   personalFinanceRecords   PersonalFinanceRecord[]
   bxTransactions           BxTransaction[]
+  bxClients                BxClient[]
   slotMachines             SlotMachine[]
   slotCollections          SlotCollection[]
   fieldVisits              FieldVisit[]
@@ -298,6 +301,7 @@ model User {
   role              UserRole
   status            UserStatus         @default(ACTIVE)
   name              String
+  username          String?            @unique
   email             String             @unique
   phone             String?
   passwordHash      String
@@ -631,6 +635,22 @@ model ModuleOperationReview {
   @@index([organizationId, module, status])
 }
 
+model CarretaKidsClient {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nameKey        String
+  locationName   String
+  sheetName      String
+  phone          String?
+  createdById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, nameKey])
+  @@index([organizationId, updatedAt])
+}
+
 model CarretaKidsRecord {
   id             String         @id @default(cuid())
   organizationId String
@@ -655,6 +675,23 @@ model CarretaKidsRecord {
   updatedAt      DateTime       @updatedAt
 
   @@index([organizationId, serviceDate])
+}
+
+model RentalClient {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nameKey        String
+  clientName     String
+  phone          String?
+  document       String?
+  localName      String?
+  createdById    String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, nameKey])
+  @@index([organizationId, updatedAt])
 }
 
 model RentalOrder {
@@ -976,6 +1013,28 @@ model PersonalFinanceRecord {
   updatedAt      DateTime          @updatedAt
 
   @@index([organizationId, type])
+}
+
+model BxClient {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nameKey         String
+  clientName      String
+  phone           String?
+  cpf             String?
+  cep             String?
+  street          String?
+  neighborhood    String?
+  city            String?
+  state           String?
+  exceptionClient Boolean      @default(false)
+  createdById     String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([organizationId, nameKey])
+  @@index([organizationId, updatedAt])
 }
 
 model BxTransaction {
