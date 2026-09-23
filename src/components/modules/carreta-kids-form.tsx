@@ -87,7 +87,7 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const submission = useIdempotentSubmission();
-  const tierManuallySet = useRef(false);
+  const [tierManuallySet, setTierManuallySet] = useState(false);
   const [loadedClient, setLoadedClient] = useState<LoadedCarretaClient | null>(null);
   const [clientLoading, setClientLoading] = useState(Boolean(initialClientId));
 
@@ -134,10 +134,12 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
   );
 
   useEffect(() => {
-    if (tierManuallySet.current || elapsedMinutes === null) return;
+    if (tierManuallySet || elapsedMinutes === null) return;
     form.setValue("minutesCharged", suggestTier(elapsedMinutes));
-  }, [elapsedMinutes, form]);
+  }, [elapsedMinutes, form, tierManuallySet]);
 
+  // The ref is an intentional immediate guard against two taps before React rerenders.
+  // eslint-disable-next-line react-hooks/refs
   const onSubmit = form.handleSubmit(async (values) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
@@ -309,7 +311,7 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
               className={selectClass}
               {...form.register("minutesCharged", {
                 onChange: () => {
-                  tierManuallySet.current = true;
+                  setTierManuallySet(true);
                 },
               })}
             >

@@ -17,7 +17,7 @@ import {
 import Link from "next/link";
 
 import { StatusBadge } from "@/components/ui/status-badge";
-import { formatCurrency, formatShortDate } from "@/lib/format";
+import { formatCurrency } from "@/lib/format";
 import { moduleCatalog } from "@/lib/module-catalog";
 import type { ClientListItem, DelinquencyInfo, ModuleName } from "@/types/app";
 import { fieldClass, labelClass, selectClass, textareaClass } from "@/components/modules/styles";

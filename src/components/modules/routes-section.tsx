@@ -41,7 +41,22 @@ export function RoutesSection({ onAbrirPonto }: Props) {
   }
 
   useEffect(() => {
-    carregar();
+    let active = true;
+    void listRoutesOverviewAction()
+      .then((items) => {
+        if (!active) return;
+        setRoutes(items);
+        if (items.length === 1) setAberta(items[0].routeNumber);
+      })
+      .catch(() => {
+        if (active) setRoutes([]);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const totalPontos = routes.reduce((s, r) => s + r.totalPoints, 0);
@@ -52,11 +67,6 @@ export function RoutesSection({ onAbrirPonto }: Props) {
     () => (soAlertas ? routes.filter((r) => r.needsClothChange + r.roofOpen > 0) : routes),
     [routes, soAlertas],
   );
-
-  // Uma rota so: nao faz sentido obrigar a abrir.
-  useEffect(() => {
-    if (routes.length === 1) setAberta(routes[0].routeNumber);
-  }, [routes]);
 
   if (loading) {
     return <p className="px-1 py-4 text-sm text-[#9a958b]">Carregando rotas...</p>;

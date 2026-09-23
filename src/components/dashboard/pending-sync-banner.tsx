@@ -34,6 +34,8 @@ export function PendingSyncBanner() {
   }, []);
 
   useEffect(() => {
+    // Synchronize React with the external offline queue before subscribing to it.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshCount();
     const handleChange = () => refreshCount();
     const handleOnline = () => void sync();

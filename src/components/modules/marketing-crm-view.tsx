@@ -1333,7 +1333,19 @@ export function MarketingCrmView({
       .finally(() => setLoading(false));
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    void getMarketingClientsAction()
+      .then((items) => {
+        if (active) setClients(items);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (selectedId && detailRef.current) {

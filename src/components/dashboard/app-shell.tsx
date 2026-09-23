@@ -41,6 +41,8 @@ export function AppShell({
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
+    // Hydration boundary: localStorage only exists after the client mounts.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setMounted(true);
     try {
       const v = localStorage.getItem(SIDEBAR_STORAGE_KEY);

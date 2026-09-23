@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports -- Executed directly by Node as a CommonJS maintenance script. */
 const zlib = require("zlib");
 const fs = require("fs");
 const path = require("path");

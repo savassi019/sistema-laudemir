@@ -94,7 +94,22 @@ export function MarketingCalendar({ hideFinancials = false }: { hideFinancials?:
     }
   }
 
-  useEffect(() => { carregar(); }, []);
+  useEffect(() => {
+    let active = true;
+    void getMarketingClientsAction()
+      .then((items) => {
+        if (active) setClientes(items);
+      })
+      .catch(() => {
+        if (active) setClientes([]);
+      })
+      .finally(() => {
+        if (active) setCarregando(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Agrupa tudo por dia uma vez só; o calendário só consulta o mapa.
   const porDia = useMemo(() => {

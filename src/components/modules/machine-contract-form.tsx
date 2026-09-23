@@ -109,6 +109,8 @@ export function MachineContractForm({ hideFinancials = false }: { hideFinancials
   );
   const totalCharge = monthlyCharge + streetLoanAmount;
 
+  // The ref is an intentional immediate guard against two taps before React rerenders.
+  // eslint-disable-next-line react-hooks/refs
   const onSubmit = form.handleSubmit(async (values) => {
     if (submittingRef.current) return;
     submittingRef.current = true;

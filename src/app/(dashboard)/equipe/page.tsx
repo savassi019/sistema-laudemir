@@ -38,6 +38,8 @@ export default async function EquipePage() {
   }
 
   // Atividade dos últimos 7 dias por funcionário
+  // This dynamic Server Component intentionally anchors the report to the current request.
+  // eslint-disable-next-line react-hooks/purity
   const sevenDaysAgo = new Date(Date.now() - 7 * 86_400_000);
   const recentVisits = visits.filter((v) => new Date(v.occurredAt) >= sevenDaysAgo);
 

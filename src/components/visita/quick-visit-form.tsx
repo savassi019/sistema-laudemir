@@ -135,6 +135,7 @@ export function QuickVisitForm({
   const [syncing, setSyncing] = useState(false);
   const initialized = useRef(false);
   const submittingRef = useRef(false);
+  const occurredAtRef = useRef<HTMLInputElement | null>(null);
 
   const isBilliardModule = useModuleTarget && initialVisitType === "BILLIARD";
   const isPlushModule = useModuleTarget && initialVisitType === "PLUSH";
@@ -166,6 +167,8 @@ export function QuickVisitForm({
 
   useEffect(() => {
     if (!selectedBilliardPoint) return;
+    // Reset editable readings when the user selects a different external point.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAccumulatedChips(selectedBilliardPoint.accumulatedChips);
     setChipValue(selectedBilliardPoint.chipValue);
   }, [selectedBilliardPoint]);
@@ -243,6 +246,11 @@ export function QuickVisitForm({
   }, [rentalTotalAmount, rentalSignalEnabled, rentalSignalPercentage, rentalExpenseAmount, rentalDiscountAmount]);
 
   useEffect(() => {
+    if (occurredAtRef.current && !occurredAtRef.current.value) {
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      occurredAtRef.current.value = now.toISOString().slice(0, 16);
+    }
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (pos) => { setLatitude(pos.coords.latitude); setLongitude(pos.coords.longitude); },
@@ -253,6 +261,8 @@ export function QuickVisitForm({
     try {
       const raw = localStorage.getItem("pending-visits");
       const queue: unknown[] = raw ? (JSON.parse(raw) as unknown[]) : [];
+      // Synchronize the count with the external localStorage queue after hydration.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setPendingCount(queue.length);
     } catch { /* ignore */ }
   }, []);
@@ -262,6 +272,8 @@ export function QuickVisitForm({
     initialized.current = true;
     const client = clients.find((c) => c.id === initialClientId);
     if (client) {
+      // Initialize local editable state once from the requested client.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedClient(client);
       setClientSearch(client.name);
       if (!useModuleTarget) {
@@ -984,14 +996,10 @@ ${rows}
         <div className="space-y-2">
           <p className={labelClass}>Data e hora</p>
           <input
+            ref={occurredAtRef}
             name="occurredAt"
             type="datetime-local"
             className={fieldClass}
-            defaultValue={
-              typeof window !== "undefined"
-                ? new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 16)
-                : ""
-            }
           />
         </div>
       </div>

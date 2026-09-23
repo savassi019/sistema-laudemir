@@ -38,18 +38,21 @@ export function MarketingAccounts({ hideFinancials = false }: { hideFinancials?:
   const [addingOpen, setAddingOpen] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  async function carregar() {
-    try {
-      setEntries(await getMarketingFinanceOverviewAction());
-    } catch {
-      setEntries([]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   useEffect(() => {
-    carregar();
+    let active = true;
+    void getMarketingFinanceOverviewAction()
+      .then((items) => {
+        if (active) setEntries(items);
+      })
+      .catch(() => {
+        if (active) setEntries([]);
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const totais = useMemo(() => {

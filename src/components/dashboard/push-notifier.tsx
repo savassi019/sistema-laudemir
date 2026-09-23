@@ -81,6 +81,8 @@ export function NotificationPermissionBanner() {
 
   useEffect(() => {
     if (!("Notification" in window)) return;
+    // Notification.permission is an external browser value read after hydration.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (Notification.permission === "default") setShow(true);
   }, []);
 

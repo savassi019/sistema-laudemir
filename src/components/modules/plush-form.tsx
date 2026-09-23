@@ -144,7 +144,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const submission = useIdempotentSubmission();
   const [contactPhones, setContactPhones] = useState({ ownerPhone: "", staffPhone: "" });
-  const compensationManuallySet = useRef(false);
+  const [compensationManuallySet, setCompensationManuallySet] = useState(false);
   const [loadedMachine, setLoadedMachine] = useState<LoadedMachine | null>(null);
   const [machineLoading, setMachineLoading] = useState(Boolean(initialClientId));
 
@@ -214,13 +214,15 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
   const netAmount = companyAmount - discountAmount - ownerExpenseAmount;
 
   useEffect(() => {
-    if (compensationManuallySet.current) return;
+    if (compensationManuallySet) return;
     form.setValue(
       "compensationStatus",
       grossAmount >= COMPENSATION_THRESHOLD ? "WORTH_IT" : "NOT_WORTH_IT",
     );
-  }, [grossAmount, form]);
+  }, [compensationManuallySet, grossAmount, form]);
 
+  // The ref is an intentional immediate guard against two taps before React rerenders.
+  // eslint-disable-next-line react-hooks/refs
   const onSubmit = form.handleSubmit(async (values) => {
     if (submittingRef.current) return;
     submittingRef.current = true;
@@ -578,7 +580,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
               className={selectClass}
               {...form.register("compensationStatus", {
                 onChange: () => {
-                  compensationManuallySet.current = true;
+                  setCompensationManuallySet(true);
                 },
               })}
             >
@@ -603,7 +605,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
             <PhotoCaptureInput
               registration={form.register("coinPhoto")}
               label="Foto de moedas"
-              required={!!form.watch("coinPhotoRule")}
+              required={coinPhotoRule}
               hint="Foto do depósito de moedas"
             />
             {form.formState.errors.coinPhoto ? (
@@ -616,7 +618,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
             <PhotoCaptureInput
               registration={form.register("giftPhoto")}
               label="Foto de brindes"
-              required={!!form.watch("giftPhotoRule")}
+              required={giftPhotoRule}
               hint="Foto do estoque de brindes"
             />
             {form.formState.errors.giftPhoto ? (

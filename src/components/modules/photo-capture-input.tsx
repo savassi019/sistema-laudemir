@@ -1,7 +1,7 @@
 "use client";
 
 import { Camera, CheckCircle2, ImagePlus, Loader2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { UseFormRegisterReturn } from "react-hook-form";
 
 type Props = {
@@ -44,6 +44,11 @@ export function PhotoCaptureInput({ registration, label, hint, required }: Props
   const [fileName, setFileName] = useState<string | null>(null);
   const [compressing, setCompressing] = useState(false);
   const [compressedSize, setCompressedSize] = useState<string | null>(null);
+
+  const setInputRef = useCallback((element: HTMLInputElement | null) => {
+    inputRef.current = element;
+    regRef(element);
+  }, [regRef]);
 
   async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -99,13 +104,7 @@ export function PhotoCaptureInput({ registration, label, hint, required }: Props
 
       <input
         {...restReg}
-        ref={(el) => {
-          inputRef.current = el;
-          if (typeof regRef === "function") regRef(el);
-          else if (regRef && "current" in regRef) {
-            (regRef as React.MutableRefObject<HTMLInputElement | null>).current = el;
-          }
-        }}
+        ref={setInputRef}
         type="file"
         accept="image/*"
         capture="environment"

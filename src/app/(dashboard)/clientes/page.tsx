@@ -16,6 +16,8 @@ export default async function ClientsPage() {
   ]);
 
   const lastVisitByClient: Record<string, { daysSinceVisit: number; lastVisitAt: string }> = {};
+  // This dynamic Server Component intentionally anchors relative dates to the current request.
+  // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
   for (const v of visits) {
     if (!v.clientId || lastVisitByClient[v.clientId]) continue;
