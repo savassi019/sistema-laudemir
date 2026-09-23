@@ -20,6 +20,18 @@ const profiles = [
   { role: "staff", username: `${runId}-staff` },
 ];
 
+async function waitForHydratedButton(page, label) {
+  await page.waitForFunction(
+    (text) =>
+      [...document.querySelectorAll("button")].some(
+        (button) =>
+          button.textContent?.trim().startsWith(text) &&
+          Object.keys(button).some((key) => key.startsWith("__reactProps")),
+      ),
+    label,
+  );
+}
+
 try {
   for (const profile of profiles) {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
@@ -59,6 +71,7 @@ try {
     }
 
     if (profile.role !== "staff") {
+      await waitForHydratedButton(page, "Financeiro");
       await page.getByRole("button", { name: /^Financeiro/ }).click();
       if (profile.role === "admin") {
         await page.getByText("Financeiro de hoje", { exact: true }).waitFor();
@@ -66,11 +79,14 @@ try {
           throw new Error("ADMIN recebeu filtro para consultar outro dia.");
         }
       } else {
-        await page.getByText("Filtrar por período", { exact: true }).waitFor();
+        await page.waitForFunction(
+          () => document.querySelectorAll('input[type="date"]').length === 2,
+        );
       }
       await page.goto(`${baseUrl}/modulos/bx`, { waitUntil: "domcontentloaded" });
     }
 
+    await waitForHydratedButton(page, "Clientes");
     await page.getByRole("button", { name: /^Clientes/ }).click();
     await page.getByRole("button", { name: "Novo", exact: true }).click();
     await page.getByLabel("Nome do cliente", { exact: true }).waitFor();
