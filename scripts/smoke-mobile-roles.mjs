@@ -25,10 +25,18 @@ try {
     const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
     const page = await context.newPage();
     await page.goto(`${baseUrl}/login`, { waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => Boolean(document.querySelector("#email")?._valueTracker));
     await page.locator("#email").fill(profile.email);
     await page.locator("#password").fill(password);
     await page.getByRole("button", { name: /Entrar no painel/i }).click();
-    await page.waitForURL(/\/dashboard/, { timeout: 20_000 });
+    try {
+      await page.waitForURL(/\/(dashboard|modulos)/, { timeout: 15_000 });
+    } catch (error) {
+      const alert = await page.locator('[role="alert"]').allTextContents();
+      const formText = await page.locator("form").innerText().catch(() => "formulario indisponivel");
+      console.error(`[mobile-smoke] login ${profile.role} parou em ${page.url()}`, alert, formText);
+      throw error;
+    }
 
     if (profile.role === "owner") {
       await page.goto(`${baseUrl}/painel`, { waitUntil: "domcontentloaded" });
