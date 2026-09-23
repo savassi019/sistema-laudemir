@@ -1,7 +1,11 @@
 "use server";
 
+import type { EntityType } from "@prisma/client";
+import { z } from "zod";
+
 import { hasModuleAccess, requireSession } from "@/lib/auth";
 import { getModuleBySlug } from "@/lib/module-catalog";
+import { prisma } from "@/lib/prisma";
 import {
   getClientPrefillData,
   getSlotClientMachines,
@@ -26,6 +30,25 @@ function assertSlugAccess(session: Awaited<ReturnType<typeof requireSession>>, s
     throw new Error("Sem permissao para este modulo.");
   }
 }
+
+const reviewSchema = z.object({
+  status: z.enum(["CORRECTED", "CANCELLED"]),
+  reason: z.string().trim().min(5, "Informe um motivo com pelo menos 5 caracteres.").max(300),
+  correctedIncome: z.number().nonnegative().nullable().optional(),
+  correctedExpense: z.number().nonnegative().nullable().optional(),
+  correctedResult: z.number().nullable().optional(),
+});
+
+const reviewEntityType: Partial<Record<ModuleSlug, EntityType>> = {
+  "carreta-kids": "CARRETA_KIDS",
+  "locacao": "RENTAL",
+  "maquinas-de-pelucia": "PLUSH_COLLECTION",
+  "bilhar-pebolim": "BILLIARD_COLLECTION",
+  bx: "BX_TRANSACTION",
+  "h-caca-niquel": "SLOT_COLLECTION",
+  "credito-financeiro": "MACHINE_CONTRACT",
+  marketing: "MARKETING_CONTRACT",
+};
 
 export async function listModuleClientRecordsAction(
   slug: string,
@@ -64,6 +87,101 @@ export async function listModuleReceiptsAction(slug: string) {
   assertSlugAccess(session, slug);
   if (!receiptModuleSlugs.includes(slug as ModuleSlug)) return [];
   return listModuleReceipts(session, slug as ModuleSlug);
+}
+
+export async function reviewModuleOperationAction(
+  slug: string,
+  entityId: string,
+  payload: unknown,
+) {
+  const session = await requireSession();
+  assertSlugAccess(session, slug);
+  if (session.role === "STAFF") {
+    throw new Error("Somente o dono ou gestor pode corrigir uma operacao.");
+  }
+
+  const data = reviewSchema.parse(payload);
+  const moduleSlug = slug as ModuleSlug;
+  const moduleItem = getModuleBySlug(slug);
+  if (!moduleItem) throw new Error("Modulo nao encontrado.");
+
+  const record = (await listModuleRecords(session, moduleSlug, 5000)).find(
+    (item) => item.id === entityId,
+  );
+  if (!record) throw new Error("Operacao nao encontrada neste modulo.");
+
+  const previous = await prisma.moduleOperationReview.findUnique({
+    where: {
+      organizationId_slug_entityId: {
+        organizationId: session.organizationId,
+        slug,
+        entityId,
+      },
+    },
+  });
+
+  const review = await prisma.$transaction(async (tx) => {
+    const saved = await tx.moduleOperationReview.upsert({
+      where: {
+        organizationId_slug_entityId: {
+          organizationId: session.organizationId,
+          slug,
+          entityId,
+        },
+      },
+      create: {
+        organizationId: session.organizationId,
+        userId: session.userId,
+        module: moduleItem.module,
+        slug,
+        entityId,
+        status: data.status,
+        reason: data.reason,
+        correctedIncome: data.status === "CORRECTED" ? data.correctedIncome : null,
+        correctedExpense: data.status === "CORRECTED" ? data.correctedExpense : null,
+        correctedResult: data.status === "CORRECTED" ? data.correctedResult : null,
+      },
+      update: {
+        userId: session.userId,
+        module: moduleItem.module,
+        status: data.status,
+        reason: data.reason,
+        correctedIncome: data.status === "CORRECTED" ? data.correctedIncome : null,
+        correctedExpense: data.status === "CORRECTED" ? data.correctedExpense : null,
+        correctedResult: data.status === "CORRECTED" ? data.correctedResult : null,
+      },
+    });
+
+    await tx.auditLog.create({
+      data: {
+        organizationId: session.organizationId,
+        userId: session.userId,
+        module: moduleItem.module,
+        action: data.status === "CANCELLED" ? "MODULE_OPERATION_CANCELLED" : "MODULE_OPERATION_CORRECTED",
+        entityType: reviewEntityType[moduleSlug] ?? "OTHER",
+        entityId,
+        oldData: previous
+          ? {
+              status: previous.status,
+              reason: previous.reason,
+              correctedIncome: previous.correctedIncome?.toString() ?? null,
+              correctedExpense: previous.correctedExpense?.toString() ?? null,
+              correctedResult: previous.correctedResult?.toString() ?? null,
+            }
+          : undefined,
+        newData: {
+          status: data.status,
+          reason: data.reason,
+          correctedIncome: data.correctedIncome ?? null,
+          correctedExpense: data.correctedExpense ?? null,
+          correctedResult: data.correctedResult ?? null,
+        },
+      },
+    });
+    return saved;
+  });
+
+  return { id: review.id, status: review.status };
 }
 
 export async function listBxPrizeRecordsAction() {

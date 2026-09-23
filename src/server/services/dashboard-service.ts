@@ -1,6 +1,7 @@
 import { demoDashboard } from "@/data/demo";
 import { env } from "@/lib/env";
 import { formatCurrency } from "@/lib/format";
+import { moduleCatalog } from "@/lib/module-catalog";
 import { prisma } from "@/lib/prisma";
 import type { ChartPoint, DashboardOverview, ReminderItem, SessionData } from "@/types/app";
 
@@ -103,25 +104,46 @@ export type PainelAlerts = {
   overdueTotal: number;
   todayVisitCount: number;
   unvisitedMachineCount: number;
+  pendingCount: number;
+  pendingTotal: number;
+  upcomingCount: number;
+  byModule: Array<{
+    module: string;
+    label: string;
+    href: string;
+    count: number;
+    overdueCount: number;
+    total: number;
+  }>;
 };
 
 export async function getPainelAlerts(session: SessionData): Promise<PainelAlerts> {
   if (env.demoMode) {
-    return { overdueCount: 3, overdueTotal: 1250, todayVisitCount: 7, unvisitedMachineCount: 4 };
+    return {
+      overdueCount: 3,
+      overdueTotal: 1250,
+      todayVisitCount: 7,
+      unvisitedMachineCount: 4,
+      pendingCount: 5,
+      pendingTotal: 2100,
+      upcomingCount: 2,
+      byModule: [],
+    };
   }
 
   const { organizationId } = session;
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
   const fifteenDaysAgo = new Date(Date.now() - 15 * 86_400_000);
+  const upcomingLimit = new Date(todayStart);
+  upcomingLimit.setDate(upcomingLimit.getDate() + 4);
 
   try {
-    const [overdueAgg, todayVisitCount, recentTargets, billiardCount, plushCount, slotCount] =
+    const [pendingEntries, todayVisitCount, recentTargets, billiardCount, plushCount, slotCount] =
       await Promise.all([
-        prisma.financialEntry.aggregate({
-          where: { organizationId, status: "OVERDUE" },
-          _count: { id: true },
-          _sum: { remainingAmount: true },
+        prisma.financialEntry.findMany({
+          where: { organizationId, status: { in: ["PENDING", "PARTIAL", "OVERDUE"] } },
+          select: { module: true, status: true, dueDate: true, remainingAmount: true },
         }),
         prisma.fieldVisit.count({
           where: { organizationId, occurredAt: { gte: todayStart } },
@@ -142,15 +164,54 @@ export async function getPainelAlerts(session: SessionData): Promise<PainelAlert
     const totalActiveMachines = billiardCount + plushCount + slotCount;
     const unvisitedMachineCount = Math.max(0, totalActiveMachines - recentTargetIds.size);
 
+    const isOverdue = (entry: (typeof pendingEntries)[number]) =>
+      entry.status === "OVERDUE" || Boolean(entry.dueDate && entry.dueDate < todayStart);
+    const overdueEntries = pendingEntries.filter(isOverdue);
+    const moduleMap = new Map<string, { count: number; overdueCount: number; total: number }>();
+    for (const entry of pendingEntries) {
+      const current = moduleMap.get(entry.module) ?? { count: 0, overdueCount: 0, total: 0 };
+      current.count += 1;
+      current.total += Number(entry.remainingAmount);
+      if (isOverdue(entry)) current.overdueCount += 1;
+      moduleMap.set(entry.module, current);
+    }
+
+    const byModule = [...moduleMap.entries()]
+      .map(([module, values]) => {
+        const catalog = moduleCatalog.find((item) => item.module === module);
+        return {
+          module,
+          label: catalog?.title ?? "Financeiro geral",
+          href: catalog?.href ?? "/financeiro",
+          ...values,
+        };
+      })
+      .sort((a, b) => b.overdueCount - a.overdueCount || b.total - a.total);
+
     return {
-      overdueCount: overdueAgg._count.id,
-      overdueTotal: Number(overdueAgg._sum.remainingAmount ?? 0),
+      overdueCount: overdueEntries.length,
+      overdueTotal: overdueEntries.reduce((sum, entry) => sum + Number(entry.remainingAmount), 0),
       todayVisitCount,
       unvisitedMachineCount,
+      pendingCount: pendingEntries.length,
+      pendingTotal: pendingEntries.reduce((sum, entry) => sum + Number(entry.remainingAmount), 0),
+      upcomingCount: pendingEntries.filter(
+        (entry) => entry.dueDate && entry.dueDate >= todayStart && entry.dueDate < upcomingLimit,
+      ).length,
+      byModule,
     };
   } catch (error) {
     console.error("[dashboard-service] getPainelAlerts falhou:", error);
-    return { overdueCount: 0, overdueTotal: 0, todayVisitCount: 0, unvisitedMachineCount: 0 };
+    return {
+      overdueCount: 0,
+      overdueTotal: 0,
+      todayVisitCount: 0,
+      unvisitedMachineCount: 0,
+      pendingCount: 0,
+      pendingTotal: 0,
+      upcomingCount: 0,
+      byModule: [],
+    };
   }
 }
 

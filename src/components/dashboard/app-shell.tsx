@@ -13,6 +13,7 @@ import { HeaderBrand } from "./header-brand";
 import { LeftSidebar, SIDEBAR_STORAGE_KEY } from "./left-sidebar";
 import { MobileNav } from "./mobile-nav";
 import { OfflineBanner } from "./offline-banner";
+import { PendingSyncBanner } from "./pending-sync-banner";
 
 export function AppShell({
   session,
@@ -117,6 +118,7 @@ export function AppShell({
         </main>
 
         <MobileNav role={session.role} />
+        <PendingSyncBanner />
         <OfflineBanner />
       </div>
     </div>

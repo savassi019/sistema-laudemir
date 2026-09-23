@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
+import type { Prisma, SystemModule } from "@prisma/client";
 
 import { getSession, hasModuleAccess } from "@/lib/auth";
 import { getModuleBySlug } from "@/lib/module-catalog";
+import { prisma } from "@/lib/prisma";
 import {
   listModuleRecords,
   moduleSlugs,
@@ -21,11 +23,93 @@ globalForIdempotency.modulePendingSaves = pendingSaves;
 
 const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
 
+class SubmissionAlreadyReceivedError extends Error {}
+
+async function savePersistently(
+  session: SessionData,
+  module: SystemModule,
+  slug: ModuleSlug,
+  payload: Record<string, unknown>,
+  requestKey: string,
+): Promise<SaveResult> {
+  const unique = {
+    organizationId: session.organizationId,
+    userId: session.userId,
+    slug,
+    requestKey,
+  };
+  const where = { organizationId_userId_slug_requestKey: unique };
+  let submission = await prisma.moduleSubmission.findUnique({ where });
+
+  if (submission?.status === "SUCCEEDED" && submission.response) {
+    return submission.response as unknown as SaveResult;
+  }
+  if (submission?.status === "PROCESSING") {
+    throw new SubmissionAlreadyReceivedError(
+      "Este envio já foi recebido e está sendo conferido. Consulte o histórico antes de tentar novamente.",
+    );
+  }
+
+  if (submission?.status === "FAILED") {
+    submission = await prisma.moduleSubmission.update({
+      where: { id: submission.id },
+      data: { status: "PROCESSING", lastError: null },
+    });
+  } else if (!submission) {
+    try {
+      submission = await prisma.moduleSubmission.create({
+        data: { ...unique, module, status: "PROCESSING" },
+      });
+    } catch (error) {
+      if ((error as { code?: string }).code !== "P2002") throw error;
+      const concurrent = await prisma.moduleSubmission.findUnique({ where });
+      if (concurrent?.status === "SUCCEEDED" && concurrent.response) {
+        return concurrent.response as unknown as SaveResult;
+      }
+      throw new SubmissionAlreadyReceivedError(
+        "Este envio já foi recebido e está sendo conferido. Consulte o histórico antes de tentar novamente.",
+      );
+    }
+  }
+
+  let result: SaveResult;
+  try {
+    result = await saveModuleRecord(session, slug, payload);
+  } catch (error) {
+    await prisma.moduleSubmission.update({
+      where: { id: submission.id },
+      data: {
+        status: "FAILED",
+        lastError: error instanceof Error ? error.message.slice(0, 500) : "Falha desconhecida",
+      },
+    }).catch(() => {});
+    throw error;
+  }
+
+  // Depois que a operacao real foi gravada, nunca voltamos o marcador para
+  // FAILED: uma falha apenas nesta confirmacao poderia permitir uma segunda
+  // gravacao no reenvio. PROCESSING e o estado seguro para esse caso raro.
+  try {
+    await prisma.moduleSubmission.update({
+      where: { id: submission.id },
+      data: {
+        status: "SUCCEEDED",
+        response: result as unknown as Prisma.InputJsonValue,
+        lastError: null,
+      },
+    });
+  } catch (error) {
+    console.error("[module-submission] operacao salva, mas confirmacao da chave falhou:", error);
+  }
+  return result;
+}
+
 function saveIdempotently(
   session: SessionData,
   slug: ModuleSlug,
   payload: Record<string, unknown>,
   requestKey: string | null,
+  module: SystemModule,
 ) {
   if (!requestKey) return saveModuleRecord(session, slug, payload);
 
@@ -38,7 +122,7 @@ function saveIdempotently(
   const existing = pendingSaves.get(cacheKey);
   if (existing && existing.expiresAt > now) return existing.promise;
 
-  const promise = saveModuleRecord(session, slug, payload).catch((error) => {
+  const promise = savePersistently(session, module, slug, payload, requestKey).catch((error) => {
     pendingSaves.delete(cacheKey);
     throw error;
   });
@@ -111,9 +195,18 @@ export async function POST(
     rawRequestKey && /^[a-zA-Z0-9-]{16,80}$/.test(rawRequestKey) ? rawRequestKey : null;
 
   try {
-    const result = await saveIdempotently(session, slug, payload, requestKey);
+    const result = await saveIdempotently(
+      session,
+      slug,
+      payload,
+      requestKey,
+      catalogItem?.module ?? "CORE",
+    );
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
+    if (error instanceof SubmissionAlreadyReceivedError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
     console.error(`[api/modules/${slug}/records] falha ao salvar:`, error);
     return NextResponse.json(
       { error: "Falha ao salvar. Tente novamente em instantes." },

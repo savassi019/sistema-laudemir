@@ -8,6 +8,7 @@ import { z } from "zod";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
+import { postJsonWithOfflineQueue } from "@/lib/offline-submission-queue";
 import {
   formatClosingReceiptId,
   type SavedModuleRecordResponse,
@@ -106,14 +107,7 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
       : 0;
     let savedRecord: SavedModuleRecordResponse["record"];
 
-    try {
-      const response = await fetch("/api/modules/locacao/records", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Idempotency-Key": submission.key(),
-        },
-        body: JSON.stringify({
+    const payload = {
           clientName: values.clientName,
           phone: values.phone,
           localName: values.localName,
@@ -127,15 +121,20 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
           paymentStatus: values.paymentStatus,
           contractNumber: values.contractNumber,
           notes: values.notes,
-        }),
+    };
+    try {
+      const result = await postJsonWithOfflineQueue<SavedModuleRecordResponse>({
+        endpoint: "/api/modules/locacao/records",
+        payload,
+        requestKey: submission.key(),
+        label: `Locacao de ${values.clientName}`,
       });
-
-      if (!response.ok) {
-        throw new Error("Falha ao salvar a locacao.");
-      }
-      const result = (await response.json()) as SavedModuleRecordResponse;
-      savedRecord = result.record;
       submission.complete();
+      if (result.queued) {
+        setSaveStatus("queued");
+        return;
+      }
+      savedRecord = result.data.record;
       setSaveStatus("saved");
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");

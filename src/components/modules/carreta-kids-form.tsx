@@ -10,6 +10,7 @@ import { formatCurrency, formatShortDate } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
 import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
+import { postJsonWithOfflineQueue } from "@/lib/offline-submission-queue";
 import {
   formatClosingReceiptId,
   type SavedModuleRecordResponse,
@@ -147,14 +148,7 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
     const totalValue = Math.max(0, baseValue - Number(values.expenseAmount));
     let savedRecord: SavedModuleRecordResponse["record"];
 
-    try {
-      const response = await fetch("/api/modules/carreta-kids/records", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Idempotency-Key": submission.key(),
-        },
-        body: JSON.stringify({
+    const payload = {
           localName: values.localName,
           serviceDate: values.serviceDate,
           sheetName: values.sheetName,
@@ -165,15 +159,20 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
           exitTime: values.exitTime,
           expenseAmount: Number(values.expenseAmount),
           notes: values.notes,
-        }),
+    };
+    try {
+      const result = await postJsonWithOfflineQueue<SavedModuleRecordResponse>({
+        endpoint: "/api/modules/carreta-kids/records",
+        payload,
+        requestKey: submission.key(),
+        label: `Evento Carreta Kids de ${values.localName}`,
       });
-
-      if (!response.ok) {
-        throw new Error("Falha ao salvar a Carreta Kids.");
-      }
-      const result = (await response.json()) as SavedModuleRecordResponse;
-      savedRecord = result.record;
       submission.complete();
+      if (result.queued) {
+        setSaveStatus("queued");
+        return;
+      }
+      savedRecord = result.data.record;
       clearDraft();
       setSaveStatus("saved");
     } catch {

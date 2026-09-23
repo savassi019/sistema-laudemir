@@ -4,7 +4,7 @@ import { CheckCircle2, CloudUpload, LoaderCircle, TriangleAlert } from "lucide-r
 
 import { cn } from "@/lib/cn";
 
-export type SaveStatus = "idle" | "saving" | "saved" | "error";
+export type SaveStatus = "idle" | "saving" | "saved" | "queued" | "error";
 
 const CONTENT = {
   saving: {
@@ -18,6 +18,12 @@ const CONTENT = {
     title: "Salvo no servidor",
     detail: "A operacao ja esta protegida e pode ser consultada no historico.",
     style: "border-[#4ade80]/30 bg-[#0e1c10]/80 text-[#bbf7d0]",
+  },
+  queued: {
+    icon: CloudUpload,
+    title: "Protegido neste aparelho",
+    detail: "Esta operacao sera enviada automaticamente quando a internet voltar.",
+    style: "border-[#fbbf24]/35 bg-[#2a2110]/80 text-[#fde68a]",
   },
   error: {
     icon: TriangleAlert,

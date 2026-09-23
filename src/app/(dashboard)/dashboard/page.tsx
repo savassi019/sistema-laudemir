@@ -32,7 +32,7 @@ function fmtDate(d: Date) {
 }
 
 export default async function DashboardPage() {
-  const session = await requireSession("DASHBOARD");
+  const session = await requireSession();
   if (session.role !== "OWNER") {
     redirect("/modulos");
   }

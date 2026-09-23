@@ -1,10 +1,10 @@
 "use client";
 
-import { CalendarDays, ChevronDown, ChevronUp, Inbox, LoaderCircle, Paperclip, Search, WalletCards } from "lucide-react";
+import { CalendarDays, ChevronDown, ChevronUp, CircleX, Inbox, LoaderCircle, Paperclip, PencilLine, Search, WalletCards, X } from "lucide-react";
 import { useState } from "react";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
-import { listModuleClientRecordsAction, listModuleRecordsAction } from "@/server/actions/module-record-actions";
+import { listModuleClientRecordsAction, listModuleRecordsAction, reviewModuleOperationAction } from "@/server/actions/module-record-actions";
 import type { ModuleClientItem, ModuleRecordItem } from "@/server/services/module-record-service";
 
 export function ModuleHistoryOverview({
@@ -129,7 +129,7 @@ export function ModuleHistoryOverview({
             </div>
           ) : (
             flatRecords.map((r) => (
-              <RecordCard key={r.id} record={r} hideFinancials={hideFinancials} showTitle />
+              <RecordCard key={r.id} slug={slug} record={r} hideFinancials={hideFinancials} showTitle />
             ))
           )}
         </div>
@@ -201,7 +201,7 @@ export function ModuleHistoryOverview({
                         <p className="text-xs text-[#5a544c]">Nenhum registro encontrado.</p>
                       ) : (
                         <div className="space-y-2">
-                          {records.map((r) => <RecordCard key={r.id} record={r} hideFinancials={hideFinancials} />)}
+                          {records.map((r) => <RecordCard key={r.id} slug={slug} record={r} hideFinancials={hideFinancials} />)}
                         </div>
                       )}
                     </div>
@@ -217,14 +217,43 @@ export function ModuleHistoryOverview({
 }
 
 function RecordCard({
+  slug,
   record,
   hideFinancials,
   showTitle = false,
 }: {
+  slug: string;
   record: ModuleRecordItem;
   hideFinancials: boolean;
   showTitle?: boolean;
 }) {
+  const [reviewMode, setReviewMode] = useState<"CORRECTED" | "CANCELLED" | null>(null);
+  const [reason, setReason] = useState("");
+  const [income, setIncome] = useState(String(record.incomeValue ?? 0));
+  const [expense, setExpense] = useState(String(record.expenseValue ?? 0));
+  const [result, setResult] = useState(String(record.amountValue ?? 0));
+  const [reviewing, setReviewing] = useState(false);
+  const [reviewError, setReviewError] = useState<string | null>(null);
+
+  async function submitReview() {
+    if (!reviewMode) return;
+    setReviewing(true);
+    setReviewError(null);
+    try {
+      await reviewModuleOperationAction(slug, record.id, {
+        status: reviewMode,
+        reason,
+        correctedIncome: reviewMode === "CORRECTED" ? Number(income) : null,
+        correctedExpense: reviewMode === "CORRECTED" ? Number(expense) : null,
+        correctedResult: reviewMode === "CORRECTED" ? Number(result) : null,
+      });
+      window.location.reload();
+    } catch (error) {
+      setReviewError(error instanceof Error ? error.message : "Nao foi possivel revisar a operacao.");
+      setReviewing(false);
+    }
+  }
+
   return (
     <div className="rounded-xl border border-white/10 bg-white/[0.02] p-3">
       <div className="flex items-center justify-between gap-3">
@@ -270,6 +299,53 @@ function RecordCard({
               {attachment.label}
             </a>
           ))}
+        </div>
+      ) : null}
+
+      {!hideFinancials ? (
+        <div className="mt-3 border-t border-white/[0.07] pt-3">
+          {reviewMode ? (
+            <div className="space-y-3 rounded-xl border border-[#d1a04f]/20 bg-[#17140d] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-[#f3dfae]">
+                  {reviewMode === "CORRECTED" ? "Corrigir valores" : "Estornar operacao"}
+                </p>
+                <button type="button" onClick={() => setReviewMode(null)} className="flex size-11 items-center justify-center rounded-xl active:bg-white/5" aria-label="Fechar revisao">
+                  <X className="size-4" />
+                </button>
+              </div>
+              {reviewMode === "CORRECTED" ? (
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                  <label className="text-xs text-[#9a958b]">Entrada
+                    <input value={income} onChange={(event) => setIncome(event.target.value)} type="number" min="0" step="0.01" className="mt-1 min-h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-base text-white" />
+                  </label>
+                  <label className="text-xs text-[#9a958b]">Despesa
+                    <input value={expense} onChange={(event) => setExpense(event.target.value)} type="number" min="0" step="0.01" className="mt-1 min-h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-base text-white" />
+                  </label>
+                  <label className="text-xs text-[#9a958b]">Resultado
+                    <input value={result} onChange={(event) => setResult(event.target.value)} type="number" step="0.01" className="mt-1 min-h-11 w-full rounded-xl border border-white/10 bg-black/20 px-3 text-base text-white" />
+                  </label>
+                </div>
+              ) : null}
+              <label className="block text-xs text-[#9a958b]">Motivo obrigatorio
+                <textarea value={reason} onChange={(event) => setReason(event.target.value)} rows={2} maxLength={300} className="mt-1 w-full rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-base text-white" placeholder="Explique o que aconteceu" />
+              </label>
+              {reviewError ? <p role="alert" className="text-xs text-[#f0a08f]">{reviewError}</p> : null}
+              <button type="button" onClick={() => void submitReview()} disabled={reviewing || reason.trim().length < 5} className="flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#d1a04f] px-4 text-sm font-semibold text-[#0d0a05] active:bg-[#b8893e] disabled:opacity-50">
+                {reviewing ? <LoaderCircle className="size-4 animate-spin" /> : null}
+                {reviewMode === "CORRECTED" ? "Salvar correcao" : "Confirmar estorno"}
+              </button>
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <button type="button" onClick={() => setReviewMode("CORRECTED")} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[#d1a04f]/25 px-3 text-xs font-medium text-[#f3dfae] active:bg-[#d1a04f]/10">
+                <PencilLine className="size-3.5" /> Corrigir
+              </button>
+              <button type="button" onClick={() => setReviewMode("CANCELLED")} className="inline-flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-[#ef806d]/25 px-3 text-xs font-medium text-[#f0a08f] active:bg-[#ef806d]/10">
+                <CircleX className="size-3.5" /> Estornar
+              </button>
+            </div>
+          )}
         </div>
       ) : null}
     </div>

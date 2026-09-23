@@ -22,6 +22,7 @@ import { fetchAddressByCep } from "@/lib/cep";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
+import { postJsonWithOfflineQueue } from "@/lib/offline-submission-queue";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCnpj, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import {
@@ -516,9 +517,9 @@ export function BilliardForm({
     if (photoFile) filesToUpload.push({ file: photoFile, category: "PHOTO" });
     if (contractFile) filesToUpload.push({ file: contractFile, category: "CONTRACT" });
 
-    const uploadedIds = await Promise.all(
-      filesToUpload.map(({ file, category }) => uploadFile(file, category)),
-    );
+    const uploadedIds = navigator.onLine
+      ? await Promise.all(filesToUpload.map(({ file, category }) => uploadFile(file, category)))
+      : [];
     const photoFileIds = uploadedIds.filter((id): id is string => Boolean(id));
 
     const payload = {
@@ -532,23 +533,26 @@ export function BilliardForm({
     let savedRecord: SavedModuleRecordResponse["record"];
 
     try {
-      const response = await fetch("/api/modules/bilhar-pebolim/records", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Idempotency-Key": submission.key(),
-        },
-        body: JSON.stringify(payload),
+      const result = await postJsonWithOfflineQueue<SavedModuleRecordResponse>({
+        endpoint: "/api/modules/bilhar-pebolim/records",
+        payload,
+        requestKey: submission.key(),
+        label: `Fechamento de ${values.pointName}`,
+        files: navigator.onLine
+          ? undefined
+          : filesToUpload.map(({ file, category }, index) => ({
+              file,
+              category,
+              payloadPath: `photoFileIds.${index}`,
+            })),
       });
-
-      if (!response.ok) {
-        throw new Error("Falha ao salvar o fechamento.");
-      }
-
-      const result = (await response.json()) as SavedModuleRecordResponse;
-      source = result.source ?? "local";
-      savedRecord = result.record;
       submission.complete();
+      if (result.queued) {
+        setSaveStatus("queued");
+        return;
+      }
+      source = result.data.source ?? "local";
+      savedRecord = result.data.record;
       setSaveStatus("saved");
       if (source === "database") {
         refreshRouteData();

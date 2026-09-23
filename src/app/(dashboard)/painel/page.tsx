@@ -112,6 +112,37 @@ export default async function PainelPage() {
         </div>
       </div>
 
+      {/* Central global de pendencias */}
+      <section className="rounded-2xl border border-[#f59e0b]/20 bg-[#1b160d]/55 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#fbbf24]">Central de pendencias</p>
+            <p className="mt-1 text-sm text-[#c9c2b4]">
+              {alerts.pendingCount} em aberto · {alerts.upcomingCount} vencendo nos proximos 3 dias
+            </p>
+          </div>
+          <p className="shrink-0 text-base font-bold text-[#fde68a]">{formatCurrency(alerts.pendingTotal)}</p>
+        </div>
+        <div className="mt-3 space-y-2">
+          {alerts.byModule.length === 0 ? (
+            <p className="rounded-xl border border-white/[0.06] px-3 py-3 text-xs text-[#9a958b]">Nenhuma pendencia financeira.</p>
+          ) : (
+            alerts.byModule.map((item) => (
+              <Link key={item.module} href={item.href} className="flex min-h-14 items-center gap-3 rounded-xl border border-white/[0.07] bg-black/10 px-3 active:bg-white/[0.04]">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-white">{item.label}</p>
+                  <p className="text-xs text-[#9a958b]">
+                    {item.count} em aberto{item.overdueCount > 0 ? ` · ${item.overdueCount} vencida(s)` : ""}
+                  </p>
+                </div>
+                <span className="text-sm font-semibold text-[#fde68a]">{formatCurrency(item.total)}</span>
+                <ChevronRight className="size-4 shrink-0 text-[#9a958b]" />
+              </Link>
+            ))
+          )}
+        </div>
+      </section>
+
       {/* Gestão */}
       <div>
         <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9a958b]">Gestão</p>

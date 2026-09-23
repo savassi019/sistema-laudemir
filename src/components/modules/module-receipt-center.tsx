@@ -1,6 +1,6 @@
 "use client";
 
-import { LoaderCircle, ReceiptText, RefreshCw, Search } from "lucide-react";
+import { FilterX, LoaderCircle, ReceiptText, RefreshCw, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { formatShortDate } from "@/lib/format";
@@ -15,6 +15,9 @@ export function ModuleReceiptCenter({ slug }: { slug: string }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("");
 
   async function load() {
     setLoading(true);
@@ -37,13 +40,26 @@ export function ModuleReceiptCenter({ slug }: { slug: string }) {
 
   const filtered = useMemo(() => {
     const normalized = query.trim().toLocaleLowerCase("pt-BR");
-    if (!normalized) return items;
-    return items.filter((item) =>
-      `${item.title} ${item.subtitle} ${item.phone}`
-        .toLocaleLowerCase("pt-BR")
-        .includes(normalized),
-    );
-  }, [items, query]);
+    const from = fromDate ? new Date(`${fromDate}T00:00:00`) : null;
+    const to = toDate ? new Date(`${toDate}T23:59:59.999`) : null;
+    return items.filter((item) => {
+      const haystack = `${item.title} ${item.subtitle} ${item.phone} ${item.receiptCode} ${item.message}`
+        .toLocaleLowerCase("pt-BR");
+      const occurredAt = new Date(item.occurredAt);
+      return (
+        (!normalized || haystack.includes(normalized)) &&
+        (!from || occurredAt >= from) &&
+        (!to || occurredAt <= to) &&
+        (!paymentMethod || item.paymentMethod === paymentMethod)
+      );
+    });
+  }, [fromDate, items, paymentMethod, query, toDate]);
+
+  const paymentOptions = useMemo(
+    () => [...new Set(items.map((item) => item.paymentMethod).filter(Boolean))].sort(),
+    [items],
+  );
+  const hasFilters = Boolean(query || fromDate || toDate || paymentMethod);
 
   return (
     <div className="space-y-3">
@@ -74,9 +90,21 @@ export function ModuleReceiptCenter({ slug }: { slug: string }) {
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             className={`${fieldClass} pl-11`}
-            placeholder="Buscar cliente, local ou telefone"
+            placeholder="Cliente, telefone ou ID do comprovante"
           />
         </div>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          <input type="date" value={fromDate} onChange={(event) => setFromDate(event.target.value)} aria-label="Data inicial" className={`${fieldClass} min-h-11 text-base [color-scheme:dark]`} />
+          <input type="date" value={toDate} onChange={(event) => setToDate(event.target.value)} aria-label="Data final" className={`${fieldClass} min-h-11 text-base [color-scheme:dark]`} />
+          <select value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)} className={`${fieldClass} min-h-11 text-base`}>
+            <option value="">Todos os pagamentos</option>
+            {paymentOptions.map((payment) => <option key={payment} value={payment}>{payment}</option>)}
+          </select>
+          <button type="button" disabled={!hasFilters} onClick={() => { setQuery(""); setFromDate(""); setToDate(""); setPaymentMethod(""); }} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 text-sm text-[#c9c2b4] active:bg-white/5 disabled:opacity-40">
+            <FilterX className="size-4" /> Limpar
+          </button>
+        </div>
+        <p className="mt-2 text-xs text-[#7e786d]">{filtered.length} de {items.length} comprovantes</p>
       </div>
 
       {loading ? (
@@ -99,10 +127,12 @@ export function ModuleReceiptCenter({ slug }: { slug: string }) {
                 <div className="min-w-0">
                   <h3 className="truncate text-sm font-semibold text-white">{item.title}</h3>
                   <p className="mt-1 text-xs text-[#a9a398]">{item.subtitle}</p>
+                  <p className="mt-1 text-[11px] font-medium text-[#d1a04f]">{item.receiptCode}</p>
                   <p className="mt-1 text-xs text-[#7e786d]">
                     {formatShortDate(item.occurredAt)}
                     {item.phone ? ` · ${item.phone}` : " · Sem telefone cadastrado"}
                   </p>
+                  <p className="mt-1 text-xs text-[#7e786d]">Pagamento: {item.paymentMethod}</p>
                 </div>
                 <span className="rounded-full border border-[#4ade80]/25 bg-[#4ade80]/10 px-2 py-1 text-[10px] font-semibold text-[#bbf7d0]">
                   Salvo

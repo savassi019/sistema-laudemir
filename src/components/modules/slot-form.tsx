@@ -18,6 +18,7 @@ import { fetchAddressByCep } from "@/lib/cep";
 import { formatCurrency, formatMachineCounter } from "@/lib/format";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
+import { postJsonWithOfflineQueue } from "@/lib/offline-submission-queue";
 import { formatClosingReceiptId } from "@/lib/receipt";
 import { calculateSlotCustomerDebt } from "@/lib/slot-finance";
 import { isValidCpf } from "@/lib/validators";
@@ -649,6 +650,7 @@ function SlotVisitForm({
   const [reviewValues, setReviewValues] = useState<ReviewedVisitValues | null>(null);
   const [results, setResults] = useState<MachineResult[] | null>(null);
   const [isReceiptPreview, setIsReceiptPreview] = useState(false);
+  const [queuedReceipt, setQueuedReceipt] = useState(false);
   const [lastSubmission, setLastSubmission] = useState<{
     paymentMethod: string;
     occurredAt: string;
@@ -792,6 +794,58 @@ function SlotVisitForm({
     setSaveError(null);
     const included = reviewValues.machines.filter((machine) => machine.included);
     try {
+      visitKeyRef.current ??= globalThis.crypto.randomUUID();
+      if (!navigator.onLine) {
+        const files: Array<{ file: File; payloadPath: string; category: string }> = [];
+        const queuedMachines = included.map((machine, index) => {
+          const screenPhoto = getFile(machine.screenPhoto);
+          if (!screenPhoto) throw new Error(`Falta a foto da maquina ${machine.clientMachineNumber}.`);
+          files.push({ file: screenPhoto, payloadPath: `machines.${index}.screenPhotoFileId`, category: "PHOTO" });
+          return {
+            machineId: machine.machineId,
+            previousIncome: Number(machine.previousIncome),
+            currentIncome: Number(machine.currentIncome),
+            previousExpense: Number(machine.previousExpense),
+            currentExpense: Number(machine.currentExpense),
+            percentageSplit: Number(machine.percentageSplit),
+            optionalGreedAmount: Number(machine.optionalGreedAmount),
+            previousMachineDebt: Number(machine.previousMachineDebt),
+            finalMachineDebt: Number(machine.finalMachineDebt),
+            screenPhotoFileId: null,
+            notes: machine.notes,
+          };
+        });
+        const requestKey = visitKeyRef.current;
+        const queued = await postJsonWithOfflineQueue<never>({
+          endpoint: "/api/modules/h-caca-niquel/visits",
+          requestKey,
+          label: `Visita H de ${clientName}`,
+          files,
+          payload: {
+            visitKey: requestKey,
+            clientName,
+            occurredAt: reviewValues.occurredAt,
+            paymentMethod: reviewValues.paymentMethod,
+            previousCustomerDebt: Number(reviewValues.previousCustomerDebt),
+            customerDebtDiscounted: Number(reviewValues.customerDebtDiscounted),
+            machines: queuedMachines,
+          },
+        });
+        if (queued.queued) {
+          openReceiptPreview();
+          setQueuedReceipt(true);
+          setLastSubmission({
+            paymentMethod: reviewValues.paymentMethod,
+            occurredAt: reviewValues.occurredAt,
+            closedAt: new Date().toISOString(),
+            receiptSourceId: requestKey,
+          });
+          setReviewValues(null);
+          visitKeyRef.current = null;
+          return;
+        }
+      }
+
       const uploadedMachines = await Promise.all(
         included.map(async (machine) => {
           const screenPhoto = getFile(machine.screenPhoto);
@@ -818,7 +872,6 @@ function SlotVisitForm({
         }),
       );
 
-      visitKeyRef.current ??= globalThis.crypto.randomUUID();
       const response = await fetch("/api/modules/h-caca-niquel/visits", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -841,6 +894,7 @@ function SlotVisitForm({
 
       setResults(responseBody.results);
       setIsReceiptPreview(false);
+      setQueuedReceipt(false);
       setLastSubmission({
         paymentMethod: reviewValues.paymentMethod,
         occurredAt: reviewValues.occurredAt,
@@ -871,7 +925,7 @@ function SlotVisitForm({
       <div className="space-y-4">
         <article
           className={`rounded-[28px] border p-5 ${
-            isReceiptPreview
+            isReceiptPreview || queuedReceipt
               ? "border-[#d1a04f]/30 bg-[#3a2b18]/60"
               : "border-[#8aa17c]/25 bg-[#243528]/72"
           }`}
@@ -879,9 +933,11 @@ function SlotVisitForm({
           <div className="flex items-center gap-2 text-[#dbe6d4]">
             <ReceiptText className="size-4" />
             <p className="font-medium">
-              {isReceiptPreview
-                ? `Prévia da via de ${clientName} — nada foi salvo`
-                : `Visita de ${clientName} salva`}
+              {queuedReceipt
+                ? `Visita de ${clientName} protegida neste aparelho`
+                : isReceiptPreview
+                  ? `Prévia da via de ${clientName} — nada foi salvo`
+                  : `Visita de ${clientName} salva`}
             </p>
           </div>
           <div className="mt-4 space-y-1.5 text-sm text-[#dbe6d4]/85">
@@ -911,8 +967,13 @@ function SlotVisitForm({
               </p>
             </div>
           )}
+          {queuedReceipt ? (
+            <p className="mt-3 text-sm text-[#f3dfae]">
+              O comprovante definitivo ficara disponivel depois da sincronizacao automatica.
+            </p>
+          ) : null}
           {saveError ? <p className="mt-3 text-sm text-[#f0c9ad]">{saveError}</p> : null}
-          <div className="mt-5 border-t border-[#8aa17c]/20 pt-4">
+          {!queuedReceipt ? <div className="mt-5 border-t border-[#8aa17c]/20 pt-4">
             <WhatsAppReceiptButton
               defaultPhone={phone}
               autoOpen={!!phone}
@@ -944,12 +1005,12 @@ function SlotVisitForm({
                 .filter(Boolean)
                 .join("\n")}
             />
-          </div>
+          </div> : null}
         </article>
         <button
           type="button"
           onClick={() => {
-            if (isReceiptPreview) {
+            if (isReceiptPreview && !queuedReceipt) {
               setResults(null);
               setLastSubmission(null);
               setIsReceiptPreview(false);
@@ -961,6 +1022,7 @@ function SlotVisitForm({
             setReviewValues(null);
             setLastSubmission(null);
             setIsReceiptPreview(false);
+            setQueuedReceipt(false);
             setSaveError(null);
             visitKeyRef.current = null;
             uploadedPhotosRef.current.clear();
@@ -968,7 +1030,7 @@ function SlotVisitForm({
           }}
           className="inline-flex min-h-11 items-center text-xs font-semibold text-[#9a958b] underline underline-offset-2 transition hover:text-white active:text-white"
         >
-          {isReceiptPreview ? "Voltar ao teste" : "Fazer outra visita"}
+          {isReceiptPreview && !queuedReceipt ? "Voltar ao teste" : "Fazer outra visita"}
         </button>
       </div>
     );

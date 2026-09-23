@@ -11,6 +11,7 @@ import { formatCurrency } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL, RECEIPT_STATUS_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
 import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
+import { postJsonWithOfflineQueue } from "@/lib/offline-submission-queue";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCpf, maskPhone, withMask } from "@/lib/masks";
 import {
@@ -351,20 +352,15 @@ export function BxForm({
       Math.max(clientDebt - Number(values.discountAmount), 0) +
       generatedDebtAmount;
 
-    const [screenPhotoFileId, paperPhotoFileId] = await Promise.all([
-      screenPhoto ? uploadFile(screenPhoto, "PROOF") : Promise.resolve(null),
-      paperPhoto ? uploadFile(paperPhoto, "PROOF") : Promise.resolve(null),
-    ]);
+    const [screenPhotoFileId, paperPhotoFileId] = navigator.onLine
+      ? await Promise.all([
+          screenPhoto ? uploadFile(screenPhoto, "PROOF") : Promise.resolve(null),
+          paperPhoto ? uploadFile(paperPhoto, "PROOF") : Promise.resolve(null),
+        ])
+      : [null, null];
     let savedRecord: SavedModuleRecordResponse["record"];
 
-    try {
-      const response = await fetch("/api/modules/bx/records", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Idempotency-Key": submission.key(),
-        },
-        body: JSON.stringify({
+    const payload = {
           clientName: values.clientName,
           phone: values.phone,
           cpf: values.cpf,
@@ -387,15 +383,26 @@ export function BxForm({
           notes: values.notes,
           screenPhotoFileId,
           paperPhotoFileId,
-        }),
+    };
+    try {
+      const result = await postJsonWithOfflineQueue<SavedModuleRecordResponse>({
+        endpoint: "/api/modules/bx/records",
+        payload,
+        requestKey: submission.key(),
+        label: `Operacao BX de ${values.clientName}`,
+        files: navigator.onLine
+          ? undefined
+          : [
+              ...(screenPhoto ? [{ file: screenPhoto, category: "PROOF", payloadPath: "screenPhotoFileId" }] : []),
+              ...(paperPhoto ? [{ file: paperPhoto, category: "PROOF", payloadPath: "paperPhotoFileId" }] : []),
+            ],
       });
-
-      if (!response.ok) {
-        throw new Error("Falha ao salvar o BX.");
-      }
-      const result = (await response.json()) as SavedModuleRecordResponse;
-      savedRecord = result.record;
       submission.complete();
+      if (result.queued) {
+        setSaveStatus("queued");
+        return;
+      }
+      savedRecord = result.data.record;
       clearDraft();
       setSaveStatus("saved");
     } catch {

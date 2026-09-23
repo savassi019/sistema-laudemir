@@ -69,7 +69,9 @@ export default async function ModuleDetailPage({
 }: {
   params: Promise<{ slug: string }>;
 }) {
-  const session = await requireSession("DASHBOARD");
+  // O modulo se autoriza pela propria permissao abaixo. Exigir DASHBOARD
+  // aqui quebrava justamente os logins com acesso avulso.
+  const session = await requireSession();
   const { slug } = await params;
   const item = getModuleBySlug(slug);
 

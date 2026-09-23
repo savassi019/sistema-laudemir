@@ -7,7 +7,10 @@ import { getVisibleModulesFlat } from "@/lib/module-catalog";
 export const dynamic = "force-dynamic";
 
 export default async function ModulesPage() {
-  const session = await requireSession("DASHBOARD");
+  // Acesso avulso a um modulo nao exige a permissao DASHBOARD. Esta pagina
+  // e a porta de entrada segura para gestor/funcionario ver somente os cards
+  // que foram liberados para ele.
+  const session = await requireSession();
   const items = getVisibleModulesFlat(session.modules, session.role === "OWNER");
 
   return (

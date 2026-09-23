@@ -591,6 +591,46 @@ model AuditLog {
   @@index([organizationId, entityType, entityId])
 }
 
+/// Chave persistente de idempotencia dos formularios. Impede que o mesmo
+/// envio seja gravado duas vezes mesmo depois de reinicio da aplicacao.
+model ModuleSubmission {
+  id             String       @id @default(cuid())
+  organizationId String
+  userId         String
+  module         SystemModule
+  slug           String
+  requestKey     String
+  status         String       @default("PROCESSING")
+  response       Json?
+  lastError      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, userId, slug, requestKey])
+  @@index([organizationId, status])
+}
+
+/// Revisao nao destrutiva de uma operacao: o registro original permanece
+/// intacto e a camada de relatorio aplica a correcao ou o estorno.
+model ModuleOperationReview {
+  id               String       @id @default(cuid())
+  organizationId   String
+  userId            String
+  module            SystemModule
+  slug              String
+  entityId          String
+  status            String
+  correctedIncome   Decimal?     @db.Decimal(14, 2)
+  correctedExpense  Decimal?     @db.Decimal(14, 2)
+  correctedResult   Decimal?     @db.Decimal(14, 2)
+  reason            String
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  @@unique([organizationId, slug, entityId])
+  @@index([organizationId, module, status])
+}
+
 model CarretaKidsRecord {
   id             String         @id @default(cuid())
   organizationId String

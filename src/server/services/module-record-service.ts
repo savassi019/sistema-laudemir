@@ -73,6 +73,8 @@ export type ModuleRecordItem = {
   financialBreakdown?: ModuleFinancialBreakdownItem[];
   attachments?: { id: string; label: string }[];
   badge?: string;
+  reviewStatus?: "CORRECTED" | "CANCELLED";
+  reviewReason?: string;
   createdAt: string;
 };
 
@@ -2215,7 +2217,7 @@ function buildDateWhere(range?: DateRange, campo: string = "createdAt") {
   };
 }
 
-export async function listModuleRecords(
+async function listModuleRecordsBase(
   session: SessionData,
   slug: ModuleSlug,
   take = 5,
@@ -2692,6 +2694,74 @@ export async function listModuleRecords(
   }
 }
 
+async function applyOperationReviews(
+  session: SessionData,
+  slug: ModuleSlug,
+  records: ModuleRecordItem[],
+): Promise<ModuleRecordItem[]> {
+  if (records.length === 0) return records;
+  const reviews = await prisma.moduleOperationReview.findMany({
+    where: {
+      organizationId: session.organizationId,
+      slug,
+      entityId: { in: records.map((record) => record.id) },
+    },
+  });
+  const byEntity = new Map(reviews.map((review) => [review.entityId, review]));
+
+  return records.map((record) => {
+    const review = byEntity.get(record.id);
+    if (!review) return record;
+
+    if (review.status === "CANCELLED") {
+      return {
+        ...record,
+        amount: formatCurrency(0),
+        amountValue: 0,
+        incomeValue: 0,
+        expenseValue: 0,
+        financialBreakdown: [],
+        badge: "Estornado",
+        details: [...record.details, `Estorno: ${review.reason}`],
+        reviewStatus: "CANCELLED" as const,
+        reviewReason: review.reason,
+      };
+    }
+
+    const income = Number(review.correctedIncome ?? record.incomeValue ?? 0);
+    const expense = Number(review.correctedExpense ?? record.expenseValue ?? 0);
+    const result = Number(review.correctedResult ?? income - expense);
+    return {
+      ...record,
+      amount: formatCurrency(result),
+      amountValue: result,
+      incomeValue: income,
+      expenseValue: expense,
+      financialBreakdown: [
+        ...(income > 0
+          ? [{ direction: "INCOME" as const, category: "CORRECTED_INCOME", categoryLabel: "Entrada corrigida", amount: income }]
+          : []),
+        ...(expense > 0
+          ? [{ direction: "EXPENSE" as const, category: "CORRECTED_EXPENSE", categoryLabel: "Despesa corrigida", amount: expense }]
+          : []),
+      ],
+      badge: "Corrigido",
+      details: [...record.details, `Correcao: ${review.reason}`],
+      reviewStatus: "CORRECTED" as const,
+      reviewReason: review.reason,
+    };
+  });
+}
+
+export async function listModuleRecords(
+  session: SessionData,
+  slug: ModuleSlug,
+  take = 5,
+  range?: DateRange,
+): Promise<ModuleRecordItem[]> {
+  return applyOperationReviews(session, slug, await listModuleRecordsBase(session, slug, take, range));
+}
+
 export type ModuleClientItem = {
   id: string;
   name: string;
@@ -2884,7 +2954,7 @@ export async function listModuleClients(
   }
 }
 
-export async function listModuleClientRecords(
+async function listModuleClientRecordsBase(
   session: SessionData,
   slug: ModuleSlug,
   clientId: string,
@@ -3092,6 +3162,19 @@ export async function listModuleClientRecords(
     default:
       return [];
   }
+}
+
+export async function listModuleClientRecords(
+  session: SessionData,
+  slug: ModuleSlug,
+  clientId: string,
+  clientName: string,
+): Promise<ModuleRecordItem[]> {
+  return applyOperationReviews(
+    session,
+    slug,
+    await listModuleClientRecordsBase(session, slug, clientId, clientName),
+  );
 }
 
 export async function listModuleVisitTargets(

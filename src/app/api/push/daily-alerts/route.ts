@@ -28,12 +28,23 @@ export async function POST(req: NextRequest) {
   inicioDeHoje.setHours(0, 0, 0, 0);
   const limiteProximos = new Date(inicioDeHoje);
   limiteProximos.setDate(limiteProximos.getDate() + 4); // hoje + 3 dias inteiros
+  const quinzeDiasAtras = new Date(inicioDeHoje);
+  quinzeDiasAtras.setDate(quinzeDiasAtras.getDate() - 15);
 
   const orgs = await prisma.organization.findMany({ select: { id: true } });
   const report: { org: string; sent: number; alerts: number }[] = [];
 
   for (const org of orgs) {
-    const [overdueContent, upcomingContent, overdueEntries, delinquents] = await Promise.all([
+    const [
+      overdueContent,
+      upcomingContent,
+      overdueEntries,
+      upcomingEntries,
+      delinquents,
+      billiardsWithoutVisit,
+      plushWithoutVisit,
+      slotsWithoutVisit,
+    ] = await Promise.all([
       prisma.marketingContent.count({
         where: { organizationId: org.id, status: "PENDING", contentDate: { lt: inicioDeHoje } },
       }),
@@ -45,10 +56,41 @@ export async function POST(req: NextRequest) {
         },
       }),
       prisma.financialEntry.count({
-        where: { organizationId: org.id, status: "OVERDUE" },
+        where: {
+          organizationId: org.id,
+          status: { in: ["PENDING", "PARTIAL", "OVERDUE"] },
+          OR: [{ status: "OVERDUE" }, { dueDate: { lt: inicioDeHoje } }],
+        },
+      }),
+      prisma.financialEntry.count({
+        where: {
+          organizationId: org.id,
+          status: { in: ["PENDING", "PARTIAL"] },
+          dueDate: { gte: inicioDeHoje, lt: limiteProximos },
+        },
       }),
       prisma.client.count({
         where: { organizationId: org.id, status: "DELINQUENT" },
+      }),
+      prisma.billiardPoint.count({
+        where: {
+          organizationId: org.id,
+          collections: { none: { collectionDate: { gte: quinzeDiasAtras } } },
+        },
+      }),
+      prisma.plushMachine.count({
+        where: {
+          organizationId: org.id,
+          active: true,
+          collections: { none: { createdAt: { gte: quinzeDiasAtras } } },
+        },
+      }),
+      prisma.slotMachine.count({
+        where: {
+          organizationId: org.id,
+          active: true,
+          collections: { none: { occurredAt: { gte: quinzeDiasAtras } } },
+        },
       }),
     ]);
 
@@ -59,20 +101,31 @@ export async function POST(req: NextRequest) {
       parts.push(`${upcomingContent} vencendo em 3 dias`);
     if (overdueEntries > 0)
       parts.push(`${overdueEntries} cobrança${overdueEntries !== 1 ? "s" : ""} vencida${overdueEntries !== 1 ? "s" : ""}`);
+    if (upcomingEntries > 0)
+      parts.push(`${upcomingEntries} cobrança${upcomingEntries !== 1 ? "s" : ""} vencendo em 3 dias`);
     if (delinquents > 0)
       parts.push(`${delinquents} cliente${delinquents !== 1 ? "s" : ""} inadimplente${delinquents !== 1 ? "s" : ""}`);
+    const unvisitedMachines = billiardsWithoutVisit + plushWithoutVisit + slotsWithoutVisit;
+    if (unvisitedMachines > 0)
+      parts.push(`${unvisitedMachines} ponto${unvisitedMachines !== 1 ? "s" : ""} sem fechamento ha 15 dias`);
 
-    const totalAlerts = overdueContent + upcomingContent + overdueEntries + delinquents;
+    const totalAlerts = overdueContent + upcomingContent + overdueEntries + upcomingEntries + delinquents + unvisitedMachines;
     if (totalAlerts === 0) {
       report.push({ org: org.id, sent: 0, alerts: 0 });
       continue;
     }
 
-    const subs = await prisma.pushSubscription.findMany({ where: { organizationId: org.id } });
+    const managementUsers = await prisma.user.findMany({
+      where: { organizationId: org.id, role: { in: ["OWNER", "ADMIN"] }, status: "ACTIVE" },
+      select: { id: true },
+    });
+    const subs = await prisma.pushSubscription.findMany({
+      where: { organizationId: org.id, userId: { in: managementUsers.map((user) => user.id) } },
+    });
     const payload = JSON.stringify({
       title: "Sistema LM · Atenção necessária",
       body: parts.join(" · "),
-      url: "/dashboard",
+      url: "/painel",
     });
 
     const results = await Promise.allSettled(

@@ -27,9 +27,11 @@ export const receiptModuleSlugs: ModuleSlug[] = [
 
 export type ModuleReceiptItem = {
   id: string;
+  receiptCode: string;
   title: string;
   subtitle: string;
   phone: string;
+  paymentMethod: string;
   occurredAt: string;
   closedAt: string;
   message: string;
@@ -62,9 +64,11 @@ export async function listModuleReceipts(
       });
       return records.map((record) => ({
         id: record.id,
+        receiptCode: receiptId(record.id, record.serviceDate),
         title: record.locationName,
         subtitle: `Ficha ${record.sheetName}`,
         phone: record.phone ?? "",
+        paymentMethod: paymentLabel(record.paymentMethod),
         occurredAt: record.serviceDate.toISOString(),
         closedAt: record.createdAt.toISOString(),
         message: [
@@ -96,9 +100,11 @@ export async function listModuleReceipts(
       });
       return records.map((record) => ({
         id: record.id,
+        receiptCode: receiptId(record.id, record.createdAt),
         title: record.plushMachine.clientName ?? record.plushMachine.name,
         subtitle: `${record.plushMachine.name} #${record.plushMachine.machineNumber}`,
         phone: record.plushMachine.phone ?? "",
+        paymentMethod: paymentLabel(record.paymentMethod),
         occurredAt: record.createdAt.toISOString(),
         closedAt: record.createdAt.toISOString(),
         message: [
@@ -144,9 +150,11 @@ export async function listModuleReceipts(
         });
         return {
           id: record.id,
+          receiptCode: receiptId(record.id, record.collectionDate),
           title: record.billiardPoint.clientName ?? record.billiardPoint.name,
           subtitle: record.billiardPoint.name,
           phone: record.billiardPoint.phone ?? "",
+          paymentMethod: paymentLabel(record.roofPaymentMethod),
           occurredAt: record.collectionDate.toISOString(),
           closedAt: record.createdAt.toISOString(),
           message: [
@@ -183,9 +191,11 @@ export async function listModuleReceipts(
         });
         return {
           id: record.id,
+          receiptCode: receiptId(record.id, record.occurredAt),
           title: record.clientName,
           subtitle: rotuloDeStatus(record.receiptStatus, RECEIPT_STATUS_LABEL),
           phone: record.phone ?? "",
+          paymentMethod: paymentLabel(record.paymentMethod),
           occurredAt: record.occurredAt.toISOString(),
           closedAt: record.createdAt.toISOString(),
           message: [
@@ -219,9 +229,11 @@ export async function listModuleReceipts(
       });
       return records.map((record) => ({
         id: record.id,
+        receiptCode: receiptId(record.id, record.eventDate),
         title: record.clientName ?? record.localName,
         subtitle: record.localName,
         phone: record.phone ?? "",
+        paymentMethod: paymentLabel(record.paymentMethod),
         occurredAt: record.eventDate.toISOString(),
         closedAt: record.createdAt.toISOString(),
         message: [
@@ -285,9 +297,11 @@ export async function listModuleReceipts(
         );
         return {
           id: key,
+          receiptCode: receiptId(key, first.occurredAt),
           title: first.slotMachine.clientName ?? "Cliente",
           subtitle: `Máquinas ${machines.join(", ")}`,
           phone: first.slotMachine.phone ?? "",
+          paymentMethod: paymentLabel(first.paymentMethod),
           occurredAt: first.occurredAt.toISOString(),
           closedAt: closedAt.toISOString(),
           message: [

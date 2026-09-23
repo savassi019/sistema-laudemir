@@ -10,6 +10,7 @@ import { formatCurrency, formatShortDate } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
 import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
+import { postJsonWithOfflineQueue } from "@/lib/offline-submission-queue";
 import { maskCpf, maskPhone, withMask } from "@/lib/masks";
 import {
   formatClosingReceiptId,
@@ -230,20 +231,15 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
     const coinPhoto = getFile(values.coinPhoto);
     const giftPhoto = getFile(values.giftPhoto);
 
-    const [coinPhotoFileId, giftPhotoFileId] = await Promise.all([
-      coinPhoto ? uploadFile(coinPhoto, "PHOTO") : Promise.resolve(null),
-      giftPhoto ? uploadFile(giftPhoto, "PHOTO") : Promise.resolve(null),
-    ]);
+    const [coinPhotoFileId, giftPhotoFileId] = navigator.onLine
+      ? await Promise.all([
+          coinPhoto ? uploadFile(coinPhoto, "PHOTO") : Promise.resolve(null),
+          giftPhoto ? uploadFile(giftPhoto, "PHOTO") : Promise.resolve(null),
+        ])
+      : [null, null];
     let savedRecord: SavedModuleRecordResponse["record"];
 
-    try {
-      const response = await fetch("/api/modules/maquinas-de-pelucia/records", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Idempotency-Key": submission.key(),
-        },
-        body: JSON.stringify({
+    const payload = {
           clientName: values.clientName,
           cpf: values.cpf,
           phone: values.phone,
@@ -268,15 +264,26 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
           notes: values.notes,
           coinPhotoFileId,
           giftPhotoFileId,
-        }),
+    };
+    try {
+      const result = await postJsonWithOfflineQueue<SavedModuleRecordResponse>({
+        endpoint: "/api/modules/maquinas-de-pelucia/records",
+        payload,
+        requestKey: submission.key(),
+        label: `Fechamento GRUA de ${values.clientName}`,
+        files: navigator.onLine
+          ? undefined
+          : [
+              ...(coinPhoto ? [{ file: coinPhoto, category: "PHOTO", payloadPath: "coinPhotoFileId" }] : []),
+              ...(giftPhoto ? [{ file: giftPhoto, category: "PHOTO", payloadPath: "giftPhotoFileId" }] : []),
+            ],
       });
-
-      if (!response.ok) {
-        throw new Error("Falha ao salvar a Pelucia.");
-      }
-      const result = (await response.json()) as SavedModuleRecordResponse;
-      savedRecord = result.record;
       submission.complete();
+      if (result.queued) {
+        setSaveStatus("queued");
+        return;
+      }
+      savedRecord = result.data.record;
       clearDraft();
       setSaveStatus("saved");
     } catch {
