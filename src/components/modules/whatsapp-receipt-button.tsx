@@ -12,6 +12,7 @@ type Props = {
   closedAt?: string;
   documentLabel?: string;
   pdfButtonLabel?: string;
+  compact?: boolean;
 };
 
 type ReceiptLine = {
@@ -454,6 +455,7 @@ export function WhatsAppReceiptButton({
   closedAt,
   documentLabel = "Comprovante",
   pdfButtonLabel = "Baixar como PDF",
+  compact = false,
 }: Props) {
   const [phone, setPhone] = useState(defaultPhone);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -645,14 +647,14 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
   }, []);
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-[#25d366]/30 bg-[#0d1f14]">
-      <div className="flex items-center gap-2 border-b border-[#25d366]/15 px-4 py-3">
+    <div className={`overflow-hidden border border-[#25d366]/30 bg-[#0d1f14] ${compact ? "rounded-xl" : "rounded-2xl"}`}>
+      {compact ? null : <div className="flex items-center gap-2 border-b border-[#25d366]/15 px-4 py-3">
         <MessageCircle className="size-4 text-[#25d366]" />
         <p className="text-sm font-semibold text-[#25d366]">{title}</p>
-      </div>
+      </div>}
 
       {countdown !== null ? (
-        <div className="flex items-center justify-between gap-3 px-4 py-4">
+        <div className={`flex items-center justify-between gap-3 ${compact ? "p-3" : "px-4 py-4"}`}>
           <p className="text-sm text-[#25d366]">
             Abrindo WhatsApp em <strong>{countdown}s</strong>…
           </p>
@@ -666,11 +668,11 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
           </button>
         </div>
       ) : (
-        <div className="space-y-3 p-4">
+        <div className={compact ? "space-y-2 p-3" : "space-y-3 p-4"}>
           <button
             type="button"
             onClick={handleSendText}
-            className="inline-flex min-h-14 w-full items-center justify-center gap-2.5 rounded-xl bg-[#25d366] px-4 py-4 text-base font-bold text-[#0a1a10] shadow-[0_6px_20px_rgba(37,211,102,0.4)] transition active:scale-[0.98] active:bg-[#22c55e] disabled:opacity-40 disabled:shadow-none"
+            className={`inline-flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#25d366] px-4 font-bold text-[#0a1a10] shadow-[0_6px_20px_rgba(37,211,102,0.3)] transition active:scale-[0.98] active:bg-[#22c55e] disabled:opacity-40 disabled:shadow-none ${compact ? "min-h-12 py-3 text-sm" : "min-h-14 py-4 text-base"}`}
           >
             <MessageCircle className="size-5" />
             Enviar comprovante ao cliente
@@ -678,28 +680,30 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
 
           {shareError ? <p className="text-center text-xs text-[#f0a08f]">{shareError}</p> : null}
 
-          <button
-            type="button"
-            onClick={handleShareImage}
-            disabled={generating}
-            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#25d366]/20 bg-transparent px-4 py-3 text-sm font-semibold text-[#25d366]/70 transition active:bg-[#25d366]/10 active:text-[#25d366] disabled:opacity-40"
-          >
-            {generating ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : (
-              <ImageIcon className="size-4" />
-            )}
-            {generating ? "Gerando comprovante…" : "Compartilhar imagem do comprovante"}
-          </button>
+          <div className={compact ? "grid grid-cols-2 gap-2" : "space-y-3"}>
+            <button
+              type="button"
+              onClick={handleShareImage}
+              disabled={generating}
+              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#25d366]/20 bg-transparent px-3 py-3 text-sm font-semibold text-[#25d366]/70 transition active:bg-[#25d366]/10 active:text-[#25d366] disabled:opacity-40"
+            >
+              {generating ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <ImageIcon className="size-4" />
+              )}
+              {generating ? "Gerando…" : compact ? "Imagem" : "Compartilhar imagem do comprovante"}
+            </button>
 
-          <button
-            type="button"
-            onClick={handleDownloadPDF}
-            className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#25d366]/20 bg-transparent px-4 py-3 text-sm font-semibold text-[#25d366]/70 transition active:bg-[#25d366]/10 active:text-[#25d366]"
-          >
-            <FileDown className="size-4" />
-            {pdfButtonLabel}
-          </button>
+            <button
+              type="button"
+              onClick={handleDownloadPDF}
+              className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#25d366]/20 bg-transparent px-3 py-3 text-sm font-semibold text-[#25d366]/70 transition active:bg-[#25d366]/10 active:text-[#25d366]"
+            >
+              <FileDown className="size-4" />
+              {pdfButtonLabel}
+            </button>
+          </div>
 
           <div className="text-center">
             <button
@@ -736,11 +740,11 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
             </div>
           ) : null}
 
-          <p className="text-center text-[11px] leading-tight text-[#25d366]/30">
+          {compact ? null : <p className="text-center text-[11px] leading-tight text-[#25d366]/30">
             O botão verde abre o WhatsApp no telefone cadastrado do cliente.
             <br />
             A imagem também pode ser compartilhada ou baixada separadamente.
-          </p>
+          </p>}
         </div>
       )}
     </div>
