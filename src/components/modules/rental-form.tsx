@@ -317,7 +317,6 @@ export function RentalForm({ hideFinancials = false, initialClientName = "", ini
             <span>Status: {rotuloDeStatus(receipt.paymentStatus, FINANCIAL_STATUS_LABEL)}</span>
           </div>
           <WhatsAppReceiptButton
-            autoOpen={!saveError && !!receipt.phone}
             defaultPhone={receipt.phone}
             closedAt={receipt.closedAt}
             title="Via do cliente — WhatsApp e PDF"

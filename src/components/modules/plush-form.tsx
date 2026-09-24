@@ -701,7 +701,6 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
             return (
               <div className="mt-3 space-y-3">
                 <WhatsAppReceiptButton
-                  autoOpen={!saveError && !!receipt.phone}
                   defaultPhone={receipt.phone}
                   closedAt={receipt.closedAt}
                   message={message}

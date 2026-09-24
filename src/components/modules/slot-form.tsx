@@ -977,7 +977,6 @@ function SlotVisitForm({
           {!queuedReceipt ? <div className="mt-5 border-t border-[#8aa17c]/20 pt-4">
             <WhatsAppReceiptButton
               defaultPhone={phone}
-              autoOpen={!!phone}
               closedAt={lastSubmission?.closedAt}
               title="Via do cliente — WhatsApp e PDF"
               documentLabel="Via do cliente"

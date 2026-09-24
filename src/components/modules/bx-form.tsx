@@ -972,7 +972,6 @@ export function BxForm({
           {receipt.notes ? <p className="mt-3 text-sm text-[#dbe6d4]/75">{receipt.notes}</p> : null}
           <WhatsAppReceiptButton
             defaultPhone={receipt.phone ?? ""}
-            autoOpen={!saveError && !!receipt.phone}
             closedAt={receipt.closedAt}
             title="Via do cliente — WhatsApp e PDF"
             documentLabel="Via do cliente"

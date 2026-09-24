@@ -491,7 +491,6 @@ export function MarketingContractForm({
             <p className="mt-3 text-sm text-[#c8bef5]/60">{receipt.notes}</p>
           ) : null}
           <WhatsAppReceiptButton
-            autoOpen
             defaultPhone={receipt.phone}
             message={[
               "*Comprovante Marketing*",

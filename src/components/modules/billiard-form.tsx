@@ -1379,7 +1379,6 @@ export function BilliardForm({
                       ) : null}
                     </div>
                     <WhatsAppReceiptButton
-                      autoOpen={!saveError && !!receipt.phone}
                       defaultPhone={receipt.phone}
                       closedAt={receipt.closedAt}
                       title="Via do cliente — WhatsApp e PDF"

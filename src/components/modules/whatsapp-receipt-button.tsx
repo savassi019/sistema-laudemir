@@ -1,6 +1,6 @@
 "use client";
 
-import { FileDown, ImageIcon, LoaderCircle, MessageCircle, Send, X } from "lucide-react";
+import { FileDown, ImageIcon, LoaderCircle, MessageCircle, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 type Props = {
@@ -8,7 +8,6 @@ type Props = {
   message: string;
   title?: string;
   phoneLabel?: string;
-  autoOpen?: boolean;
   closedAt?: string;
   documentLabel?: string;
   pdfButtonLabel?: string;
@@ -451,19 +450,15 @@ export function WhatsAppReceiptButton({
   message,
   title = "Enviar comprovante pelo WhatsApp",
   phoneLabel = "Número do cliente",
-  autoOpen = false,
   closedAt,
   documentLabel = "Comprovante",
   pdfButtonLabel = "Baixar como PDF",
   compact = false,
 }: Props) {
   const [phone, setPhone] = useState(defaultPhone);
-  const [countdown, setCountdown] = useState<number | null>(null);
   const [generating, setGenerating] = useState(false);
   const [shareError, setShareError] = useState<string | null>(null);
   const [showText, setShowText] = useState(false);
-  const cancelledRef = useRef(false);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const messageRef = useRef(message);
 
   useEffect(() => {
@@ -612,39 +607,8 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
       setShareError("Cadastre ou confira o telefone do cliente para abrir o WhatsApp.");
       return;
     }
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    setCountdown(null);
     window.open(buildTextUrl(phone), "_blank", "noopener,noreferrer");
   }
-
-  function handleCancel() {
-    cancelledRef.current = true;
-    if (intervalRef.current) clearInterval(intervalRef.current);
-    setCountdown(null);
-  }
-
-  useEffect(() => {
-    if (!autoOpen || !isReady || cancelledRef.current) return;
-    const START = 3;
-    setCountdown(START);
-    let remaining = START;
-    intervalRef.current = setInterval(() => {
-      remaining -= 1;
-      if (remaining <= 0) {
-        clearInterval(intervalRef.current!);
-        setCountdown(null);
-        if (!cancelledRef.current) {
-          window.open(buildTextUrl(phone), "_blank", "noopener,noreferrer");
-        }
-      } else {
-        setCountdown(remaining);
-      }
-    }, 1000);
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div className={`overflow-hidden border border-[#25d366]/30 bg-[#0d1f14] ${compact ? "rounded-xl" : "rounded-2xl"}`}>
@@ -653,22 +617,7 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
         <p className="text-sm font-semibold text-[#25d366]">{title}</p>
       </div>}
 
-      {countdown !== null ? (
-        <div className={`flex items-center justify-between gap-3 ${compact ? "p-3" : "px-4 py-4"}`}>
-          <p className="text-sm text-[#25d366]">
-            Abrindo WhatsApp em <strong>{countdown}s</strong>…
-          </p>
-          <button
-            type="button"
-            onClick={handleCancel}
-            className="flex min-h-11 items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-xs font-semibold text-[#9a958b] transition active:text-white"
-          >
-            <X className="size-3.5" />
-            Cancelar
-          </button>
-        </div>
-      ) : (
-        <div className={compact ? "space-y-2 p-3" : "space-y-3 p-4"}>
+      <div className={compact ? "space-y-2 p-3" : "space-y-3 p-4"}>
           <button
             type="button"
             onClick={handleSendText}
@@ -745,8 +694,7 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
             <br />
             A imagem também pode ser compartilhada ou baixada separadamente.
           </p>}
-        </div>
-      )}
+      </div>
     </div>
   );
 }

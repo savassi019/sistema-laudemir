@@ -422,7 +422,6 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
           ) : null}
           <WhatsAppReceiptButton
             defaultPhone={receipt.phone}
-            autoOpen={!saveError && !!receipt.phone}
             closedAt={receipt.closedAt}
             title="Via do cliente — WhatsApp e PDF"
             documentLabel="Via do cliente"
