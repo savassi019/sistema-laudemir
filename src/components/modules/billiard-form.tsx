@@ -1032,80 +1032,179 @@ export function BilliardForm({
                   ) : null}
 
                   {/* Acerto do telhado: parcela e pagamento sao separados para manter saldo parcial. */}
-                  <div className="mt-4 rounded-2xl border border-[#9d6b50]/30 bg-[#2b1e19]/45 p-3">
-                    <div className="mb-3 flex items-center justify-between gap-3">
-                      <div>
-                        <p className="text-sm font-semibold text-[#f0c9ad]">Acerto do telhado</p>
-                        <p className="mt-0.5 text-xs text-[#9a958b]">
-                          Registre a parcela cobrada e quanto foi realmente pago.
+                  <div className="mt-4 overflow-hidden rounded-2xl border border-[#d1a04f]/20 bg-[#11130f] shadow-[0_14px_35px_rgba(0,0,0,0.16)]">
+                    <div className="flex flex-wrap items-start gap-3 border-b border-white/8 px-4 py-4">
+                      <span className="inline-flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#d1a04f]/20 bg-[#d1a04f]/10 text-[#e2b35e]">
+                        <ReceiptText className="size-5" />
+                      </span>
+                      <div className="min-w-40 flex-1">
+                        <p className="text-sm font-semibold text-white">Acerto do telhado</p>
+                        <p className="mt-1 text-xs leading-5 text-[#9a958b]">
+                          Informe a cobrança desta visita e o valor que o cliente pagou.
                         </p>
                       </div>
                       {!hideFinancials ? (
-                        <span className="shrink-0 rounded-full border border-[#9d6b50]/30 px-2.5 py-1 text-xs font-semibold text-[#f0c9ad]">
-                          Saldo: {formatCurrency(roofPreviousBalance)}
+                        <span
+                          className={cn(
+                            "ml-[52px] shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold sm:ml-0",
+                            roofPreviousBalance > 0
+                              ? "border-[#d1a04f]/30 bg-[#d1a04f]/8 text-[#f0c979]"
+                              : "border-[#86efac]/20 bg-[#86efac]/8 text-[#86efac]",
+                          )}
+                        >
+                          {roofPreviousBalance > 0 ? "Há saldo anterior" : "Sem dívida anterior"}
                         </span>
                       ) : null}
                     </div>
 
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label="Tipo de cobrança">
-                        <select className={selectClass} {...form.register("roofChargeType")}>
-                          <option value="FIXED">Parcela fixa da Infinity</option>
-                          <option value="NEGOTIATED">Negociado no local</option>
-                        </select>
-                      </Field>
-                      <Field label="Parcela cobrada agora (R$)">
-                        <input
-                          className={fieldClass}
-                          inputMode="decimal"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          {...form.register("roofInstallmentAmount")}
-                        />
-                      </Field>
-                      <Field
-                        label="Valor pago agora (R$)"
-                        error={form.formState.errors.roofPaidAmount?.message}
-                      >
-                        <input
-                          className={fieldClass}
-                          inputMode="decimal"
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          {...form.register("roofPaidAmount")}
-                        />
-                      </Field>
-                      <Field
-                        label="Forma de pagamento"
-                        error={form.formState.errors.roofPaymentMethod?.message}
-                      >
-                        <select className={selectClass} {...form.register("roofPaymentMethod")}>
-                          <option value="ABERTO">Não houve pagamento</option>
-                          <option value="PIX">PIX</option>
-                          <option value="DINHEIRO">Dinheiro</option>
-                          <option value="CARTAO">Cartão</option>
-                        </select>
-                      </Field>
-                    </div>
+                    <div className="space-y-3 p-3 sm:p-4">
+                      <section className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+                        <div className="mb-3 flex items-center gap-2">
+                          <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#d1a04f]/12 text-xs font-bold text-[#e2b35e]">
+                            1
+                          </span>
+                          <p className="text-sm font-semibold text-[#e8e2d8]">Cobrança desta visita</p>
+                        </div>
 
-                    {!hideFinancials ? (
-                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[#9d6b50]/20 pt-3 text-center">
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wide text-[#9a958b]">Anterior</p>
-                          <p className="mt-1 text-xs font-semibold text-[#c9c2b4]">{formatCurrency(roofBalance.previousBalance)}</p>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <Field label="Como será cobrado?">
+                            <div className="grid gap-2 sm:grid-cols-2" role="radiogroup" aria-label="Tipo de cobrança do telhado">
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={watched.roofChargeType === "FIXED"}
+                                onClick={() => form.setValue("roofChargeType", "FIXED", { shouldDirty: true })}
+                                className={cn(
+                                  "min-h-11 rounded-xl border px-3 py-2.5 text-left text-sm transition active:scale-[0.99]",
+                                  watched.roofChargeType === "FIXED"
+                                    ? "border-[#d1a04f]/60 bg-[#d1a04f]/10 font-semibold text-[#f5d99d]"
+                                    : "border-white/10 bg-[#090d0c]/60 text-[#aaa397]",
+                                )}
+                              >
+                                Parcela fixa da Infinity
+                              </button>
+                              <button
+                                type="button"
+                                role="radio"
+                                aria-checked={watched.roofChargeType === "NEGOTIATED"}
+                                onClick={() => form.setValue("roofChargeType", "NEGOTIATED", { shouldDirty: true })}
+                                className={cn(
+                                  "min-h-11 rounded-xl border px-3 py-2.5 text-left text-sm transition active:scale-[0.99]",
+                                  watched.roofChargeType === "NEGOTIATED"
+                                    ? "border-[#d1a04f]/60 bg-[#d1a04f]/10 font-semibold text-[#f5d99d]"
+                                    : "border-white/10 bg-[#090d0c]/60 text-[#aaa397]",
+                                )}
+                              >
+                                Negociado no local
+                              </button>
+                            </div>
+                          </Field>
+                          <Field label="Valor da parcela desta visita (R$)">
+                            <input
+                              className={cn(fieldClass, "font-semibold")}
+                              inputMode="decimal"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              {...form.register("roofInstallmentAmount")}
+                            />
+                            <span className="block text-[11px] leading-4 text-[#777167]">
+                              Esse valor será somado ao saldo do telhado.
+                            </span>
+                          </Field>
                         </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wide text-[#9a958b]">Pago agora</p>
-                          <p className="mt-1 text-xs font-semibold text-[#86efac]">{formatCurrency(roofBalance.paidAmount)}</p>
+                      </section>
+
+                      <section className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+                        <div className="mb-3 flex items-center gap-2">
+                          <span className="inline-flex size-6 items-center justify-center rounded-full bg-[#86efac]/10 text-xs font-bold text-[#86efac]">
+                            2
+                          </span>
+                          <p className="text-sm font-semibold text-[#e8e2d8]">Pagamento recebido</p>
                         </div>
-                        <div>
-                          <p className="text-[10px] uppercase tracking-wide text-[#9a958b]">Fica devendo</p>
-                          <p className="mt-1 text-xs font-semibold text-[#f0c9ad]">{formatCurrency(roofBalance.balanceAfter)}</p>
+
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          <Field
+                            label="Quanto o cliente pagou agora? (R$)"
+                            error={form.formState.errors.roofPaidAmount?.message}
+                          >
+                            <input
+                              className={cn(fieldClass, "font-semibold")}
+                              inputMode="decimal"
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              {...form.register("roofPaidAmount")}
+                            />
+                          </Field>
+                          {roofPaidAmount > 0 ? (
+                            <Field
+                              label="Como o cliente pagou?"
+                              error={form.formState.errors.roofPaymentMethod?.message}
+                            >
+                              <select className={selectClass} {...form.register("roofPaymentMethod")}>
+                                <option value="ABERTO" disabled>Selecione a forma de pagamento</option>
+                                <option value="PIX">PIX</option>
+                                <option value="DINHEIRO">Dinheiro</option>
+                                <option value="CARTAO">Cartão</option>
+                              </select>
+                            </Field>
+                          ) : (
+                            <div className="flex min-h-20 items-center rounded-xl border border-dashed border-white/10 bg-[#090d0c]/45 px-3 py-3 text-xs leading-5 text-[#777167]">
+                              Nenhum pagamento informado nesta visita.
+                            </div>
+                          )}
                         </div>
-                      </div>
-                    ) : null}
+                      </section>
+
+                      {!hideFinancials ? (
+                        <section
+                          className={cn(
+                            "rounded-2xl border p-3.5",
+                            roofBalance.balanceAfter > 0
+                              ? "border-[#d1a04f]/25 bg-[#d1a04f]/7"
+                              : "border-[#86efac]/20 bg-[#86efac]/6",
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={cn(
+                                  "inline-flex size-6 items-center justify-center rounded-full text-xs font-bold",
+                                  roofBalance.balanceAfter > 0
+                                    ? "bg-[#d1a04f]/12 text-[#e2b35e]"
+                                    : "bg-[#86efac]/10 text-[#86efac]",
+                                )}
+                              >
+                                3
+                              </span>
+                              <div>
+                                <p className="text-sm font-semibold text-[#e8e2d8]">Resultado do acerto</p>
+                                <p className="mt-0.5 text-[11px] text-[#8e887e]">
+                                  {roofBalance.balanceAfter > 0 ? "Saldo que continuará pendente" : "Telhado quitado"}
+                                </p>
+                              </div>
+                            </div>
+                            <p
+                              className={cn(
+                                "text-lg font-bold tabular-nums",
+                                roofBalance.balanceAfter > 0 ? "text-[#f0c979]" : "text-[#86efac]",
+                              )}
+                            >
+                              {formatCurrency(roofBalance.balanceAfter)}
+                            </p>
+                          </div>
+
+                          <div className="mt-3 grid grid-cols-[1fr_auto_1fr_auto_1fr] items-center gap-1 border-t border-white/8 pt-3 text-center">
+                            <RoofEquationValue label="Anterior" value={roofBalance.previousBalance} />
+                            <span className="text-[#777167]">+</span>
+                            <RoofEquationValue label="Parcela" value={roofBalance.installmentAmount} />
+                            <span className="text-[#777167]">−</span>
+                            <RoofEquationValue label="Recebido" value={roofBalance.paidAmount} positive />
+                          </div>
+                        </section>
+                      ) : null}
+                    </div>
                   </div>
 
                   {/* Histórico */}
@@ -1300,7 +1399,11 @@ export function BilliardForm({
                               `Telhado: ${rotuloDeStatus(receipt.roofChargeType, ROOF_CHARGE_TYPE_LABEL)}`,
                               `Parcela cobrada: ${formatCurrency(receipt.roofInstallmentAmount)}`,
                               `Pago agora: ${formatCurrency(receipt.roofPaidAmount)}`,
-                              `Pagamento: ${rotuloDeStatus(receipt.roofPaymentMethod, PAYMENT_METHOD_LABEL)}`,
+                              `Pagamento: ${
+                                receipt.roofPaidAmount > 0
+                                  ? rotuloDeStatus(receipt.roofPaymentMethod, PAYMENT_METHOD_LABEL)
+                                  : "Não houve pagamento"
+                              }`,
                               ...(!hideFinancials
                                 ? [
                                     `Saldo anterior do telhado: ${formatCurrency(receipt.roofPreviousBalance)}`,
@@ -1771,6 +1874,30 @@ function Field({
       {children}
       {error ? <span className="block text-xs text-[#f0c9ad]">{error}</span> : null}
     </label>
+  );
+}
+
+function RoofEquationValue({
+  label,
+  value,
+  positive = false,
+}: {
+  label: string;
+  value: number;
+  positive?: boolean;
+}) {
+  return (
+    <div className="min-w-0">
+      <p className="text-[9px] uppercase tracking-wide text-[#777167]">{label}</p>
+      <p
+        className={cn(
+          "mt-1 truncate text-[11px] font-semibold tabular-nums sm:text-xs",
+          positive && value > 0 ? "text-[#86efac]" : "text-[#c9c2b4]",
+        )}
+      >
+        {formatCurrency(value)}
+      </p>
+    </div>
   );
 }
 
