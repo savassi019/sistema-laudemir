@@ -101,7 +101,12 @@ export async function listBilliardPoints(
         take: 1,
       },
     },
-    orderBy: [{ routeNumber: "asc" }, { code: "asc" }],
+    orderBy: [
+      { routeNumber: "asc" },
+      { registrationNumber: "asc" },
+      { createdAt: "asc" },
+      { code: "asc" },
+    ],
   });
 
   return points.map((point) => {
