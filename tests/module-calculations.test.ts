@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   calculateBilliardFinancials,
+  calculateBilliardRoofBalance,
   calculateBxFinancials,
   calculateCarretaFinancials,
   calculatePlushFinancials,
@@ -31,6 +32,32 @@ test("bilhar calcula bruto, repasse, custos, resultado e alerta do pano", () => 
     clothRemaining: 0,
     clothWarning: true,
   });
+});
+
+test("bilhar mantem saldo parcial do telhado e soma somente o valor recebido", () => {
+  assert.deepEqual(
+    calculateBilliardRoofBalance({
+      previousBalance: 80,
+      installmentAmount: 200,
+      paidAmount: 120,
+    }),
+    {
+      previousBalance: 80,
+      installmentAmount: 200,
+      paidAmount: 120,
+      balanceAfter: 160,
+    },
+  );
+
+  const result = calculateBilliardFinancials({
+    quantityOfChips: 100,
+    chipValue: 2,
+    percentage: 25,
+    employeeCost: 10,
+    roofPaidAmount: 120,
+  });
+  assert.equal(result.finalValue, 260);
+  assert.equal(result.totalCosts, 10);
 });
 
 test("BX trata prêmio como despesa e carrega somente a dívida válida", () => {

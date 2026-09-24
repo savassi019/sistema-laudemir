@@ -1,21 +1,14 @@
 import { Camera, FileText, WalletCards } from "lucide-react";
 
 import { formatCurrency, formatShortDate } from "@/lib/format";
+import {
+  MAINTENANCE_STATUS_LABEL,
+  PAYMENT_METHOD_LABEL,
+  ROOF_CHARGE_TYPE_LABEL,
+  rotuloDeStatus,
+} from "@/lib/status-labels";
 import type { BilliardPointHistoryEntry } from "@/server/services/billiard-route-service";
 import { hintClass } from "./styles";
-
-export const ROOF_PAYMENT_LABELS: Record<string, string> = {
-  PIX: "PIX",
-  DINHEIRO: "Dinheiro",
-  CARTAO: "Cartão",
-  ABERTO: "Aberto",
-};
-
-export const MAINTENANCE_STATUS_LABELS: Record<string, string> = {
-  SCHEDULED: "Agendada",
-  DONE: "Concluída",
-  CANCELLED: "Cancelada",
-};
 
 export function BilliardPointHistoryList({
   entries,
@@ -45,13 +38,27 @@ export function BilliardPointHistoryList({
                 <span>Bruto: {formatCurrency(item.grossAmount)}</span>
                 <span>Percentual cliente: {item.percentage}%</span>
                 <span>Desconto: {formatCurrency(item.discountAmount)}</span>
-                <span>Telhado: {formatCurrency(item.roofAmount)}</span>
+                {item.roofPaidAmount === null ? (
+                  <span>Telhado (registro antigo): {formatCurrency(item.roofAmount)}</span>
+                ) : (
+                  <>
+                    <span>
+                      Cobrança: {rotuloDeStatus(item.roofChargeType, ROOF_CHARGE_TYPE_LABEL)}
+                    </span>
+                    <span>Parcela telhado: {formatCurrency(item.roofAmount)}</span>
+                    <span>Pago telhado: {formatCurrency(item.roofPaidAmount)}</span>
+                    <span>Saldo anterior: {formatCurrency(item.roofPreviousBalance ?? 0)}</span>
+                    <span>Saldo restante: {formatCurrency(item.roofBalanceAfter ?? 0)}</span>
+                  </>
+                )}
                 <span>Func.: {formatCurrency(item.employeeCost)}</span>
                 <span>Instalação: {formatCurrency(item.installationCost)}</span>
                 <span>Manutenção: {formatCurrency(item.maintenanceCost)}</span>
                 <span>Outros: {formatCurrency(item.otherCost)}</span>
                 {item.roofPaymentMethod ? (
-                  <span>Pagto telhado: {ROOF_PAYMENT_LABELS[item.roofPaymentMethod] ?? item.roofPaymentMethod}</span>
+                  <span>
+                    Pagto telhado: {rotuloDeStatus(item.roofPaymentMethod, PAYMENT_METHOD_LABEL)}
+                  </span>
                 ) : null}
                 <span className="font-medium text-[#dbe6d4]">
                   Resultado: {formatCurrency(item.finalValue)}
@@ -86,7 +93,7 @@ export function BilliardPointHistoryList({
                 {formatShortDate(item.date)}
               </p>
               <span className="text-xs text-[#9a958b]">
-                {MAINTENANCE_STATUS_LABELS[item.status] ?? item.status}
+                {rotuloDeStatus(item.status, MAINTENANCE_STATUS_LABEL)}
               </span>
             </div>
             {item.materials ? <p className="mt-1.5 text-xs text-[#9a958b]">Materiais: {item.materials}</p> : null}

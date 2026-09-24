@@ -23,6 +23,7 @@ import { fetchAddressByCep } from "@/lib/cep";
 import { cn } from "@/lib/cn";
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
+import { calculateBilliardRoofBalance } from "@/lib/module-calculations";
 import { postJsonWithOfflineQueue } from "@/lib/offline-submission-queue";
 import { buildMapsLink } from "@/lib/maps";
 import { maskCep, maskCnpj, maskCpf, maskPhone, withMask } from "@/lib/masks";
@@ -31,6 +32,11 @@ import {
   type SavedModuleRecordResponse,
 } from "@/lib/receipt";
 import { isValidCnpj, isValidCpf } from "@/lib/validators";
+import {
+  PAYMENT_METHOD_LABEL,
+  ROOF_CHARGE_TYPE_LABEL,
+  rotuloDeStatus,
+} from "@/lib/status-labels";
 import {
   createRoutePlanAction,
   getBilliardPointAction,
@@ -74,7 +80,9 @@ const schema = z
     percentage: z.coerce.number().min(0).max(100),
     discountAmount: z.coerce.number().min(0),
     discountReason: z.string().optional(),
-    roofDebt: z.coerce.number().min(0),
+    roofChargeType: z.enum(["FIXED", "NEGOTIATED"]),
+    roofInstallmentAmount: z.coerce.number().min(0),
+    roofPaidAmount: z.coerce.number().min(0),
     roofPaymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
     contractType: z.enum(["NENHUM", "ALUGUEL", "VENDA"]),
     contractStatus: z.enum(["NAO_APLICA", "PENDENTE", "ATIVO", "QUITADO"]),
@@ -95,6 +103,13 @@ const schema = z
     {
       message: "Explique o motivo do desconto.",
       path: ["discountReason"],
+    },
+  )
+  .refine(
+    (data) => data.roofPaidAmount === 0 || data.roofPaymentMethod !== "ABERTO",
+    {
+      message: "Informe como o valor do telhado foi pago.",
+      path: ["roofPaymentMethod"],
     },
   )
   .refine((data) => !data.cpf?.trim() || isValidCpf(data.cpf), {
@@ -137,6 +152,12 @@ type ReceiptState = {
   companyShare: number;
   totalCosts: number;
   finalValue: number;
+  roofChargeType: "FIXED" | "NEGOTIATED";
+  roofPreviousBalance: number;
+  roofInstallmentAmount: number;
+  roofPaidAmount: number;
+  roofBalanceAfter: number;
+  roofPaymentMethod: string;
   quantityOfChips: number;
   accumulatedChips: number;
   collectionDate: string;
@@ -314,7 +335,9 @@ export function BilliardForm({
       percentage: 25,
       discountAmount: 0,
       discountReason: "",
-      roofDebt: 0,
+      roofChargeType: "FIXED",
+      roofInstallmentAmount: 0,
+      roofPaidAmount: 0,
       roofPaymentMethod: "ABERTO",
       contractType: "NENHUM",
       contractStatus: "NAO_APLICA",
@@ -336,7 +359,14 @@ export function BilliardForm({
   const chipValue = Number(watched.chipValue ?? 0);
   const percentage = Number(watched.percentage ?? 0);
   const discountAmount = Number(watched.discountAmount ?? 0);
-  const roofDebt = Number(watched.roofDebt ?? 0);
+  const roofInstallmentAmount = Number(watched.roofInstallmentAmount ?? 0);
+  const roofPaidAmount = Number(watched.roofPaidAmount ?? 0);
+  const roofPreviousBalance = loadedPoint?.roofOpenDebt ?? 0;
+  const roofBalance = calculateBilliardRoofBalance({
+    previousBalance: roofPreviousBalance,
+    installmentAmount: roofInstallmentAmount,
+    paidAmount: roofPaidAmount,
+  });
   const employeeCost = Number(watched.employeeCost ?? 0);
   const installationCost = Number(watched.installationCost ?? 0);
   const maintenanceCost = Number(watched.maintenanceCost ?? 0);
@@ -350,6 +380,7 @@ export function BilliardForm({
     const collections = pointHistory.filter(
       (e): e is Extract<BilliardPointHistoryEntry, { type: "collection" }> => e.type === "collection",
     );
+    const latestStructuredRoofEntry = collections.find((c) => c.roofBalanceAfter !== null);
     return {
       count: collections.length,
       totalChips: collections.reduce((s, c) => s + c.quantityOfChips, 0),
@@ -357,7 +388,12 @@ export function BilliardForm({
       totalClientShare: collections.reduce((s, c) => s + c.grossAmount * (c.percentage / 100), 0),
       totalFinal: collections.reduce((s, c) => s + c.finalValue, 0),
       totalRoof: collections.reduce((s, c) => s + c.roofAmount, 0),
-      openRoofEntries: collections.filter((c) => c.roofAmount > 0 && c.roofPaymentMethod === "ABERTO"),
+      totalRoofPaid: collections.reduce((s, c) => s + (c.roofPaidAmount ?? 0), 0),
+      openRoofEntries: latestStructuredRoofEntry
+        ? latestStructuredRoofEntry.roofBalanceAfter! > 0
+          ? [latestStructuredRoofEntry]
+          : []
+        : collections.filter((c) => c.roofAmount > 0 && c.roofPaymentMethod === "ABERTO"),
     };
   }, [pointHistory]);
 
@@ -371,9 +407,8 @@ export function BilliardForm({
       maintenanceCost +
       otherCost +
       structureCost +
-      roofDebt +
       discountAmount;
-    const finalValue = companyShare - totalCosts;
+    const finalValue = companyShare + roofPaidAmount - totalCosts;
     const clothTotal = accumulatedChips + quantityOfChips;
 
     return {
@@ -396,7 +431,7 @@ export function BilliardForm({
     otherCost,
     percentage,
     quantityOfChips,
-    roofDebt,
+    roofPaidAmount,
     structureCost,
   ]);
 
@@ -433,6 +468,15 @@ export function BilliardForm({
     if (activeStep === "ponto") {
       if (loadedPoint) {
         if (!watched.collectionDate) return "Informe a data do fechamento.";
+        if (
+          !hideFinancials &&
+          roofPaidAmount > roofPreviousBalance + roofInstallmentAmount
+        ) {
+          return "O valor pago não pode ser maior que o saldo do telhado.";
+        }
+        if (roofPaidAmount > 0 && watched.roofPaymentMethod === "ABERTO") {
+          return "Informe a forma de pagamento do telhado.";
+        }
       } else {
         if (String(watched.clientName ?? "").trim().length < 2) return "Informe o nome do cliente.";
         if (String(watched.pointName ?? "").trim().length < 2) return "Informe o nome do ponto.";
@@ -490,7 +534,10 @@ export function BilliardForm({
     form.setValue("chipValue", point.chipValue);
     form.setValue("routeNumber", point.routeNumber ?? 1);
     form.setValue("partialRoute", point.partialRoute ?? "");
-    form.setValue("roofDebt", point.roofOpenDebt);
+    form.setValue("roofChargeType", "FIXED");
+    form.setValue("roofInstallmentAmount", point.roofFixedInstallment);
+    form.setValue("roofPaidAmount", 0);
+    form.setValue("roofPaymentMethod", "ABERTO");
     form.setValue("accumulatedChips", point.accumulatedChips);
     setLoadedPoint(point);
     setShowPointHistory(false);
@@ -504,6 +551,17 @@ export function BilliardForm({
   }
 
   const onSubmit = form.handleSubmit(async (values) => {
+    if (
+      !hideFinancials &&
+      values.roofPaidAmount > roofPreviousBalance + values.roofInstallmentAmount
+    ) {
+      form.setError("roofPaidAmount", {
+        message: "O valor pago não pode ser maior que o saldo do telhado.",
+      });
+      setActiveStep("ponto");
+      return;
+    }
+
     // O resumo continua dentro do mesmo <form>. Depois da primeira gravacao,
     // qualquer novo submit dessa instancia e repetido e nao uma nova visita.
     // O ref fecha tambem a pequena janela entre atualizar o ponto e renderizar
@@ -581,7 +639,7 @@ export function BilliardForm({
 
     const newStatus = totals.clothWarning
       ? "Trocar pano"
-      : values.roofDebt > 0
+      : roofBalance.balanceAfter > 0
         ? "Telhado aberto"
         : "Coletado";
     const pointCode = payload.pointCode;
@@ -607,7 +665,11 @@ export function BilliardForm({
         partialRoute: values.partialRoute ?? null,
         accumulatedChips: totals.clothTotal,
         clothChangeAlertAt: loadedPoint?.clothChangeAlertAt ?? CLOTH_LIMIT,
-        roofOpenDebt: values.roofDebt,
+        roofOpenDebt: roofBalance.balanceAfter,
+        roofFixedInstallment:
+          values.roofChargeType === "FIXED" && values.roofInstallmentAmount > 0
+            ? values.roofInstallmentAmount
+            : loadedPoint?.roofFixedInstallment ?? 0,
         status: newStatus,
         lastCollectionAt: values.collectionDate,
         lastResultAmount: totals.finalValue,
@@ -639,6 +701,12 @@ export function BilliardForm({
       companyShare: totals.companyShare,
       totalCosts: totals.totalCosts,
       finalValue: totals.finalValue,
+      roofChargeType: values.roofChargeType,
+      roofPreviousBalance: roofBalance.previousBalance,
+      roofInstallmentAmount: roofBalance.installmentAmount,
+      roofPaidAmount: roofBalance.paidAmount,
+      roofBalanceAfter: roofBalance.balanceAfter,
+      roofPaymentMethod: values.roofPaymentMethod,
       quantityOfChips: Number(values.quantityOfChips),
       accumulatedChips: totals.clothTotal,
       collectionDate: values.collectionDate,
@@ -927,28 +995,6 @@ export function BilliardForm({
                     ) : null}
                   </div>
 
-                  {/* Telhado — sempre visível para permitir registrar nova dívida */}
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <Field label={loadedPoint.roofOpenDebt > 0 ? `Telhado em aberto (R$) — atual: ${formatCurrency(loadedPoint.roofOpenDebt)}` : "Telhado (R$)"}>
-                      <input
-                        className={fieldClass}
-                        inputMode="decimal"
-                        type="number"
-                        min="0"
-                        step="0.01"
-                        {...form.register("roofDebt")}
-                      />
-                    </Field>
-                    <Field label="Forma de pagamento">
-                      <select className={selectClass} {...form.register("roofPaymentMethod")}>
-                        <option value="ABERTO">Em aberto</option>
-                        <option value="PIX">PIX</option>
-                        <option value="DINHEIRO">Dinheiro</option>
-                        <option value="CARTAO">Cartão</option>
-                      </select>
-                    </Field>
-                  </div>
-
                   {/* Custos */}
                   {!hideFinancials ? (
                     <>
@@ -984,6 +1030,83 @@ export function BilliardForm({
                       ) : null}
                     </>
                   ) : null}
+
+                  {/* Acerto do telhado: parcela e pagamento sao separados para manter saldo parcial. */}
+                  <div className="mt-4 rounded-2xl border border-[#9d6b50]/30 bg-[#2b1e19]/45 p-3">
+                    <div className="mb-3 flex items-center justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-semibold text-[#f0c9ad]">Acerto do telhado</p>
+                        <p className="mt-0.5 text-xs text-[#9a958b]">
+                          Registre a parcela cobrada e quanto foi realmente pago.
+                        </p>
+                      </div>
+                      {!hideFinancials ? (
+                        <span className="shrink-0 rounded-full border border-[#9d6b50]/30 px-2.5 py-1 text-xs font-semibold text-[#f0c9ad]">
+                          Saldo: {formatCurrency(roofPreviousBalance)}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Field label="Tipo de cobrança">
+                        <select className={selectClass} {...form.register("roofChargeType")}>
+                          <option value="FIXED">Parcela fixa da Infinity</option>
+                          <option value="NEGOTIATED">Negociado no local</option>
+                        </select>
+                      </Field>
+                      <Field label="Parcela cobrada agora (R$)">
+                        <input
+                          className={fieldClass}
+                          inputMode="decimal"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          {...form.register("roofInstallmentAmount")}
+                        />
+                      </Field>
+                      <Field
+                        label="Valor pago agora (R$)"
+                        error={form.formState.errors.roofPaidAmount?.message}
+                      >
+                        <input
+                          className={fieldClass}
+                          inputMode="decimal"
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          {...form.register("roofPaidAmount")}
+                        />
+                      </Field>
+                      <Field
+                        label="Forma de pagamento"
+                        error={form.formState.errors.roofPaymentMethod?.message}
+                      >
+                        <select className={selectClass} {...form.register("roofPaymentMethod")}>
+                          <option value="ABERTO">Não houve pagamento</option>
+                          <option value="PIX">PIX</option>
+                          <option value="DINHEIRO">Dinheiro</option>
+                          <option value="CARTAO">Cartão</option>
+                        </select>
+                      </Field>
+                    </div>
+
+                    {!hideFinancials ? (
+                      <div className="mt-3 grid grid-cols-3 gap-2 border-t border-[#9d6b50]/20 pt-3 text-center">
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wide text-[#9a958b]">Anterior</p>
+                          <p className="mt-1 text-xs font-semibold text-[#c9c2b4]">{formatCurrency(roofBalance.previousBalance)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wide text-[#9a958b]">Pago agora</p>
+                          <p className="mt-1 text-xs font-semibold text-[#86efac]">{formatCurrency(roofBalance.paidAmount)}</p>
+                        </div>
+                        <div>
+                          <p className="text-[10px] uppercase tracking-wide text-[#9a958b]">Fica devendo</p>
+                          <p className="mt-1 text-xs font-semibold text-[#f0c9ad]">{formatCurrency(roofBalance.balanceAfter)}</p>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
 
                   {/* Histórico */}
                   <button
@@ -1172,6 +1295,20 @@ export function BilliardForm({
                         `Ponto: ${receipt.pointName}`,
                         `Data: ${formatShortDate(receipt.collectionDate)}`,
                         `Fichas: ${receipt.quantityOfChips}`,
+                        ...(receipt.roofInstallmentAmount > 0 || receipt.roofPaidAmount > 0
+                          ? [
+                              `Telhado: ${rotuloDeStatus(receipt.roofChargeType, ROOF_CHARGE_TYPE_LABEL)}`,
+                              `Parcela cobrada: ${formatCurrency(receipt.roofInstallmentAmount)}`,
+                              `Pago agora: ${formatCurrency(receipt.roofPaidAmount)}`,
+                              `Pagamento: ${rotuloDeStatus(receipt.roofPaymentMethod, PAYMENT_METHOD_LABEL)}`,
+                              ...(!hideFinancials
+                                ? [
+                                    `Saldo anterior do telhado: ${formatCurrency(receipt.roofPreviousBalance)}`,
+                                    `Saldo restante do telhado: ${formatCurrency(receipt.roofBalanceAfter)}`,
+                                  ]
+                                : []),
+                            ]
+                          : []),
                         ...(!hideFinancials
                           ? [
                               `*Repasse ao cliente: ${formatCurrency(receipt.clientShare)}*`,
@@ -1272,7 +1409,11 @@ export function BilliardForm({
                                 className="flex items-center justify-between text-xs text-[#f0c9ad]/70"
                               >
                                 <span>{formatShortDate(e.date)}</span>
-                                <span>{formatCurrency(e.roofAmount)} — em aberto</span>
+                                <span>
+                                  {formatCurrency(
+                                    e.roofBalanceAfter ?? e.roofAmount,
+                                  )} — em aberto
+                                </span>
                               </div>
                             ))}
                           </div>
@@ -1350,6 +1491,12 @@ export function BilliardForm({
                             <SummaryLine
                               label="Telhado cobrado (total)"
                               value={formatCurrency(historyTotals.totalRoof)}
+                            />
+                          ) : null}
+                          {historyTotals.totalRoofPaid > 0 ? (
+                            <SummaryLine
+                              label="Telhado recebido (total)"
+                              value={formatCurrency(historyTotals.totalRoofPaid)}
                             />
                           ) : null}
                         </div>

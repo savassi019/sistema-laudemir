@@ -11,6 +11,7 @@ import {
   FINANCIAL_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
   RECEIPT_STATUS_LABEL,
+  ROOF_CHARGE_TYPE_LABEL,
   rotuloDeStatus,
 } from "@/lib/status-labels";
 import type { ModuleSlug } from "@/server/services/module-record-service";
@@ -134,6 +135,8 @@ export async function listModuleReceipts(
         take,
       });
       return records.map((record) => {
+        const isLegacyRoofEntry = record.roofPaidAmount === null;
+        const roofPaidAmount = isLegacyRoofEntry ? 0 : Number(record.roofPaidAmount ?? 0);
         const totals = calculateBilliardFinancials({
           quantityOfChips: record.quantityOfChips,
           chipValue:
@@ -145,7 +148,8 @@ export async function listModuleReceipts(
           installationCost: Number(record.installationCost ?? 0),
           maintenanceCost: Number(record.maintenanceCost ?? 0),
           otherCost: Number(record.otherCost ?? 0),
-          roofDebt: Number(record.roofAmount ?? 0),
+          roofDebt: isLegacyRoofEntry ? Number(record.roofAmount ?? 0) : 0,
+          roofPaidAmount,
           discountAmount: Number(record.discountAmount ?? 0),
         });
         return {
@@ -154,7 +158,10 @@ export async function listModuleReceipts(
           title: record.billiardPoint.clientName ?? record.billiardPoint.name,
           subtitle: record.billiardPoint.name,
           phone: record.billiardPoint.phone ?? "",
-          paymentMethod: paymentLabel(record.roofPaymentMethod),
+          paymentMethod:
+            !isLegacyRoofEntry && roofPaidAmount === 0
+              ? "Não houve pagamento"
+              : paymentLabel(record.roofPaymentMethod),
           occurredAt: record.collectionDate.toISOString(),
           closedAt: record.createdAt.toISOString(),
           message: [
@@ -164,8 +171,30 @@ export async function listModuleReceipts(
             `Ponto: ${record.billiardPoint.name}`,
             `Data: ${formatShortDate(record.collectionDate)}`,
             `Fichas: ${record.quantityOfChips}`,
+            ...(!isLegacyRoofEntry &&
+            (Number(record.roofAmount ?? 0) > 0 || roofPaidAmount > 0)
+              ? [
+                  `Telhado: ${rotuloDeStatus(record.roofChargeType, ROOF_CHARGE_TYPE_LABEL)}`,
+                  `Parcela cobrada: ${formatCurrency(Number(record.roofAmount ?? 0))}`,
+                  `Pago agora: ${formatCurrency(roofPaidAmount)}`,
+                  `Pagamento do telhado: ${
+                    roofPaidAmount > 0
+                      ? paymentLabel(record.roofPaymentMethod)
+                      : "Não houve pagamento"
+                  }`,
+                ]
+              : []),
             ...(showFinancials
               ? [
+                  ...(!isLegacyRoofEntry &&
+                  (Number(record.roofAmount ?? 0) > 0 ||
+                    roofPaidAmount > 0 ||
+                    Number(record.roofPreviousBalance ?? 0) > 0)
+                    ? [
+                        `Saldo anterior: ${formatCurrency(Number(record.roofPreviousBalance ?? 0))}`,
+                        `Saldo restante: ${formatCurrency(Number(record.roofBalanceAfter ?? 0))}`,
+                      ]
+                    : []),
                   `*Repasse ao cliente: ${formatCurrency(totals.clientShare)}*`,
                   `*Resultado Infinity: ${formatCurrency(totals.finalValue)}*`,
                 ]

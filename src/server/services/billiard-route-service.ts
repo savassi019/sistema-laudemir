@@ -33,6 +33,7 @@ export type BilliardPointItem = {
   accumulatedChips: number;
   clothChangeAlertAt: number;
   roofOpenDebt: number;
+  roofFixedInstallment: number;
   status: "Trocar pano" | "Telhado aberto" | "Coletado" | "Pendente";
   lastCollectionAt: string | null;
   lastResultAmount: number | null;
@@ -127,14 +128,16 @@ export async function listBilliardPoints(
     if (lastCollection) {
       const grossAmount = Number(lastCollection.grossAmount);
       const percentage = Number(lastCollection.percentage ?? 0);
+      const isLegacyRoofEntry = lastCollection.roofPaidAmount === null;
       lastResultAmount =
         grossAmount * (1 - percentage / 100) -
         Number(lastCollection.employeeCost ?? 0) -
         Number(lastCollection.installationCost ?? 0) -
         Number(lastCollection.maintenanceCost ?? 0) -
         Number(lastCollection.otherCost ?? 0) -
-        Number(lastCollection.roofAmount ?? 0) -
-        Number(lastCollection.discountAmount ?? 0);
+        Number(lastCollection.discountAmount ?? 0) -
+        (isLegacyRoofEntry ? Number(lastCollection.roofAmount ?? 0) : 0) +
+        (isLegacyRoofEntry ? 0 : Number(lastCollection.roofPaidAmount ?? 0));
     }
 
     const canReturnLastResult =
@@ -166,6 +169,7 @@ export async function listBilliardPoints(
       accumulatedChips: point.accumulatedChips,
       clothChangeAlertAt: point.clothChangeAlertAt,
       roofOpenDebt: session.role === "STAFF" ? 0 : roofOpenDebt,
+      roofFixedInstallment: Number(point.roofFixedInstallment ?? 0),
       status,
       lastCollectionAt: lastCollection ? lastCollection.collectionDate.toISOString() : null,
       lastResultAmount: canReturnLastResult ? lastResultAmount : null,
@@ -281,7 +285,8 @@ export async function getBilliardPoint(
     partialRoute: point.partialRoute,
     accumulatedChips: point.accumulatedChips,
     clothChangeAlertAt: point.clothChangeAlertAt,
-    roofOpenDebt,
+    roofOpenDebt: session.role === "STAFF" ? 0 : roofOpenDebt,
+    roofFixedInstallment: Number(point.roofFixedInstallment ?? 0),
     status,
     lastCollectionAt: lastCollection ? lastCollection.collectionDate.toISOString() : null,
     lastResultAmount: null,
@@ -359,6 +364,10 @@ export type BilliardPointHistoryEntry =
       percentage: number;
       discountAmount: number;
       roofAmount: number;
+      roofChargeType: string | null;
+      roofPreviousBalance: number | null;
+      roofPaidAmount: number | null;
+      roofBalanceAfter: number | null;
       roofPaymentMethod: string | null;
       employeeCost: number;
       installationCost: number;
@@ -431,6 +440,10 @@ export async function listBilliardPointHistory(
     const percentage = Number(c.percentage ?? 0);
     const discountAmount = Number(c.discountAmount ?? 0);
     const roofAmount = Number(c.roofAmount ?? 0);
+    const isLegacyRoofEntry = c.roofPaidAmount === null;
+    const roofPreviousBalance = c.roofPreviousBalance === null ? null : Number(c.roofPreviousBalance);
+    const roofPaidAmount = c.roofPaidAmount === null ? null : Number(c.roofPaidAmount);
+    const roofBalanceAfter = c.roofBalanceAfter === null ? null : Number(c.roofBalanceAfter);
     const employeeCost = Number(c.employeeCost ?? 0);
     const installationCost = Number(c.installationCost ?? 0);
     const maintenanceCost = Number(c.maintenanceCost ?? 0);
@@ -441,8 +454,9 @@ export async function listBilliardPointHistory(
       installationCost -
       maintenanceCost -
       otherCost -
-      roofAmount -
-      discountAmount;
+      discountAmount -
+      (isLegacyRoofEntry ? roofAmount : 0) +
+      (roofPaidAmount ?? 0);
 
     return {
       type: "collection",
@@ -453,6 +467,10 @@ export async function listBilliardPointHistory(
       percentage: showFinancials ? percentage : 0,
       discountAmount: showFinancials ? discountAmount : 0,
       roofAmount: showFinancials ? roofAmount : 0,
+      roofChargeType: showFinancials ? c.roofChargeType : null,
+      roofPreviousBalance: showFinancials ? roofPreviousBalance : null,
+      roofPaidAmount: showFinancials ? roofPaidAmount : null,
+      roofBalanceAfter: showFinancials ? roofBalanceAfter : null,
       roofPaymentMethod: showFinancials ? c.roofPaymentMethod : null,
       employeeCost: showFinancials ? employeeCost : 0,
       installationCost: showFinancials ? installationCost : 0,

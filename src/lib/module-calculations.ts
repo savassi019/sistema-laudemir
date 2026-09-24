@@ -8,6 +8,8 @@ export function calculateBilliardFinancials(input: {
   maintenanceCost?: number;
   otherCost?: number;
   structureCost?: number;
+  roofPaidAmount?: number;
+  /** Compatibilidade com fechamentos antigos, nos quais telhado era custo. */
   roofDebt?: number;
   discountAmount?: number;
   clothLimit?: number;
@@ -31,10 +33,27 @@ export function calculateBilliardFinancials(input: {
     clientShare,
     companyShare,
     totalCosts,
-    finalValue: companyShare - totalCosts,
+    finalValue: companyShare + (input.roofPaidAmount ?? 0) - totalCosts,
     clothTotal,
     clothRemaining: Math.max(clothLimit - clothTotal, 0),
     clothWarning: clothTotal >= clothLimit,
+  };
+}
+
+export function calculateBilliardRoofBalance(input: {
+  previousBalance?: number;
+  installmentAmount?: number;
+  paidAmount?: number;
+}) {
+  const previousBalance = Math.max(input.previousBalance ?? 0, 0);
+  const installmentAmount = Math.max(input.installmentAmount ?? 0, 0);
+  const paidAmount = Math.max(input.paidAmount ?? 0, 0);
+
+  return {
+    previousBalance,
+    installmentAmount,
+    paidAmount,
+    balanceAfter: Math.max(previousBalance + installmentAmount - paidAmount, 0),
   };
 }
 

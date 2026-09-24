@@ -39,6 +39,19 @@ export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   OTHER: "Outro",
 };
 
+/** RoofChargeType */
+export const ROOF_CHARGE_TYPE_LABEL: Record<string, string> = {
+  FIXED: "Parcela fixa da Infinity",
+  NEGOTIATED: "Negociado no local",
+};
+
+/** MaintenanceStatus */
+export const MAINTENANCE_STATUS_LABEL: Record<string, string> = {
+  SCHEDULED: "Agendada",
+  DONE: "Concluída",
+  CANCELLED: "Cancelada",
+};
+
 /** BxReceiptStatus */
 export const RECEIPT_STATUS_LABEL: Record<string, string> = {
   RECEIVED: "Recebido",

@@ -61,6 +61,11 @@ enum PaymentMethod {
   OTHER
 }
 
+enum RoofChargeType {
+  FIXED
+  NEGOTIATED
+}
+
 enum FinancialDirection {
   INCOME
   EXPENSE
@@ -776,61 +781,66 @@ model PlushCollection {
 }
 
 model BilliardPoint {
-  id                 String                @id @default(cuid())
-  organizationId     String
-  organization       Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId           String?
-  client             Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  registrationNumber Int?
-  code               String
-  name               String
-  clientName         String?
-  cep                String?
-  street             String?
-  neighborhood       String?
-  city               String?
-  state              String?
-  phone              String?
-  cpf                String?
-  cnpj               String?
-  tableModel         String?
-  chipValue          Decimal?              @db.Decimal(14, 2)
-  roofOpenDebt       Decimal?              @db.Decimal(14, 2)
-  routeNumber        Int?
-  partialRoute       String?
-  accumulatedChips   Int                   @default(0)
-  clothChangeAlertAt Int                   @default(1500)
-  createdById        String?
-  createdAt          DateTime              @default(now())
-  updatedAt          DateTime              @updatedAt
-  collections        BilliardCollection[]
-  maintenances       BilliardMaintenance[]
+  id                   String                @id @default(cuid())
+  organizationId       String
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId             String?
+  client               Client?               @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  registrationNumber   Int?
+  code                 String
+  name                 String
+  clientName           String?
+  cep                  String?
+  street               String?
+  neighborhood         String?
+  city                 String?
+  state                String?
+  phone                String?
+  cpf                  String?
+  cnpj                 String?
+  tableModel           String?
+  chipValue            Decimal?              @db.Decimal(14, 2)
+  roofOpenDebt         Decimal?              @db.Decimal(14, 2)
+  roofFixedInstallment Decimal?              @db.Decimal(14, 2)
+  routeNumber          Int?
+  partialRoute         String?
+  accumulatedChips     Int                   @default(0)
+  clothChangeAlertAt   Int                   @default(1500)
+  createdById          String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime              @updatedAt
+  collections          BilliardCollection[]
+  maintenances         BilliardMaintenance[]
 
   @@unique([organizationId, code])
   @@unique([organizationId, registrationNumber])
 }
 
 model BilliardCollection {
-  id                String         @id @default(cuid())
-  organizationId    String
-  organization      Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  billiardPointId   String
-  billiardPoint     BilliardPoint  @relation(fields: [billiardPointId], references: [id], onDelete: Cascade)
-  collectionDate    DateTime
-  quantityOfChips   Int
-  grossAmount       Decimal        @db.Decimal(14, 2)
-  percentage        Decimal?       @db.Decimal(5, 2)
-  discountAmount    Decimal?       @db.Decimal(14, 2)
-  roofAmount        Decimal?       @db.Decimal(14, 2)
-  roofPaymentMethod PaymentMethod?
-  employeeCost      Decimal?       @db.Decimal(14, 2)
-  installationCost  Decimal?       @db.Decimal(14, 2)
-  maintenanceCost   Decimal?       @db.Decimal(14, 2)
-  otherCost         Decimal?       @db.Decimal(14, 2)
-  photoId           String?
-  registerNumber    String?
-  createdById       String?
-  createdAt         DateTime       @default(now())
+  id                  String          @id @default(cuid())
+  organizationId      String
+  organization        Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  billiardPointId     String
+  billiardPoint       BilliardPoint   @relation(fields: [billiardPointId], references: [id], onDelete: Cascade)
+  collectionDate      DateTime
+  quantityOfChips     Int
+  grossAmount         Decimal         @db.Decimal(14, 2)
+  percentage          Decimal?        @db.Decimal(5, 2)
+  discountAmount      Decimal?        @db.Decimal(14, 2)
+  roofAmount          Decimal?        @db.Decimal(14, 2)
+  roofChargeType      RoofChargeType?
+  roofPreviousBalance Decimal?        @db.Decimal(14, 2)
+  roofPaidAmount      Decimal?        @db.Decimal(14, 2)
+  roofBalanceAfter    Decimal?        @db.Decimal(14, 2)
+  roofPaymentMethod   PaymentMethod?
+  employeeCost        Decimal?        @db.Decimal(14, 2)
+  installationCost    Decimal?        @db.Decimal(14, 2)
+  maintenanceCost     Decimal?        @db.Decimal(14, 2)
+  otherCost           Decimal?        @db.Decimal(14, 2)
+  photoId             String?
+  registerNumber      String?
+  createdById         String?
+  createdAt           DateTime        @default(now())
 
   @@index([organizationId, collectionDate])
 }

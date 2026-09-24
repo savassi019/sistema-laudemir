@@ -12,6 +12,7 @@ import { z } from "zod";
 import { formatCurrency, formatMachineCounter, formatShortDate } from "@/lib/format";
 import {
   calculateBilliardFinancials,
+  calculateBilliardRoofBalance,
   calculateBxFinancials,
   calculateCarretaFinancials,
   calculatePlushFinancials,
@@ -198,8 +199,13 @@ const createBilliardSchema = z.object({
   percentage: z.number(),
   discountAmount: z.number().optional(),
   discountReason: z.string().optional(),
-  roofDebt: z.number(),
-  roofPaymentMethod: z.string(),
+  // roofDebt continua aceito para sincronizar formulários antigos que
+  // estavam na fila offline antes do controle de parcela/pagamento parcial.
+  roofDebt: z.number().optional(),
+  roofChargeType: z.enum(["FIXED", "NEGOTIATED"]).optional(),
+  roofInstallmentAmount: z.number().min(0).optional(),
+  roofPaidAmount: z.number().min(0).optional(),
+  roofPaymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]).optional(),
   contractType: z.string().optional(),
   contractStatus: z.string().optional(),
   structureCost: z.number().optional(),
@@ -1559,6 +1565,11 @@ async function saveWithPrisma(
         },
         select: { id: true },
       });
+      const usesStructuredRoofPayment =
+        data.roofInstallmentAmount !== undefined || data.roofPaidAmount !== undefined;
+      const roofInstallmentAmount = Math.max(data.roofInstallmentAmount ?? 0, 0);
+      const roofPaidAmount = Math.max(data.roofPaidAmount ?? 0, 0);
+      const roofChargeType = data.roofChargeType ?? "FIXED";
       let registrationNumber: number | undefined;
       if (!existingPoint) {
         // Usa MAX atômico em vez de findFirst+1 para evitar race condition com múltiplos usuários simultâneos.
@@ -1569,77 +1580,124 @@ async function saveWithPrisma(
         `;
         registrationNumber = result[0]?.next ?? 1;
       }
-      const point = await prisma.billiardPoint.upsert({
-        where: {
-          organizationId_code: {
-            organizationId: session.organizationId,
-            code: pointCode,
-          },
-        },
-        create: {
-          organizationId: session.organizationId,
-          createdById: session.userId,
-          registrationNumber,
-          code: pointCode,
-          name: data.pointName,
-          clientName: data.clientName,
-          cep: data.cep,
-          street: data.street,
-          city: data.city,
-          neighborhood: data.neighborhood,
-          state: data.state,
-          phone: data.phone,
-          cpf: data.cpf,
-          cnpj: data.cnpj,
-          tableModel: data.tableModel,
-          chipValue: data.chipValue,
-          roofOpenDebt: data.roofDebt,
-          routeNumber: data.routeNumber,
-          partialRoute: data.partialRoute,
-          accumulatedChips,
-        },
-        update: {
-          name: data.pointName,
-          clientName: data.clientName,
-          cep: data.cep,
-          street: data.street,
-          city: data.city,
-          neighborhood: data.neighborhood,
-          state: data.state,
-          phone: data.phone,
-          cpf: data.cpf,
-          cnpj: data.cnpj,
-          tableModel: data.tableModel,
-          chipValue: data.chipValue,
-          roofOpenDebt: data.roofDebt,
-          routeNumber: data.routeNumber,
-          partialRoute: data.partialRoute,
-          accumulatedChips,
-        },
-      });
-
       const grossAmount = data.quantityOfChips * data.chipValue;
       const collectionDate = data.collectionDate || data.maintenanceDate || new Date().toISOString();
       const installationTotal = data.installationCost + (data.structureCost ?? 0);
-      const record = await prisma.billiardCollection.create({
-        data: {
-          organizationId: session.organizationId,
-          createdById: session.userId,
-          billiardPointId: point.id,
-          collectionDate: toDate(collectionDate),
-          quantityOfChips: data.quantityOfChips,
-          grossAmount,
-          percentage: data.percentage,
-          discountAmount: data.discountAmount ?? 0,
-          roofAmount: data.roofDebt,
-          roofPaymentMethod: mapPaymentMethod(data.roofPaymentMethod),
-          employeeCost: data.employeeCost,
-          installationCost: installationTotal,
-          maintenanceCost: data.maintenanceCost,
-          otherCost: data.otherCost,
-          registerNumber: pointCode,
-        },
-        include: { billiardPoint: true },
+      const { point, record } = await prisma.$transaction(async (tx) => {
+        // Trava o ponto durante o calculo para duas visitas simultaneas nao
+        // sobrescreverem o saldo parcial uma da outra.
+        const currentRows = await tx.$queryRaw<
+          Array<{ roofOpenDebt: unknown; roofFixedInstallment: unknown }>
+        >`
+          SELECT "roofOpenDebt", "roofFixedInstallment"
+          FROM "BilliardPoint"
+          WHERE "organizationId" = ${session.organizationId}
+            AND "code" = ${pointCode}
+          FOR UPDATE
+        `;
+        const currentPoint = currentRows[0];
+        const roofPreviousBalance = Number(currentPoint?.roofOpenDebt ?? 0);
+        const roofBalance = calculateBilliardRoofBalance({
+          previousBalance: roofPreviousBalance,
+          installmentAmount: roofInstallmentAmount,
+          paidAmount: roofPaidAmount,
+        });
+        if (
+          usesStructuredRoofPayment &&
+          roofPaidAmount > roofPreviousBalance + roofInstallmentAmount + 0.005
+        ) {
+          throw new Error("O valor pago não pode ser maior que o saldo do telhado.");
+        }
+        const roofBalanceAfter = usesStructuredRoofPayment
+          ? roofBalance.balanceAfter
+          : Math.max(data.roofDebt ?? roofPreviousBalance, 0);
+        const roofFixedInstallment =
+          usesStructuredRoofPayment && roofChargeType === "FIXED" && roofInstallmentAmount > 0
+            ? roofInstallmentAmount
+            : Number(currentPoint?.roofFixedInstallment ?? 0);
+
+        const point = await tx.billiardPoint.upsert({
+          where: {
+            organizationId_code: {
+              organizationId: session.organizationId,
+              code: pointCode,
+            },
+          },
+          create: {
+            organizationId: session.organizationId,
+            createdById: session.userId,
+            registrationNumber,
+            code: pointCode,
+            name: data.pointName,
+            clientName: data.clientName,
+            cep: data.cep,
+            street: data.street,
+            city: data.city,
+            neighborhood: data.neighborhood,
+            state: data.state,
+            phone: data.phone,
+            cpf: data.cpf,
+            cnpj: data.cnpj,
+            tableModel: data.tableModel,
+            chipValue: data.chipValue,
+            roofOpenDebt: roofBalanceAfter,
+            roofFixedInstallment,
+            routeNumber: data.routeNumber,
+            partialRoute: data.partialRoute,
+            accumulatedChips,
+          },
+          update: {
+            name: data.pointName,
+            clientName: data.clientName,
+            cep: data.cep,
+            street: data.street,
+            city: data.city,
+            neighborhood: data.neighborhood,
+            state: data.state,
+            phone: data.phone,
+            cpf: data.cpf,
+            cnpj: data.cnpj,
+            tableModel: data.tableModel,
+            chipValue: data.chipValue,
+            roofOpenDebt: roofBalanceAfter,
+            roofFixedInstallment,
+            routeNumber: data.routeNumber,
+            partialRoute: data.partialRoute,
+            accumulatedChips,
+          },
+        });
+
+        const record = await tx.billiardCollection.create({
+          data: {
+            organizationId: session.organizationId,
+            createdById: session.userId,
+            billiardPointId: point.id,
+            collectionDate: toDate(collectionDate),
+            quantityOfChips: data.quantityOfChips,
+            grossAmount,
+            percentage: data.percentage,
+            discountAmount: data.discountAmount ?? 0,
+            roofAmount: usesStructuredRoofPayment
+              ? roofInstallmentAmount
+              : (data.roofDebt ?? roofBalanceAfter),
+            roofChargeType: usesStructuredRoofPayment ? roofChargeType : null,
+            roofPreviousBalance: usesStructuredRoofPayment ? roofPreviousBalance : null,
+            roofPaidAmount: usesStructuredRoofPayment ? roofPaidAmount : null,
+            roofBalanceAfter: usesStructuredRoofPayment ? roofBalanceAfter : null,
+            roofPaymentMethod:
+              usesStructuredRoofPayment && roofPaidAmount === 0
+                ? null
+                : mapPaymentMethod(data.roofPaymentMethod ?? "ABERTO"),
+            employeeCost: data.employeeCost,
+            installationCost: installationTotal,
+            maintenanceCost: data.maintenanceCost,
+            otherCost: data.otherCost,
+            registerNumber: pointCode,
+          },
+          include: { billiardPoint: true },
+        });
+
+        return { point, record };
       });
 
       if (data.photoFileIds && data.photoFileIds.length > 0) {
@@ -1674,7 +1732,8 @@ async function saveWithPrisma(
         installationCost: installationTotal,
         maintenanceCost: data.maintenanceCost,
         otherCost: data.otherCost,
-        roofDebt: data.roofDebt,
+        roofPaidAmount: usesStructuredRoofPayment ? roofPaidAmount : 0,
+        roofDebt: usesStructuredRoofPayment ? 0 : data.roofDebt,
         discountAmount: data.discountAmount,
       });
       const companyShare = billiardTotals.finalValue;
@@ -1685,8 +1744,14 @@ async function saveWithPrisma(
         targetId: record.billiardPointId,
         visitType: "BILLIARD",
         occurredAt: record.collectionDate,
-        incomeAmount: grossAmount,
-        expenseAmount: data.employeeCost + installationTotal + data.maintenanceCost + data.otherCost + data.roofDebt + (data.discountAmount ?? 0),
+        incomeAmount: grossAmount + (usesStructuredRoofPayment ? roofPaidAmount : 0),
+        expenseAmount:
+          data.employeeCost +
+          installationTotal +
+          data.maintenanceCost +
+          data.otherCost +
+          (usesStructuredRoofPayment ? 0 : (data.roofDebt ?? 0)) +
+          (data.discountAmount ?? 0),
         clientName: record.billiardPoint.clientName ?? null,
         clientPhone: record.billiardPoint.phone ?? null,
       }).catch((e) => console.error("[module-record-service] logFieldVisit bilhar falhou:", e));
@@ -2542,16 +2607,23 @@ async function listModuleRecordsBase(
         return records.map((record) => {
           const grossAmount = Number(record.grossAmount);
           const percentage = Number(record.percentage ?? 0);
-          const clientShare = grossAmount * (percentage / 100);
-          const operatingCosts =
-            Number(record.employeeCost ?? 0) +
-            Number(record.installationCost ?? 0) +
-            Number(record.maintenanceCost ?? 0) +
-            Number(record.otherCost ?? 0) +
-            Number(record.roofAmount ?? 0) +
-            Number(record.discountAmount ?? 0);
-          const companyShare =
-            grossAmount - clientShare - operatingCosts;
+          const isLegacyRoofEntry = record.roofPaidAmount === null;
+          const roofPaidAmount = isLegacyRoofEntry ? 0 : Number(record.roofPaidAmount ?? 0);
+          const billiardTotals = calculateBilliardFinancials({
+            quantityOfChips: record.quantityOfChips,
+            chipValue: record.quantityOfChips > 0 ? grossAmount / record.quantityOfChips : 0,
+            percentage,
+            employeeCost: Number(record.employeeCost ?? 0),
+            installationCost: Number(record.installationCost ?? 0),
+            maintenanceCost: Number(record.maintenanceCost ?? 0),
+            otherCost: Number(record.otherCost ?? 0),
+            discountAmount: Number(record.discountAmount ?? 0),
+            roofDebt: isLegacyRoofEntry ? Number(record.roofAmount ?? 0) : 0,
+            roofPaidAmount,
+          });
+          const clientShare = billiardTotals.clientShare;
+          const operatingCosts = billiardTotals.totalCosts;
+          const companyShare = billiardTotals.finalValue;
           const operatorName = record.createdById
             ? (creatorNames.get(record.createdById) ?? "-")
             : "-";
@@ -2587,6 +2659,13 @@ async function listModuleRecordsBase(
             `Bruto das fichas: ${formatCurrency(grossAmount)}`,
             `Repasse do cliente: ${formatCurrency(clientShare)}`,
             `Custos e descontos: ${formatCurrency(operatingCosts)}`,
+            ...(record.roofPaidAmount !== null
+              ? [
+                  `Parcela do telhado: ${formatCurrency(Number(record.roofAmount ?? 0))}`,
+                  `Recebido do telhado: ${formatCurrency(roofPaidAmount)}`,
+                  `Saldo do telhado: ${formatCurrency(Number(record.roofBalanceAfter ?? 0))}`,
+                ]
+              : []),
             `Resultado da Infinity: ${formatCurrency(companyShare)}`,
           ];
           const financialData =
@@ -2595,8 +2674,8 @@ async function listModuleRecordsBase(
               : {
                   amount: formatCurrency(companyShare),
                   amountValue: companyShare,
-                  incomeValue: grossAmount,
-                  expenseValue: grossAmount - companyShare,
+                  incomeValue: grossAmount + roofPaidAmount,
+                  expenseValue: grossAmount + roofPaidAmount - companyShare,
                   financialBreakdown,
                 };
 
