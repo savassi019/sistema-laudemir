@@ -1382,13 +1382,13 @@ export function BilliardForm({
                         `Ponto: ${receipt.pointName}`,
                         `Data: ${formatShortDate(receipt.collectionDate)}`,
                         `Fichas: ${receipt.quantityOfChips}`,
-                        `Total das fichas: ${formatCurrency(receipt.grossAmount)}`,
+                        `*Total das fichas: ${formatCurrency(receipt.grossAmount)}*`,
                         ...(receipt.roofInstallmentAmount > 0 || receipt.roofPaidAmount > 0
                           ? [
                               `Telhado: ${rotuloDeStatus(receipt.roofChargeType, ROOF_CHARGE_TYPE_LABEL)}`,
                               `Parcela cobrada: ${formatCurrency(receipt.roofInstallmentAmount)}`,
                               `Pago agora: ${formatCurrency(receipt.roofPaidAmount)}`,
-                              `Pagamento: ${
+                              `Pagamento do telhado: ${
                                 receipt.roofPaidAmount > 0
                                   ? rotuloDeStatus(receipt.roofPaymentMethod, PAYMENT_METHOD_LABEL)
                                   : "Não houve pagamento"
@@ -1399,11 +1399,6 @@ export function BilliardForm({
                                     `Saldo restante do telhado: ${formatCurrency(receipt.roofBalanceAfter)}`,
                                   ]
                                 : []),
-                            ]
-                          : []),
-                        ...(!hideFinancials
-                          ? [
-                              `*Resultado Infinity: ${formatCurrency(receipt.finalValue)}*`,
                             ]
                           : []),
                         `Situação: ${saveError ? "Não salvo — confira a conexão" : "Fechamento concluído"}`,

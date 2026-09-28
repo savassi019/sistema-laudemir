@@ -1,7 +1,6 @@
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { canViewCalculatedFinancials } from "@/lib/access-policy";
 import {
-  calculateBilliardFinancials,
   calculateBxFinancials,
   calculateSlotMachineSplit,
 } from "@/lib/module-calculations";
@@ -137,32 +136,17 @@ export async function listModuleReceipts(
       return records.map((record) => {
         const isLegacyRoofEntry = record.roofPaidAmount === null;
         const roofPaidAmount = isLegacyRoofEntry ? 0 : Number(record.roofPaidAmount ?? 0);
-        const legacyPercentage = Number(record.percentage ?? 0);
-        const totals = calculateBilliardFinancials({
-          quantityOfChips: record.quantityOfChips,
-          chipValue:
-            record.quantityOfChips > 0
-              ? Number(record.grossAmount) / record.quantityOfChips
-              : 0,
-          percentage: legacyPercentage,
-          employeeCost: Number(record.employeeCost ?? 0),
-          installationCost: Number(record.installationCost ?? 0),
-          maintenanceCost: Number(record.maintenanceCost ?? 0),
-          otherCost: Number(record.otherCost ?? 0),
-          roofDebt: isLegacyRoofEntry ? Number(record.roofAmount ?? 0) : 0,
-          roofPaidAmount,
-          discountAmount: Number(record.discountAmount ?? 0),
-        });
         return {
           id: record.id,
           receiptCode: receiptId(record.id, record.collectionDate),
           title: record.billiardPoint.clientName ?? record.billiardPoint.name,
           subtitle: record.billiardPoint.name,
           phone: record.billiardPoint.phone ?? "",
-          paymentMethod:
-            !isLegacyRoofEntry && roofPaidAmount === 0
-              ? "Não houve pagamento"
-              : paymentLabel(record.roofPaymentMethod),
+          paymentMethod: roofPaidAmount > 0
+            ? paymentLabel(record.roofPaymentMethod)
+            : isLegacyRoofEntry
+              ? "Não informado"
+              : "Não houve pagamento",
           occurredAt: record.collectionDate.toISOString(),
           closedAt: record.createdAt.toISOString(),
           message: [
@@ -172,7 +156,7 @@ export async function listModuleReceipts(
             `Ponto: ${record.billiardPoint.name}`,
             `Data: ${formatShortDate(record.collectionDate)}`,
             `Fichas: ${record.quantityOfChips}`,
-            `Total das fichas: ${formatCurrency(Number(record.grossAmount))}`,
+            `*Total das fichas: ${formatCurrency(Number(record.grossAmount))}*`,
             ...(!isLegacyRoofEntry &&
             (Number(record.roofAmount ?? 0) > 0 || roofPaidAmount > 0)
               ? [
@@ -193,14 +177,10 @@ export async function listModuleReceipts(
                     roofPaidAmount > 0 ||
                     Number(record.roofPreviousBalance ?? 0) > 0)
                     ? [
-                        `Saldo anterior: ${formatCurrency(Number(record.roofPreviousBalance ?? 0))}`,
-                        `Saldo restante: ${formatCurrency(Number(record.roofBalanceAfter ?? 0))}`,
+                        `Saldo anterior do telhado: ${formatCurrency(Number(record.roofPreviousBalance ?? 0))}`,
+                        `Saldo restante do telhado: ${formatCurrency(Number(record.roofBalanceAfter ?? 0))}`,
                       ]
                     : []),
-                  ...(legacyPercentage > 0
-                    ? [`*Repasse antigo ao cliente: ${formatCurrency(totals.clientShare)}*`]
-                    : []),
-                  `*Resultado Infinity: ${formatCurrency(totals.finalValue)}*`,
                 ]
               : []),
             "Situação: Fechamento concluído",
