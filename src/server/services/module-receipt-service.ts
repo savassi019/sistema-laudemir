@@ -1,5 +1,6 @@
 import { formatCurrency, formatShortDate } from "@/lib/format";
 import { canViewCalculatedFinancials } from "@/lib/access-policy";
+import { currentBusinessDayRange } from "@/lib/business-date";
 import {
   calculateBxFinancials,
   calculateSlotMachineSplit,
@@ -54,11 +55,15 @@ export async function listModuleReceipts(
 ): Promise<ModuleReceiptItem[]> {
   if (!receiptModuleSlugs.includes(slug)) return [];
   const showFinancials = canViewCalculatedFinancials(session.role);
+  const adminDay = session.role === "ADMIN" ? currentBusinessDayRange() : null;
+  const createdAtScope = adminDay
+    ? { createdAt: { gte: adminDay.from, lte: adminDay.to } }
+    : {};
 
   switch (slug) {
     case "carreta-kids": {
       const records = await prisma.carretaKidsRecord.findMany({
-        where: { organizationId: session.organizationId },
+        where: { organizationId: session.organizationId, ...createdAtScope },
         orderBy: { createdAt: "desc" },
         take,
       });
@@ -93,7 +98,7 @@ export async function listModuleReceipts(
     }
     case "maquinas-de-pelucia": {
       const records = await prisma.plushCollection.findMany({
-        where: { organizationId: session.organizationId },
+        where: { organizationId: session.organizationId, ...createdAtScope },
         include: { plushMachine: true },
         orderBy: { createdAt: "desc" },
         take,
@@ -128,7 +133,7 @@ export async function listModuleReceipts(
     }
     case "bilhar-pebolim": {
       const records = await prisma.billiardCollection.findMany({
-        where: { organizationId: session.organizationId },
+        where: { organizationId: session.organizationId, ...createdAtScope },
         include: { billiardPoint: true },
         orderBy: { createdAt: "desc" },
         take,
@@ -190,7 +195,7 @@ export async function listModuleReceipts(
     }
     case "bx": {
       const records = await prisma.bxTransaction.findMany({
-        where: { organizationId: session.organizationId },
+        where: { organizationId: session.organizationId, ...createdAtScope },
         orderBy: { createdAt: "desc" },
         take,
       });
@@ -236,7 +241,7 @@ export async function listModuleReceipts(
     }
     case "locacao": {
       const records = await prisma.rentalOrder.findMany({
-        where: { organizationId: session.organizationId },
+        where: { organizationId: session.organizationId, ...createdAtScope },
         orderBy: { createdAt: "desc" },
         take,
       });
@@ -271,7 +276,7 @@ export async function listModuleReceipts(
     }
     case "h-caca-niquel": {
       const records = await prisma.slotCollection.findMany({
-        where: { organizationId: session.organizationId },
+        where: { organizationId: session.organizationId, ...createdAtScope },
         include: { slotMachine: true },
         orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
         take: Math.max(take * 8, 100),

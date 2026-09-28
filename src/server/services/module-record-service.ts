@@ -9,6 +9,7 @@ import {
 import { randomUUID } from "crypto";
 import { z } from "zod";
 
+import { currentBusinessDayRange } from "@/lib/business-date";
 import { formatCurrency, formatMachineCounter, formatShortDate } from "@/lib/format";
 import {
   calculateBilliardFinancials,
@@ -2480,10 +2481,12 @@ export type BxPrizeItem = {
  * A aba Premio mostra o fechamento normal, nao um lancamento separado.
  */
 export async function listBxPrizeRecords(session: SessionData): Promise<BxPrizeItem[]> {
+  const adminDay = session.role === "ADMIN" ? currentBusinessDayRange() : null;
   const records = await prisma.bxTransaction.findMany({
     where: {
       organizationId: session.organizationId,
       receiptStatus: { in: ["DELIVERED", "PRIZE"] },
+      ...(adminDay ? { occurredAt: { gte: adminDay.from, lte: adminDay.to } } : {}),
     },
     select: {
       id: true,
@@ -3137,10 +3140,11 @@ export async function listModuleRecords(
   take = 5,
   range?: DateRange,
 ): Promise<ModuleRecordItem[]> {
+  const effectiveRange = session.role === "ADMIN" ? currentBusinessDayRange() : range;
   const records = await applyOperationReviews(
     session,
     slug,
-    await listModuleRecordsBase(session, slug, take, range),
+    await listModuleRecordsBase(session, slug, take, effectiveRange),
   );
   return recordsVisibleToSession(session, records);
 }
