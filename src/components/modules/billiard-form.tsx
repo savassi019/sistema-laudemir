@@ -1369,6 +1369,7 @@ export function BilliardForm({
                     <WhatsAppReceiptButton
                       defaultPhone={receipt.phone}
                       closedAt={receipt.closedAt}
+                      showInfinityLogo
                       title="Via do cliente — WhatsApp e PDF"
                       documentLabel="Via do cliente"
                       pdfButtonLabel="Gerar via do cliente em PDF"

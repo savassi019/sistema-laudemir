@@ -171,6 +171,7 @@ export function ModuleReceiptCenter({ slug }: { slug: string }) {
                     compact
                     defaultPhone={item.phone}
                     closedAt={item.closedAt}
+                    showInfinityLogo={slug === "bilhar-pebolim"}
                     message={item.message}
                     title="Via do cliente — WhatsApp e PDF"
                     documentLabel="Via do cliente"

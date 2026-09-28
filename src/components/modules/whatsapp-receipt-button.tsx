@@ -12,6 +12,7 @@ type Props = {
   documentLabel?: string;
   pdfButtonLabel?: string;
   compact?: boolean;
+  showInfinityLogo?: boolean;
 };
 
 type ReceiptLine = {
@@ -133,6 +134,7 @@ async function generateReceiptImage(
   message: string,
   documentLabel: string,
   closedAt?: string,
+  showInfinityLogo = false,
 ): Promise<Blob> {
   const receipt = parseReceiptMessage(message);
   const W = 404;
@@ -147,7 +149,7 @@ async function generateReceiptImage(
   const DETAIL_W = (CONTENT_W - DETAIL_GAP) / 2;
   const measureCanvas = document.createElement("canvas");
   const measure = measureCanvas.getContext("2d")!;
-  const logo = await loadReceiptLogo();
+  const logo = showInfinityLogo ? await loadReceiptLogo() : null;
 
   measure.font = `800 19px ${FONT}`;
   const headingLines = wrapCanvasText(measure, "COMPROVANTE DE FECHAMENTO", CONTENT_W);
@@ -250,7 +252,7 @@ async function generateReceiptImage(
   let y = OUTER + 26;
   if (logo) {
     ctx.drawImage(logo, CONTENT_X, y, logoWidth, logoHeight);
-  } else {
+  } else if (showInfinityLogo) {
     ctx.font = `800 13px ${FONT}`;
     ctx.fillStyle = "#111827";
     ctx.fillText("INFINITY ERP", CONTENT_X, y + 7);
@@ -454,6 +456,7 @@ export function WhatsAppReceiptButton({
   documentLabel = "Comprovante",
   pdfButtonLabel = "Baixar como PDF",
   compact = false,
+  showInfinityLogo = false,
 }: Props) {
   const [phone, setPhone] = useState(defaultPhone);
   const [generating, setGenerating] = useState(false);
@@ -477,7 +480,12 @@ export function WhatsAppReceiptButton({
     setGenerating(true);
     setShareError(null);
     try {
-      const blob = await generateReceiptImage(messageRef.current, documentLabel, closedAt);
+      const blob = await generateReceiptImage(
+        messageRef.current,
+        documentLabel,
+        closedAt,
+        showInfinityLogo,
+      );
       const file = new File([blob], "comprovante.png", { type: "image/png" });
       if (typeof navigator !== "undefined" && navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: "Comprovante" });
@@ -502,7 +510,9 @@ export function WhatsAppReceiptButton({
 
   function handleDownloadPDF() {
     const receipt = parseReceiptMessage(messageRef.current);
-    const logoUrl = `${window.location.origin}/infinity-logo.png`;
+    const logoHtml = showInfinityLogo
+      ? `<img src="${window.location.origin}/infinity-logo.png" alt="Infinity" class="receipt-logo"/>`
+      : "";
     const receiptTimestamp = getReceiptTimestamp(closedAt);
     const generatedDate = receiptTimestamp.toLocaleDateString("pt-BR", {
       day: "2-digit",
@@ -554,7 +564,7 @@ export function WhatsAppReceiptButton({
 @page{size:A4;margin:14mm}
 body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print-color-adjust:exact}
 .receipt{width:100%;max-width:620px;margin:0 auto;background:#fff;border-radius:24px;overflow:hidden;color:#101828;font-family:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;box-shadow:0 18px 60px rgba(16,24,40,.08)}
-.receipt-header{padding:38px 38px 30px}.receipt-brand{display:flex;justify-content:space-between;align-items:flex-start;gap:30px}.receipt-logo{width:92px;height:auto;object-fit:contain}.receipt-copy{padding:9px 15px;background:#f5f6f8;border-radius:999px;color:#5f6878;font-size:11px;font-weight:700;letter-spacing:.04em;white-space:nowrap}.receipt-heading{margin-top:38px}.receipt-heading h1{font-size:28px;line-height:1.08;font-weight:800;letter-spacing:-.9px;color:#111827}.receipt-heading p{margin-top:10px;color:#697386;font-size:18px;line-height:1.4}.heading-line{position:relative;height:1px;margin-top:27px;background:#e1e5ea}.heading-line span{position:absolute;top:-2px;left:0;width:62px;height:4px;border-radius:999px;background:#2563eb}
+  .receipt-header{padding:38px 38px 30px}.receipt-brand{display:flex;justify-content:${showInfinityLogo ? "space-between" : "flex-end"};align-items:flex-start;gap:30px}.receipt-logo{width:92px;height:auto;object-fit:contain}.receipt-copy{padding:9px 15px;background:#f5f6f8;border-radius:999px;color:#5f6878;font-size:11px;font-weight:700;letter-spacing:.04em;white-space:nowrap}.receipt-heading{margin-top:38px}.receipt-heading h1{font-size:28px;line-height:1.08;font-weight:800;letter-spacing:-.9px;color:#111827}.receipt-heading p{margin-top:10px;color:#697386;font-size:18px;line-height:1.4}.heading-line{position:relative;height:1px;margin-top:27px;background:#e1e5ea}.heading-line span{position:absolute;top:-2px;left:0;width:62px;height:4px;border-radius:999px;background:#2563eb}
 .receipt-main-value{margin:0 28px;padding:28px 26px;display:flex;justify-content:space-between;align-items:center;gap:28px;border-radius:18px;background:#f7f8fa}.field-label{display:block;color:#697386;font-size:11px;line-height:1;font-weight:750;letter-spacing:.05em;text-transform:uppercase}.main-value{display:block;margin-top:10px;color:#111827;font-size:43px;line-height:1;font-weight:800;letter-spacing:-1.8px;overflow-wrap:anywhere}.closing-status{display:flex;align-items:center;gap:10px;flex-shrink:0;color:#667085;font-size:13px;font-weight:500}.status-dot{width:10px;height:10px;border-radius:50%;background:#2563eb}
 .receipt-details{margin:28px 38px 0;padding:28px 0;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb}.receipt-details h2{margin:0 0 26px;color:#667085;font-size:12px;font-weight:750;letter-spacing:.05em}.details-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:28px 50px}.detail{min-width:0}.detail strong{display:block;margin-top:8px;color:#111827;font-size:19px;line-height:1.35;font-weight:600;overflow-wrap:anywhere}
 .receipt-balance{margin:0 38px;padding:30px 0}.receipt-balance strong{display:block;margin-top:10px;color:#111827;font-size:32px;line-height:1;font-weight:800;letter-spacing:-1px;overflow-wrap:anywhere}.balance-item+.balance-item{margin-top:24px}
@@ -565,7 +575,7 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
 <main class="receipt">
   <header class="receipt-header">
     <div class="receipt-brand">
-      <img src="${logoUrl}" alt="Infinity" class="receipt-logo"/>
+      ${logoHtml}
       <span class="receipt-copy">${escapeReceiptHtml(documentLabel)}</span>
     </div>
     <div class="receipt-heading">
