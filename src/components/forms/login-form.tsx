@@ -14,8 +14,10 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
+import { USERNAME_MIN } from "@/lib/user-validation";
+
 const schema = z.object({
-  username: z.string().trim().min(3, "Informe seu usuário."),
+  username: z.string().trim().min(USERNAME_MIN, "Informe seu usuário."),
   password: z.string().min(6, "A senha precisa ter pelo menos 6 caracteres."),
 });
 

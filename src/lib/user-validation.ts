@@ -42,7 +42,7 @@ export function validarSenha(senha: string): string | null {
   return falhou ? falhou.label : null;
 }
 
-export const USERNAME_MIN = 3;
+export const USERNAME_MIN = 2;
 export const USERNAME_MAX = 32;
 
 /** O usuário de acesso é sempre sem espaços e sem diferença entre maiúsculas/minúsculas. */

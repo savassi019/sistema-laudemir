@@ -10,8 +10,9 @@ import {
 test("usuário de acesso é normalizado sem depender de e-mail", () => {
   assert.equal(normalizarUsuario("  Joao.Silva  "), "joao.silva");
   assert.equal(validarUsuario("joao.silva"), null);
+  assert.equal(validarUsuario("bx"), null);
   assert.match(validarUsuario("joao@email.com") ?? "", /somente letras/i);
-  assert.match(validarUsuario("ab") ?? "", /pelo menos 3/i);
+  assert.match(validarUsuario("b") ?? "", /pelo menos 2/i);
 });
 
 test("contas antigas recebem como usuário a parte anterior ao arroba", () => {

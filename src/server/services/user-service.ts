@@ -13,6 +13,10 @@ const localStaffStore =
   globalForUsers.localStaffStore ?? new Map<string, StaffMember[]>();
 globalForUsers.localStaffStore = localStaffStore;
 
+function emailTecnicoDoUsuario(username: string) {
+  return `${normalizarUsuario(username)}@login.erpinfinity.local`;
+}
+
 function getLocalStaff(session: SessionData): StaffMember[] {
   return localStaffStore.get(session.organizationId) ?? [];
 }
@@ -99,7 +103,7 @@ export async function createStaff(
     const username = normalizarUsuario(data.username);
     // O campo e-mail continua no banco apenas por compatibilidade estrutural.
     // Nenhum e-mail real é pedido nem mostrado para novas contas.
-    const email = `${username}@login.erpinfinity.local`;
+    const email = emailTecnicoDoUsuario(username);
 
     const user = await prisma.user.create({
       data: {
@@ -189,11 +193,17 @@ export async function updateStaff(
 
   let updated;
   try {
+    const username = data.username === undefined
+      ? undefined
+      : normalizarUsuario(data.username);
     updated = await prisma.user.update({
       where: { id: userId },
       data: {
         ...(data.name !== undefined && { name: data.name }),
-        ...(data.username !== undefined && { username: normalizarUsuario(data.username) }),
+        ...(username !== undefined && {
+          username,
+          email: emailTecnicoDoUsuario(username),
+        }),
         ...(data.phone !== undefined && { phone: data.phone || null }),
         ...(data.role !== undefined && { role: data.role }),
       },

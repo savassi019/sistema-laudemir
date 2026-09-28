@@ -2,10 +2,10 @@ import { z } from "zod";
 import { NextResponse } from "next/server";
 
 import { authenticateUser, getAuthCookieName, signSession } from "@/lib/auth";
-import { normalizarUsuario } from "@/lib/user-validation";
+import { normalizarUsuario, USERNAME_MIN } from "@/lib/user-validation";
 
 const schema = z.object({
-  username: z.string().trim().min(3).max(254),
+  username: z.string().trim().min(USERNAME_MIN).max(254),
   password: z.string().min(6),
 });
 
