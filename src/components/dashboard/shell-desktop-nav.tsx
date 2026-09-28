@@ -53,7 +53,7 @@ export function ShellDesktopNav({
           Visita
         </Link>
       )}
-      {(session.role === "OWNER" || session.role === "ADMIN") && (
+      {session.role === "OWNER" && (
         <Link
           href="/equipe"
           className={cn(linkCls, pathname === "/equipe" && activeCls)}
@@ -62,7 +62,7 @@ export function ShellDesktopNav({
           Equipe
         </Link>
       )}
-      {(session.role === "OWNER" || session.role === "ADMIN") && !isModuleDetail && (
+      {(session.role === "OWNER" || session.modules.includes("REPORTS")) && !isModuleDetail && (
         <Link
           href="/relatorio"
           className={cn(linkCls, pathname === "/relatorio" && activeCls)}
