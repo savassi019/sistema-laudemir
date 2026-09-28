@@ -1,4 +1,4 @@
-import { startServer } from "next/dist/server/lib/start-server";
+import { startServer } from "next/dist/server/lib/start-server.js";
 
 const port = Number.parseInt(process.env.PORT || "3001", 10);
 
