@@ -1,70 +1,100 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { WifiOff, ServerCrash, CheckCircle } from "lucide-react";
 
 type Status = "online" | "offline" | "server-down";
 
 const CHECK_INTERVAL_ONLINE  = 30_000; // 30s quando conectado
-const CHECK_INTERVAL_OFFLINE = 10_000; // 10s quando sem conexão
+const CHECK_INTERVAL_RETRY = 3_000; // recupera rapido depois de uma falha
+const SERVER_FAILURE_THRESHOLD = 2; // ignora um solavanco isolado de rede/deploy
 
 export function ConnectionBanner() {
   const [status, setStatus] = useState<Status>("online");
   const [showRecovered, setShowRecovered] = useState(false);
-  const prevStatus = useRef<Status>("online");
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  async function pingServer(): Promise<Status> {
-    if (!navigator.onLine) return "offline";
-    try {
-      const res = await fetch("/api/health", { cache: "no-store", signal: AbortSignal.timeout(8000) });
-      const data = await res.json() as { ok?: boolean };
-      return data.ok ? "online" : "server-down";
-    } catch {
-      return "server-down";
-    }
-  }
-
-  function scheduleCheck(interval: number) {
-    if (timerRef.current) clearInterval(timerRef.current);
-    timerRef.current = setInterval(async () => {
-      const next = await pingServer();
-      setStatus((prev) => {
-        if (prev !== "online" && next === "online") {
-          setShowRecovered(true);
-          setTimeout(() => setShowRecovered(false), 4000);
-        }
-        prevStatus.current = next;
-        return next;
-      });
-    }, interval);
-  }
 
   useEffect(() => {
-    // Initial check
-    pingServer().then(setStatus);
+    let disposed = false;
+    let currentStatus: Status = "online";
+    let consecutiveServerFailures = 0;
+    let checkTimer: ReturnType<typeof setTimeout> | null = null;
+    let recoveredTimer: ReturnType<typeof setTimeout> | null = null;
+
+    async function pingServer(): Promise<Status> {
+      if (!navigator.onLine) return "offline";
+      try {
+        const res = await fetch("/api/health", {
+          cache: "no-store",
+          signal: AbortSignal.timeout(8000),
+        });
+        const data = await res.json() as { ok?: boolean };
+        return data.ok ? "online" : "server-down";
+      } catch {
+        return "server-down";
+      }
+    }
+
+    function showStatus(next: Status) {
+      if (disposed || currentStatus === next) return;
+      const recovered = currentStatus !== "online" && next === "online";
+      currentStatus = next;
+      setStatus(next);
+      if (recovered) {
+        setShowRecovered(true);
+        if (recoveredTimer) clearTimeout(recoveredTimer);
+        recoveredTimer = setTimeout(() => setShowRecovered(false), 4000);
+      }
+    }
+
+    function scheduleCheck(delay: number) {
+      if (checkTimer) clearTimeout(checkTimer);
+      checkTimer = setTimeout(() => void checkConnection(), delay);
+    }
+
+    async function checkConnection() {
+      const next = await pingServer();
+      if (disposed) return;
+
+      if (next === "online") {
+        consecutiveServerFailures = 0;
+        showStatus("online");
+        scheduleCheck(CHECK_INTERVAL_ONLINE);
+        return;
+      }
+
+      if (next === "offline") {
+        consecutiveServerFailures = SERVER_FAILURE_THRESHOLD;
+        showStatus("offline");
+      } else {
+        consecutiveServerFailures += 1;
+        if (consecutiveServerFailures >= SERVER_FAILURE_THRESHOLD) {
+          showStatus("server-down");
+        }
+      }
+      scheduleCheck(CHECK_INTERVAL_RETRY);
+    }
 
     function handleOffline() {
-      setStatus("offline");
-      scheduleCheck(CHECK_INTERVAL_OFFLINE);
+      consecutiveServerFailures = SERVER_FAILURE_THRESHOLD;
+      showStatus("offline");
+      scheduleCheck(CHECK_INTERVAL_RETRY);
     }
     function handleOnline() {
-      pingServer().then((s) => {
-        setStatus(s);
-        scheduleCheck(s === "online" ? CHECK_INTERVAL_ONLINE : CHECK_INTERVAL_OFFLINE);
-      });
+      consecutiveServerFailures = 0;
+      scheduleCheck(0);
     }
 
     window.addEventListener("offline", handleOffline);
     window.addEventListener("online", handleOnline);
-    scheduleCheck(CHECK_INTERVAL_ONLINE);
+    scheduleCheck(0);
 
     return () => {
+      disposed = true;
       window.removeEventListener("offline", handleOffline);
       window.removeEventListener("online", handleOnline);
-      if (timerRef.current) clearInterval(timerRef.current);
+      if (checkTimer) clearTimeout(checkTimer);
+      if (recoveredTimer) clearTimeout(recoveredTimer);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (status === "online" && !showRecovered) return null;
