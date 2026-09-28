@@ -3,8 +3,7 @@ module.exports = {
   apps: [
     {
       name: "sistema-laudemir",
-      script: "node_modules/.bin/next",
-      args: "start -p 3001",
+      script: "scripts/start-next-server.mjs",
       // Duas instancias permitem recarga gradual: uma continua atendendo
       // enquanto a outra recebe a nova versao.
       exec_mode: "cluster",
@@ -19,6 +18,7 @@ module.exports = {
       exp_backoff_restart_delay: 100,
       env: {
         NODE_ENV: "production",
+        PORT: "3001",
         DEMO_MODE: "false",
         NEXT_PUBLIC_APP_NAME: "Sistema de Gestao Modular",
         // SECURE_COOKIES omitido: código já usa false como padrão
