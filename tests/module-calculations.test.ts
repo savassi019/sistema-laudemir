@@ -12,7 +12,7 @@ import {
 } from "../src/lib/module-calculations";
 import { calculateSlotCustomerDebt } from "../src/lib/slot-finance";
 
-test("bilhar calcula bruto, repasse, custos, resultado e alerta do pano", () => {
+test("bilhar preserva o percentual dos fechamentos antigos", () => {
   const result = calculateBilliardFinancials({
     quantityOfChips: 200,
     chipValue: 2,
@@ -34,7 +34,7 @@ test("bilhar calcula bruto, repasse, custos, resultado e alerta do pano", () => 
   });
 });
 
-test("bilhar mantem saldo parcial do telhado e soma somente o valor recebido", () => {
+test("bilhar novo cobra por ficha, mantém saldo do telhado e soma o recebido", () => {
   assert.deepEqual(
     calculateBilliardRoofBalance({
       previousBalance: 80,
@@ -52,11 +52,11 @@ test("bilhar mantem saldo parcial do telhado e soma somente o valor recebido", (
   const result = calculateBilliardFinancials({
     quantityOfChips: 100,
     chipValue: 2,
-    percentage: 25,
+    percentage: 0,
     employeeCost: 10,
     roofPaidAmount: 120,
   });
-  assert.equal(result.finalValue, 260);
+  assert.equal(result.finalValue, 310);
   assert.equal(result.totalCosts, 10);
 });
 

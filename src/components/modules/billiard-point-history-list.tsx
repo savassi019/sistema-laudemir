@@ -36,7 +36,9 @@ export function BilliardPointHistoryList({
             {!hideFinancials ? (
               <div className="mt-1.5 grid grid-cols-2 gap-1 text-xs text-[#9a958b] sm:grid-cols-4">
                 <span>Bruto: {formatCurrency(item.grossAmount)}</span>
-                <span>Percentual cliente: {item.percentage}%</span>
+                {item.percentage > 0 ? (
+                  <span>Divisão antiga: {item.percentage}% para o cliente</span>
+                ) : null}
                 <span>Desconto: {formatCurrency(item.discountAmount)}</span>
                 {item.roofPaidAmount === null ? (
                   <span>Telhado (registro antigo): {formatCurrency(item.roofAmount)}</span>

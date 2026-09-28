@@ -196,7 +196,9 @@ const createBilliardSchema = z.object({
   fortnight: z.string().optional(),
   quantityOfChips: z.number(),
   accumulatedChips: z.number().optional(),
-  percentage: z.number(),
+  // Aceito apenas para compatibilidade com formulários antigos/offline.
+  // Fechamentos novos de bilhar são cobrados integralmente por ficha.
+  percentage: z.number().optional(),
   discountAmount: z.number().optional(),
   discountReason: z.string().optional(),
   // roofDebt continua aceito para sincronizar formulários antigos que
@@ -1675,7 +1677,7 @@ async function saveWithPrisma(
             collectionDate: toDate(collectionDate),
             quantityOfChips: data.quantityOfChips,
             grossAmount,
-            percentage: data.percentage,
+            percentage: 0,
             discountAmount: data.discountAmount ?? 0,
             roofAmount: usesStructuredRoofPayment
               ? roofInstallmentAmount
@@ -1727,7 +1729,7 @@ async function saveWithPrisma(
       const billiardTotals = calculateBilliardFinancials({
         quantityOfChips: data.quantityOfChips,
         chipValue: data.chipValue,
-        percentage: data.percentage,
+        percentage: 0,
         employeeCost: data.employeeCost,
         installationCost: installationTotal,
         maintenanceCost: data.maintenanceCost,
@@ -2657,7 +2659,9 @@ async function listModuleRecordsBase(
           ];
           const financialDetails = [
             `Bruto das fichas: ${formatCurrency(grossAmount)}`,
-            `Repasse do cliente: ${formatCurrency(clientShare)}`,
+            ...(percentage > 0
+              ? [`Repasse antigo ao cliente: ${formatCurrency(clientShare)}`]
+              : []),
             `Custos e descontos: ${formatCurrency(operatingCosts)}`,
             ...(record.roofPaidAmount !== null
               ? [

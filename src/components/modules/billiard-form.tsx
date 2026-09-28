@@ -77,7 +77,6 @@ const schema = z
     fortnight: z.enum(["PRIMEIRA", "SEGUNDA"]),
     quantityOfChips: z.coerce.number().min(0, "Informe as fichas."),
     accumulatedChips: z.coerce.number().min(0),
-    percentage: z.coerce.number().min(0).max(100),
     discountAmount: z.coerce.number().min(0),
     discountReason: z.string().optional(),
     roofChargeType: z.enum(["FIXED", "NEGOTIATED"]),
@@ -148,8 +147,6 @@ type ReceiptState = {
   pointName: string;
   tableModel: string;
   grossAmount: number;
-  clientShare: number;
-  companyShare: number;
   totalCosts: number;
   finalValue: number;
   roofChargeType: "FIXED" | "NEGOTIATED";
@@ -332,7 +329,6 @@ export function BilliardForm({
       fortnight: "PRIMEIRA",
       quantityOfChips: 0,
       accumulatedChips: 0,
-      percentage: 25,
       discountAmount: 0,
       discountReason: "",
       roofChargeType: "FIXED",
@@ -357,7 +353,6 @@ export function BilliardForm({
   const quantityOfChips = Number(watched.quantityOfChips ?? 0);
   const accumulatedChips = Number(watched.accumulatedChips ?? 0);
   const chipValue = Number(watched.chipValue ?? 0);
-  const percentage = Number(watched.percentage ?? 0);
   const discountAmount = Number(watched.discountAmount ?? 0);
   const roofInstallmentAmount = Number(watched.roofInstallmentAmount ?? 0);
   const roofPaidAmount = Number(watched.roofPaidAmount ?? 0);
@@ -399,8 +394,6 @@ export function BilliardForm({
 
   const totals = useMemo(() => {
     const grossAmount = quantityOfChips * chipValue;
-    const clientShare = grossAmount * (percentage / 100);
-    const companyShare = grossAmount - clientShare;
     const totalCosts =
       employeeCost +
       installationCost +
@@ -408,13 +401,11 @@ export function BilliardForm({
       otherCost +
       structureCost +
       discountAmount;
-    const finalValue = companyShare + roofPaidAmount - totalCosts;
+    const finalValue = grossAmount + roofPaidAmount - totalCosts;
     const clothTotal = accumulatedChips + quantityOfChips;
 
     return {
       grossAmount,
-      clientShare,
-      companyShare,
       totalCosts,
       finalValue,
       clothTotal,
@@ -429,7 +420,6 @@ export function BilliardForm({
     installationCost,
     maintenanceCost,
     otherCost,
-    percentage,
     quantityOfChips,
     roofPaidAmount,
     structureCost,
@@ -697,8 +687,6 @@ export function BilliardForm({
       pointName: values.pointName,
       tableModel: values.tableModel ?? "",
       grossAmount: totals.grossAmount,
-      clientShare: totals.clientShare,
-      companyShare: totals.companyShare,
       totalCosts: totals.totalCosts,
       finalValue: totals.finalValue,
       roofChargeType: values.roofChargeType,
@@ -963,17 +951,17 @@ export function BilliardForm({
                         {...form.register("quantityOfChips")}
                       />
                     </Field>
-                    <Field label="Percentual empresa (%)">
-                      <input
-                        className={fieldClass}
-                        inputMode="decimal"
-                        type="number"
-                        min="0"
-                        max="100"
-                        step="0.5"
-                        {...form.register("percentage")}
-                      />
-                    </Field>
+                    <div className="rounded-xl border border-[#d1a04f]/20 bg-[#d1a04f]/7 px-4 py-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[#a69b87]">
+                        Total pelas fichas
+                      </p>
+                      <p className="mt-1 text-base font-bold tabular-nums text-[#f5d99d]">
+                        {formatCurrency(quantityOfChips * chipValue)}
+                      </p>
+                      <p className="mt-1 text-[11px] text-[#777167]">
+                        {quantityOfChips} fichas × {formatCurrency(chipValue)}
+                      </p>
+                    </div>
                   </div>
 
                   {/* Desconto */}
@@ -1393,6 +1381,7 @@ export function BilliardForm({
                         `Ponto: ${receipt.pointName}`,
                         `Data: ${formatShortDate(receipt.collectionDate)}`,
                         `Fichas: ${receipt.quantityOfChips}`,
+                        `Total das fichas: ${formatCurrency(receipt.grossAmount)}`,
                         ...(receipt.roofInstallmentAmount > 0 || receipt.roofPaidAmount > 0
                           ? [
                               `Telhado: ${rotuloDeStatus(receipt.roofChargeType, ROOF_CHARGE_TYPE_LABEL)}`,
@@ -1413,7 +1402,6 @@ export function BilliardForm({
                           : []),
                         ...(!hideFinancials
                           ? [
-                              `*Repasse ao cliente: ${formatCurrency(receipt.clientShare)}*`,
                               `*Resultado Infinity: ${formatCurrency(receipt.finalValue)}*`,
                             ]
                           : []),
@@ -1580,10 +1568,12 @@ export function BilliardForm({
                             label="Bruto total"
                             value={formatCurrency(historyTotals.totalGross)}
                           />
-                          <SummaryLine
-                            label="Repassado ao cliente"
-                            value={formatCurrency(historyTotals.totalClientShare)}
-                          />
+                          {historyTotals.totalClientShare > 0 ? (
+                            <SummaryLine
+                              label="Repasse antigo"
+                              value={formatCurrency(historyTotals.totalClientShare)}
+                            />
+                          ) : null}
                           <SummaryLine
                             label="Resultado empresa"
                             value={formatCurrency(historyTotals.totalFinal)}

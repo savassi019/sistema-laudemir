@@ -64,10 +64,8 @@ type VisitReceipt = {
   billiard?: {
     quantityOfChips: number;
     chipValue: number;
-    percentage: number;
     discountAmount: number;
     grossAmount: number;
-    clientShare: number;
   };
   plush?: {
     grossAmount: number;
@@ -148,7 +146,6 @@ export function QuickVisitForm({
   const [accumulatedChips, setAccumulatedChips] = useState(0);
   const [quantityOfChips, setQuantityOfChips] = useState(0);
   const [chipValue, setChipValue] = useState(1);
-  const [percentage, setPercentage] = useState(25);
   const [discountAmount, setDiscountAmount] = useState(0);
   const [discountReason, setDiscountReason] = useState("");
   const [billiardPoints, setBilliardPoints] = useState<BilliardPointItem[]>([]);
@@ -206,11 +203,9 @@ export function QuickVisitForm({
 
   const billiardTotals = useMemo(() => {
     const grossAmount = quantityOfChips * chipValue;
-    const clientShare = grossAmount * (percentage / 100);
-    const companyShare = grossAmount - clientShare;
-    const resultAmount = companyShare - discountAmount;
-    return { grossAmount, clientShare, companyShare, resultAmount };
-  }, [quantityOfChips, chipValue, percentage, discountAmount]);
+    const resultAmount = grossAmount - discountAmount;
+    return { grossAmount, resultAmount };
+  }, [quantityOfChips, chipValue, discountAmount]);
 
   const plushTotals = useMemo(() => {
     const clientAmount = plushGrossAmount * (plushCommissionPercentage / 100);
@@ -328,7 +323,7 @@ export function QuickVisitForm({
     let expenseAmount = Number(fd.get("expenseAmount") ?? 0);
 
     if (isBilliardModule) {
-      incomeAmount = billiardTotals.companyShare;
+      incomeAmount = billiardTotals.grossAmount;
       expenseAmount = discountAmount;
     } else if (isPlushModule) {
       incomeAmount = plushTotals.companyAmount;
@@ -363,10 +358,8 @@ export function QuickVisitForm({
         ? {
             quantityOfChips,
             chipValue,
-            percentage,
             discountAmount,
             grossAmount: billiardTotals.grossAmount,
-            clientShare: billiardTotals.clientShare,
           }
         : undefined,
       plush: isPlushModule
@@ -459,7 +452,7 @@ export function QuickVisitForm({
               fortnight: "PRIMEIRA",
               quantityOfChips,
               accumulatedChips,
-              percentage,
+              percentage: 0,
               discountAmount,
               discountReason,
               roofChargeType: "FIXED",
@@ -534,8 +527,7 @@ export function QuickVisitForm({
       return [
         ...header,
         `🎟️ Fichas: ${r.billiard.quantityOfChips}`,
-        `*Bruto: ${formatCurrency(r.billiard.grossAmount)}*`,
-        `Repasse cliente: ${formatCurrency(r.billiard.clientShare)}`,
+        `*Total das fichas: ${formatCurrency(r.billiard.grossAmount)}*`,
         ...(r.billiard.discountAmount > 0
           ? [`Desconto: ${formatCurrency(r.billiard.discountAmount)}`]
           : []),
@@ -640,8 +632,7 @@ export function QuickVisitForm({
     if (r.billiard) {
       rows += `
       <div class="row"><span class="lbl">Fichas</span><span>${r.billiard.quantityOfChips}</span></div>
-      <div class="row"><span class="lbl">Bruto</span><span>${fmt(r.billiard.grossAmount)}</span></div>
-      <div class="row"><span class="lbl">Repasse cliente</span><span>${fmt(r.billiard.clientShare)}</span></div>
+      <div class="row"><span class="lbl">Total das fichas</span><span>${fmt(r.billiard.grossAmount)}</span></div>
       ${r.billiard.discountAmount > 0 ? `<div class="row"><span class="lbl">Desconto</span><span>${fmt(r.billiard.discountAmount)}</span></div>` : ""}
       <div class="row res"><span class="lbl">Resultado</span><span>${fmt(r.incomeAmount - r.expenseAmount)}</span></div>`;
     } else if (r.plush) {
@@ -729,7 +720,6 @@ ${rows}
     setAccumulatedChips(0);
     setQuantityOfChips(0);
     setChipValue(1);
-    setPercentage(25);
     setDiscountAmount(0);
     setDiscountReason("");
     setPlushGrossAmount(0);
@@ -775,8 +765,7 @@ ${rows}
             {receipt.billiard ? (
               <>
                 <DataRow label="Fichas" value={String(receipt.billiard.quantityOfChips)} />
-                <DataRow label="Bruto" value={formatCurrency(receipt.billiard.grossAmount)} />
-                <DataRow label="Repasse cliente" value={formatCurrency(receipt.billiard.clientShare)} />
+                <DataRow label="Total das fichas" value={formatCurrency(receipt.billiard.grossAmount)} />
                 <DataRow
                   label="Resultado"
                   value={formatCurrency(receipt.incomeAmount - receipt.expenseAmount)}
@@ -1077,23 +1066,6 @@ ${rows}
               />
             </div>
             <div className="space-y-2">
-              <label className={labelClass} htmlFor="percentage">
-                Percentual do cliente
-              </label>
-              <input
-                id="percentage"
-                name="percentage"
-                type="number"
-                inputMode="decimal"
-                step="0.01"
-                min="0"
-                max="100"
-                value={percentage}
-                onChange={(e) => setPercentage(Number(e.target.value))}
-                className={fieldClass}
-              />
-            </div>
-            <div className="space-y-2">
               <label className={labelClass} htmlFor="discountAmount">
                 Desconto (R$)
               </label>
@@ -1125,14 +1097,10 @@ ${rows}
             ) : null}
           </div>
 
-          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-sm sm:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-white/[0.02] p-3 text-sm sm:grid-cols-3">
             <div>
-              <p className="text-[11px] text-[#9a958b]">Bruto</p>
+              <p className="text-[11px] text-[#9a958b]">Total das fichas</p>
               <p className="font-semibold text-white">{formatCurrency(billiardTotals.grossAmount)}</p>
-            </div>
-            <div>
-              <p className="text-[11px] text-[#9a958b]">Cliente</p>
-              <p className="font-semibold text-white">{formatCurrency(billiardTotals.clientShare)}</p>
             </div>
             <div>
               <p className="text-[11px] text-[#9a958b]">Desconto</p>

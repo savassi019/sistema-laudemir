@@ -137,13 +137,14 @@ export async function listModuleReceipts(
       return records.map((record) => {
         const isLegacyRoofEntry = record.roofPaidAmount === null;
         const roofPaidAmount = isLegacyRoofEntry ? 0 : Number(record.roofPaidAmount ?? 0);
+        const legacyPercentage = Number(record.percentage ?? 0);
         const totals = calculateBilliardFinancials({
           quantityOfChips: record.quantityOfChips,
           chipValue:
             record.quantityOfChips > 0
               ? Number(record.grossAmount) / record.quantityOfChips
               : 0,
-          percentage: Number(record.percentage ?? 0),
+          percentage: legacyPercentage,
           employeeCost: Number(record.employeeCost ?? 0),
           installationCost: Number(record.installationCost ?? 0),
           maintenanceCost: Number(record.maintenanceCost ?? 0),
@@ -171,6 +172,7 @@ export async function listModuleReceipts(
             `Ponto: ${record.billiardPoint.name}`,
             `Data: ${formatShortDate(record.collectionDate)}`,
             `Fichas: ${record.quantityOfChips}`,
+            `Total das fichas: ${formatCurrency(Number(record.grossAmount))}`,
             ...(!isLegacyRoofEntry &&
             (Number(record.roofAmount ?? 0) > 0 || roofPaidAmount > 0)
               ? [
@@ -195,7 +197,9 @@ export async function listModuleReceipts(
                         `Saldo restante: ${formatCurrency(Number(record.roofBalanceAfter ?? 0))}`,
                       ]
                     : []),
-                  `*Repasse ao cliente: ${formatCurrency(totals.clientShare)}*`,
+                  ...(legacyPercentage > 0
+                    ? [`*Repasse antigo ao cliente: ${formatCurrency(totals.clientShare)}*`]
+                    : []),
                   `*Resultado Infinity: ${formatCurrency(totals.finalValue)}*`,
                 ]
               : []),
