@@ -25,6 +25,7 @@ test.describe("acesso móvel do BX", () => {
   test.skip(!bxPassword, "Defina E2E_BX_PASSWORD para testar a conta real sem gravar dados.");
 
   test("entra só no BX, vê apenas o financeiro de hoje e não abre áreas do dono", async ({ page }) => {
+    test.setTimeout(45_000);
     const browserErrors: string[] = [];
     page.on("pageerror", (error) => browserErrors.push(error.message));
 
@@ -36,6 +37,23 @@ test.describe("acesso móvel do BX", () => {
     await expect(page.getByText("Despesas hoje", { exact: true })).toBeVisible();
     await expect(page.getByText("Resultado hoje", { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
+
+    await page.getByRole("button", { name: /Financeiro Entradas/ }).click();
+    await expect(page.getByText("Financeiro de hoje", { exact: true })).toBeVisible();
+    await expect(page.getByText(/O consolidado completo fica disponível apenas para o dono/)).toBeVisible();
+
+    await page.goto("/modulos/bx");
+    await page.getByRole("button", { name: /Comprovantes Reenviar/ }).click();
+    await expect(page.getByRole("heading", { name: "Comprovantes", exact: true }).last()).toBeVisible();
+    const invalidReceiptEventStatus = await page.evaluate(async () => {
+      const response = await fetch("/api/receipts/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      return response.status;
+    });
+    expect(invalidReceiptEventStatus).toBe(400);
 
     await page.goto("/equipe");
     await expect(page).not.toHaveURL(/\/equipe/);

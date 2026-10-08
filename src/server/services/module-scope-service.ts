@@ -113,7 +113,8 @@ export async function getModuleScopeSummary(
       pendingAmount: 0,
       balanceAmount: incomeAmount - expenseAmount,
     };
-  } catch {
-    return fallbackSummary;
+  } catch (error) {
+    console.error(`[module-scope-service] resumo de ${slug} falhou:`, error);
+    throw new Error("Não foi possível calcular o resumo do módulo. Nenhum total temporário foi exibido.");
   }
 }
