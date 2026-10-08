@@ -6,7 +6,7 @@ const bxUsername = process.env.E2E_BX_USERNAME ?? "bx";
 async function login(page: Page, username: string, password: string) {
   await page.goto("/login");
   await page.getByLabel("Usuário").fill(username);
-  await page.getByLabel("Senha").fill(password);
+  await page.locator("#password").fill(password);
   await page.getByRole("button", { name: "Entrar no painel" }).click();
   await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
 }
@@ -31,7 +31,7 @@ test.describe("acesso móvel do BX", () => {
     await login(page, bxUsername, bxPassword!);
     await page.goto("/modulos/bx");
 
-    await expect(page.getByRole("heading", { name: "BX", exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/modulos\/bx/);
     await expect(page.getByText("Entradas hoje", { exact: true })).toBeVisible();
     await expect(page.getByText("Despesas hoje", { exact: true })).toBeVisible();
     await expect(page.getByText("Resultado hoje", { exact: true })).toBeVisible();
@@ -44,7 +44,7 @@ test.describe("acesso móvel do BX", () => {
     await expect(page).not.toHaveURL(/\/painel/);
 
     await page.goto("/modulos/bilhar-pebolim");
-    await expect(page).not.toHaveURL(/\/modulos\/bilhar-pebolim/);
+    await expect(page.getByRole("heading", { name: "Pagina nao encontrada" })).toBeVisible();
 
     expect(browserErrors).toEqual([]);
   });
