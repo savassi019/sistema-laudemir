@@ -179,8 +179,8 @@ export async function listClients(session: SessionData): Promise<ClientListItem[
 
     return clients.map(mapClientFromPrisma);
   } catch (error) {
-    console.error("[client-service] listClients falhou, retornando dados locais/demo:", error);
-    return [...getLocalClients(session), ...demoClients];
+    console.error("[client-service] listClients falhou:", error);
+    throw new Error("Não foi possível carregar os clientes do servidor.");
   }
 }
 

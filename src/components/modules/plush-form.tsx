@@ -701,6 +701,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
             return (
               <div className="mt-3 space-y-3">
                 <WhatsAppReceiptButton
+                  moduleSlug="maquinas-de-pelucia"
+                  receiptId={receipt.receiptId}
                   defaultPhone={receipt.phone}
                   closedAt={receipt.closedAt}
                   message={message}
@@ -710,6 +712,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
                   pdfButtonLabel="Gerar via do cliente em PDF"
                 />
                 <WhatsAppReceiptButton
+                  moduleSlug="maquinas-de-pelucia"
+                  receiptId={receipt.receiptId}
                   defaultPhone={contactPhones.ownerPhone}
                   closedAt={receipt.closedAt}
                   message={message}
@@ -719,6 +723,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
                   pdfButtonLabel="Gerar via do dono em PDF"
                 />
                 <WhatsAppReceiptButton
+                  moduleSlug="maquinas-de-pelucia"
+                  receiptId={receipt.receiptId}
                   defaultPhone={contactPhones.staffPhone}
                   closedAt={receipt.closedAt}
                   message={message}

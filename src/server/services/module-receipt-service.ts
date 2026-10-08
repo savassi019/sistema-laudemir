@@ -36,6 +36,10 @@ export type ModuleReceiptItem = {
   occurredAt: string;
   closedAt: string;
   message: string;
+  lastEvent?: "GENERATED" | "SHARED" | "DOWNLOADED" | "WHATSAPP_OPENED" | null;
+  lastEventAt?: string | null;
+  lastEventBy?: string | null;
+  lastPhone?: string | null;
 };
 
 function paymentLabel(value: string | null | undefined) {

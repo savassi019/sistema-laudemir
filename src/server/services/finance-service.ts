@@ -818,8 +818,8 @@ export async function getFinanceOverview(session: SessionData): Promise<FinanceO
       })),
     };
   } catch (error) {
-    console.error("[finance-service] getFinanceOverview falhou, retornando dados demo:", error);
-    return demoFinance;
+    console.error("[finance-service] getFinanceOverview falhou:", error);
+    throw new Error("Não foi possível carregar o financeiro. Nenhum valor temporário foi exibido.");
   }
 }
 
@@ -870,7 +870,8 @@ export async function createFinancialEntry(
       },
     });
   } catch (error) {
-    console.error("[finance-service] createFinancialEntry falhou, mantendo apenas em memoria local:", error);
+    console.error("[finance-service] createFinancialEntry falhou:", error);
+    throw new Error("O lançamento não foi salvo. Verifique a conexão e tente novamente.");
   }
 
   return entry;

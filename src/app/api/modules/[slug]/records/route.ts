@@ -1,9 +1,10 @@
 import { NextResponse } from "next/server";
-import type { Prisma, SystemModule } from "@prisma/client";
+import type { EntityType, Prisma, SystemModule } from "@prisma/client";
 
 import { getSession, hasModuleAccess } from "@/lib/auth";
 import { getModuleBySlug } from "@/lib/module-catalog";
 import { prisma } from "@/lib/prisma";
+import { assertBusinessDayOpen } from "@/server/services/daily-close-service";
 import {
   listModuleRecords,
   moduleSlugs,
@@ -24,6 +25,76 @@ globalForIdempotency.modulePendingSaves = pendingSaves;
 const IDEMPOTENCY_TTL_MS = 10 * 60 * 1000;
 
 class SubmissionAlreadyReceivedError extends Error {}
+
+const operationEntityType: Partial<Record<ModuleSlug, EntityType>> = {
+  "carreta-kids": "CARRETA_KIDS",
+  locacao: "RENTAL",
+  "maquinas-de-pelucia": "PLUSH_COLLECTION",
+  "bilhar-pebolim": "BILLIARD_COLLECTION",
+  bx: "BX_TRANSACTION",
+  "h-caca-niquel": "SLOT_COLLECTION",
+  "credito-financeiro": "MACHINE_CONTRACT",
+  marketing: "MARKETING_CONTRACT",
+};
+const receiptSlugs = new Set<ModuleSlug>([
+  "bilhar-pebolim",
+  "bx",
+  "h-caca-niquel",
+  "carreta-kids",
+  "maquinas-de-pelucia",
+  "locacao",
+]);
+
+function operationDate(payload: Record<string, unknown>) {
+  for (const key of ["occurredAt", "collectionDate", "serviceDate", "eventDate", "movementDate", "contractDate", "dueDate"]) {
+    const value = payload[key];
+    if (typeof value === "string" && value) return value;
+  }
+  return null;
+}
+
+async function recordOperationAudit(
+  session: SessionData,
+  module: SystemModule,
+  slug: ModuleSlug,
+  result: SaveResult,
+  payload: Record<string, unknown>,
+) {
+  await prisma.auditLog.create({
+    data: {
+      organizationId: session.organizationId,
+      userId: session.userId,
+      module,
+      action: "MODULE_OPERATION_CREATED",
+      entityType: operationEntityType[slug] ?? "OTHER",
+      entityId: result.record.id,
+      newData: {
+        slug,
+        title: result.record.title,
+        summary: result.record.summary,
+        payload,
+      } as Prisma.InputJsonValue,
+    },
+  }).catch((error) => {
+    // A operacao principal ja esta persistida. Falha de auditoria deve gerar
+    // alerta tecnico, nunca induzir um reenvio que duplicaria o fechamento.
+    console.error(`[audit] operacao ${slug}/${result.record.id} salva sem log:`, error);
+  });
+  if (receiptSlugs.has(slug)) {
+    await prisma.receiptEvent.create({
+      data: {
+        organizationId: session.organizationId,
+        userId: session.userId,
+        module,
+        slug,
+        receiptId: result.record.id,
+        event: "GENERATED",
+      },
+    }).catch((error) => {
+      console.error(`[receipt] comprovante ${slug}/${result.record.id} gerado sem evento:`, error);
+    });
+  }
+}
 
 async function savePersistently(
   session: SessionData,
@@ -75,6 +146,7 @@ async function savePersistently(
   let result: SaveResult;
   try {
     result = await saveModuleRecord(session, slug, payload);
+    await recordOperationAudit(session, module, slug, result, payload);
   } catch (error) {
     await prisma.moduleSubmission.update({
       where: { id: submission.id },
@@ -111,7 +183,12 @@ function saveIdempotently(
   requestKey: string | null,
   module: SystemModule,
 ) {
-  if (!requestKey) return saveModuleRecord(session, slug, payload);
+  if (!requestKey) {
+    return saveModuleRecord(session, slug, payload).then(async (result) => {
+      await recordOperationAudit(session, module, slug, result, payload);
+      return result;
+    });
+  }
 
   const now = Date.now();
   for (const [key, value] of pendingSaves) {
@@ -195,6 +272,7 @@ export async function POST(
     rawRequestKey && /^[a-zA-Z0-9-]{16,80}$/.test(rawRequestKey) ? rawRequestKey : null;
 
   try {
+    await assertBusinessDayOpen(session, operationDate(payload));
     const result = await saveIdempotently(
       session,
       slug,
@@ -205,6 +283,9 @@ export async function POST(
     return NextResponse.json(result, { status: 201 });
   } catch (error) {
     if (error instanceof SubmissionAlreadyReceivedError) {
+      return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof Error && error.message.includes("caixa deste dia já foi fechado")) {
       return NextResponse.json({ error: error.message }, { status: 409 });
     }
     console.error(`[api/modules/${slug}/records] falha ao salvar:`, error);

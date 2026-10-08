@@ -421,6 +421,8 @@ export function CarretaKidsForm({ hideFinancials = false, initialClientName = ""
             <p className="mt-3 text-sm text-[#dbe6d4]/75">{receipt.notes}</p>
           ) : null}
           <WhatsAppReceiptButton
+            moduleSlug="carreta-kids"
+            receiptId={receipt.receiptId}
             defaultPhone={receipt.phone}
             closedAt={receipt.closedAt}
             title="Via do cliente — WhatsApp e PDF"

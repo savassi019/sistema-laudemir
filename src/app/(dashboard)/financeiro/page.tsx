@@ -2,10 +2,12 @@ import { ArrowLeftRight, ReceiptText } from "lucide-react";
 import { redirect } from "next/navigation";
 
 import { MetricCard } from "@/components/dashboard/metric-card";
+import { DailyClosePanel } from "@/components/financeiro/daily-close-panel";
 import { FinanceEntries } from "@/components/financeiro/finance-entries";
 import { SectionCard } from "@/components/ui/section-card";
 import { requireSession } from "@/lib/auth";
 import { getFinanceOverview } from "@/server/services/finance-service";
+import { getDailyCloseSnapshot } from "@/server/services/daily-close-service";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +22,10 @@ export default async function FinancePage() {
   }
 
   const dailyOnly = session.role === "ADMIN";
-  const finance = await getFinanceOverview(session);
+  const [finance, dailyClose] = await Promise.all([
+    getFinanceOverview(session),
+    session.role === "OWNER" ? getDailyCloseSnapshot(session) : Promise.resolve(null),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -61,6 +66,8 @@ export default async function FinancePage() {
           <MetricCard key={metric.label} metric={metric} />
         ))}
       </section>
+
+      {dailyClose ? <DailyClosePanel snapshot={dailyClose} /> : null}
 
       <SectionCard
         title={dailyOnly ? "Lançamentos de hoje" : "Lançamentos recentes"}

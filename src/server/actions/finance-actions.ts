@@ -2,6 +2,7 @@
 
 import { hasModuleAccess, requireSession } from "@/lib/auth";
 import { getModuleBySlug } from "@/lib/module-catalog";
+import { assertBusinessDayOpen } from "@/server/services/daily-close-service";
 import {
   cancelModuleFinancialEntry,
   createFinancialEntry,
@@ -43,6 +44,7 @@ export async function createFinancialEntryAction(
 ): Promise<FinanceEntryListItem> {
   const session = await requireSession("FINANCE");
   assertFinancialAccess(session.role);
+  await assertBusinessDayOpen(session);
   return createFinancialEntry(session, payload);
 }
 
@@ -51,7 +53,7 @@ export async function createModuleFinancialEntryAction(
   payload: Record<string, unknown>,
 ) {
   const { session, moduleItem } = await requireModuleFinancialAccess(slug);
-
+  await assertBusinessDayOpen(session);
   return createModuleFinancialEntry(session, moduleItem.module, payload);
 }
 
@@ -84,6 +86,7 @@ export async function updateModuleFinancialEntryStatusAction(
   status: "PENDING" | "PARTIAL" | "PAID",
 ) {
   const { session, moduleItem } = await requireModuleFinancialAccess(slug);
+  await assertBusinessDayOpen(session);
   return updateModuleFinancialEntryStatus(session, moduleItem.module, id, status);
 }
 
@@ -93,6 +96,7 @@ export async function registerModuleFinancialPaymentAction(
   payload: Record<string, unknown>,
 ) {
   const { session, moduleItem } = await requireModuleFinancialAccess(slug);
+  await assertBusinessDayOpen(session);
   return registerModuleFinancialPayment(session, moduleItem.module, id, payload);
 }
 
@@ -102,10 +106,12 @@ export async function updateModuleFinancialEntryAction(
   payload: Record<string, unknown>,
 ) {
   const { session, moduleItem } = await requireModuleFinancialAccess(slug);
+  await assertBusinessDayOpen(session);
   return updateModuleFinancialEntry(session, moduleItem.module, id, payload);
 }
 
 export async function cancelModuleFinancialEntryAction(slug: string, id: string) {
   const { session, moduleItem } = await requireModuleFinancialAccess(slug);
+  await assertBusinessDayOpen(session);
   return cancelModuleFinancialEntry(session, moduleItem.module, id);
 }

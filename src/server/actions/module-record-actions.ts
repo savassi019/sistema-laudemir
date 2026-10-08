@@ -6,6 +6,7 @@ import { z } from "zod";
 import { hasModuleAccess, requireSession } from "@/lib/auth";
 import { getModuleBySlug } from "@/lib/module-catalog";
 import { prisma } from "@/lib/prisma";
+import { assertBusinessDayOpen } from "@/server/services/daily-close-service";
 import {
   getClientPrefillData,
   getSlotClientMachines,
@@ -75,7 +76,25 @@ export async function registerModuleClientAction(
 ) {
   const session = await requireSession();
   assertSlugAccess(session, slug);
-  return registerModuleClient(session, slug as ModuleSlug, payload);
+  const moduleSlug = slug as ModuleSlug;
+  const result = await registerModuleClient(session, moduleSlug, payload);
+  const moduleItem = getModuleBySlug(slug);
+  if (moduleItem) {
+    await prisma.auditLog.create({
+      data: {
+        organizationId: session.organizationId,
+        userId: session.userId,
+        module: moduleItem.module,
+        action: "MODULE_CLIENT_CREATED",
+        entityType: reviewEntityType[moduleSlug] ?? "CLIENT",
+        entityId: result.id,
+        newData: { slug, name: result.name },
+      },
+    }).catch((error) => {
+      console.error(`[audit] cliente ${slug}/${result.id} salvo sem log:`, error);
+    });
+  }
+  return result;
 }
 
 export async function listModuleRecordsAction(
@@ -99,7 +118,31 @@ export async function listModuleReceiptsAction(slug: string) {
     throw new Error("Sem permissao para acessar valores de comprovantes.");
   }
   if (!receiptModuleSlugs.includes(slug as ModuleSlug)) return [];
-  return listModuleReceipts(session, slug as ModuleSlug);
+  const items = await listModuleReceipts(session, slug as ModuleSlug);
+  if (items.length === 0) return items;
+  const events = await prisma.receiptEvent.findMany({
+    where: {
+      organizationId: session.organizationId,
+      slug,
+      receiptId: { in: items.map((item) => item.id) },
+    },
+    include: { user: { select: { name: true } } },
+    orderBy: { createdAt: "desc" },
+  });
+  const latest = new Map<string, (typeof events)[number]>();
+  for (const event of events) {
+    if (!latest.has(event.receiptId)) latest.set(event.receiptId, event);
+  }
+  return items.map((item) => {
+    const event = latest.get(item.id);
+    return {
+      ...item,
+      lastEvent: event?.event ?? null,
+      lastEventAt: event?.createdAt.toISOString() ?? null,
+      lastEventBy: event?.user?.name ?? null,
+      lastPhone: event?.phone ?? null,
+    };
+  });
 }
 
 export async function reviewModuleOperationAction(
@@ -122,6 +165,7 @@ export async function reviewModuleOperationAction(
     (item) => item.id === entityId,
   );
   if (!record) throw new Error("Operacao nao encontrada neste modulo.");
+  await assertBusinessDayOpen(session, record.createdAt);
 
   const previous = await prisma.moduleOperationReview.findUnique({
     where: {

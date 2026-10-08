@@ -61,8 +61,8 @@ export async function listStaff(session: SessionData): Promise<StaffMember[]> {
         .filter((m) => m !== "DASHBOARD"),
     }));
   } catch (error) {
-    console.error("[user-service] listStaff falhou, retornando dados locais:", error);
-    return getLocalStaff(session);
+    console.error("[user-service] listStaff falhou:", error);
+    throw new Error("Não foi possível carregar os usuários do servidor.");
   }
 }
 

@@ -1367,6 +1367,8 @@ export function BilliardForm({
                       ) : null}
                     </div>
                     <WhatsAppReceiptButton
+                      moduleSlug="bilhar-pebolim"
+                      receiptId={receipt.receiptId}
                       defaultPhone={receipt.phone}
                       closedAt={receipt.closedAt}
                       showInfinityLogo

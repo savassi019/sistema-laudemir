@@ -202,16 +202,7 @@ export async function getPainelAlerts(session: SessionData): Promise<PainelAlert
     };
   } catch (error) {
     console.error("[dashboard-service] getPainelAlerts falhou:", error);
-    return {
-      overdueCount: 0,
-      overdueTotal: 0,
-      todayVisitCount: 0,
-      unvisitedMachineCount: 0,
-      pendingCount: 0,
-      pendingTotal: 0,
-      upcomingCount: 0,
-      byModule: [],
-    };
+    throw new Error("Não foi possível carregar os alertas operacionais.");
   }
 }
 
@@ -276,7 +267,7 @@ export async function getDashboardOverview(session: SessionData): Promise<Dashbo
       spotlights: demoDashboard.spotlights,
     };
   } catch (error) {
-    console.error("[dashboard-service] getDashboardOverview falhou, retornando dados demo:", error);
-    return demoDashboard;
+    console.error("[dashboard-service] getDashboardOverview falhou:", error);
+    throw new Error("Não foi possível carregar o painel. Nenhum valor temporário foi exibido.");
   }
 }

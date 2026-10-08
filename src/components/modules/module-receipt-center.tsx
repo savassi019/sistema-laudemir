@@ -10,6 +10,13 @@ import type { ModuleReceiptItem } from "@/server/services/module-receipt-service
 import { fieldClass } from "./styles";
 import { WhatsAppReceiptButton } from "./whatsapp-receipt-button";
 
+const RECEIPT_EVENT_LABEL = {
+  GENERATED: "Gerado",
+  SHARED: "Compartilhado",
+  DOWNLOADED: "Baixado",
+  WHATSAPP_OPENED: "WhatsApp aberto",
+} as const;
+
 export function ModuleReceiptCenter({ slug }: { slug: string }) {
   const [items, setItems] = useState<ModuleReceiptItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -166,9 +173,18 @@ export function ModuleReceiptCenter({ slug }: { slug: string }) {
                   <div className="mb-3 flex flex-wrap gap-x-4 gap-y-1 px-1 text-[11px] text-[#7e786d]">
                     <span>{item.receiptCode}</span>
                     <span>{item.phone || "Sem telefone cadastrado"}</span>
+                    {item.lastEvent ? (
+                      <span className="text-[#86efac]">
+                        {RECEIPT_EVENT_LABEL[item.lastEvent]}
+                        {item.lastEventBy ? ` por ${item.lastEventBy}` : ""}
+                        {item.lastEventAt ? ` em ${new Date(item.lastEventAt).toLocaleString("pt-BR")}` : ""}
+                      </span>
+                    ) : <span>Registro anterior ao rastreamento</span>}
                   </div>
                   <WhatsAppReceiptButton
                     compact
+                    moduleSlug={slug}
+                    receiptId={item.id}
                     defaultPhone={item.phone}
                     closedAt={item.closedAt}
                     showInfinityLogo={slug === "bilhar-pebolim"}

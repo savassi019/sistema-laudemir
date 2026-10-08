@@ -82,8 +82,8 @@ export async function saveVisit(
       },
     });
   } catch (error) {
-    console.error("[visit-service] saveVisit falhou, mantendo apenas em memoria local:", error);
-    pushLocalVisit(session, visit);
+    console.error("[visit-service] saveVisit falhou:", error);
+    throw new Error("A visita não foi salva no servidor. Ela deve permanecer na fila para reenvio.");
   }
 
   return visit;
@@ -125,8 +125,8 @@ export async function listVisits(
       createdAt: r.createdAt.toISOString(),
     }));
   } catch (error) {
-    console.error("[visit-service] listVisits falhou, retornando dados locais:", error);
-    return getLocalVisits(session).slice(0, limit);
+    console.error("[visit-service] listVisits falhou:", error);
+    throw new Error("Não foi possível carregar as visitas do servidor.");
   }
 }
 
@@ -161,8 +161,8 @@ export async function getClientVisits(
       createdAt: r.createdAt.toISOString(),
     }));
   } catch (error) {
-    console.error("[visit-service] getClientVisits falhou, retornando dados locais:", error);
-    return getLocalVisits(session).filter((v) => v.clientId === clientId);
+    console.error("[visit-service] getClientVisits falhou:", error);
+    throw new Error("Não foi possível carregar o histórico de visitas do cliente.");
   }
 }
 
@@ -220,7 +220,7 @@ export async function updateVisit(
     };
   } catch (error) {
     console.error("[visit-service] updateVisit falhou:", error);
-    return null;
+    throw new Error("A alteração da visita não foi salva.");
   }
 }
 
@@ -248,7 +248,7 @@ export async function deleteVisit(
     return true;
   } catch (error) {
     console.error("[visit-service] deleteVisit falhou:", error);
-    return false;
+    throw new Error("A visita não foi excluída.");
   }
 }
 
@@ -349,10 +349,8 @@ export async function getTodayVisitCount(session: SessionData): Promise<number> 
       },
     });
   } catch (error) {
-    console.error("[visit-service] getTodayVisitCount falhou, retornando dados locais:", error);
-    return getLocalVisits(session).filter(
-      (v) => new Date(v.occurredAt) >= todayStart,
-    ).length;
+    console.error("[visit-service] getTodayVisitCount falhou:", error);
+    throw new Error("Não foi possível conferir as visitas de hoje.");
   }
 }
 
@@ -400,11 +398,8 @@ export async function listVisitsInRange(
       createdAt: r.createdAt.toISOString(),
     }));
   } catch (error) {
-    console.error("[visit-service] listVisitsInRange falhou, retornando dados locais:", error);
-    return getLocalVisits(session).filter((v) => {
-      const d = new Date(v.occurredAt);
-      return d >= fromDate && d <= toDate;
-    });
+    console.error("[visit-service] listVisitsInRange falhou:", error);
+    throw new Error("Não foi possível carregar as visitas do período.");
   }
 }
 

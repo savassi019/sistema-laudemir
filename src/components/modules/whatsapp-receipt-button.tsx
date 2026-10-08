@@ -13,6 +13,8 @@ type Props = {
   pdfButtonLabel?: string;
   compact?: boolean;
   showInfinityLogo?: boolean;
+  moduleSlug?: string;
+  receiptId?: string;
 };
 
 type ReceiptLine = {
@@ -457,6 +459,8 @@ export function WhatsAppReceiptButton({
   pdfButtonLabel = "Baixar como PDF",
   compact = false,
   showInfinityLogo = false,
+  moduleSlug,
+  receiptId,
 }: Props) {
   const [phone, setPhone] = useState(defaultPhone);
   const [generating, setGenerating] = useState(false);
@@ -469,6 +473,19 @@ export function WhatsAppReceiptButton({
   }, [message]);
 
   const isReady = phone.replace(/\D/g, "").length >= 10;
+
+  function trackEvent(
+    event: "SHARED" | "DOWNLOADED" | "WHATSAPP_OPENED",
+    metadata?: Record<string, unknown>,
+  ) {
+    if (!moduleSlug || !receiptId) return;
+    void fetch("/api/receipts/events", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug: moduleSlug, receiptId, event, phone, metadata }),
+      keepalive: true,
+    }).catch(() => {});
+  }
 
   function buildTextUrl(value: string) {
     const clean = value.replace(/\D/g, "");
@@ -489,6 +506,7 @@ export function WhatsAppReceiptButton({
       const file = new File([blob], "comprovante.png", { type: "image/png" });
       if (typeof navigator !== "undefined" && navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: "Comprovante" });
+        trackEvent("SHARED", { format: "PNG" });
       } else {
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
@@ -498,6 +516,7 @@ export function WhatsAppReceiptButton({
         anchor.click();
         document.body.removeChild(anchor);
         setTimeout(() => URL.revokeObjectURL(url), 1500);
+        trackEvent("DOWNLOADED", { format: "PNG" });
       }
     } catch (error) {
       if (error instanceof Error && error.name !== "AbortError") {
@@ -596,6 +615,7 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
 
     const printWindow = window.open("", "_blank");
     if (!printWindow) return;
+    trackEvent("DOWNLOADED", { format: "PDF_PRINT" });
     printWindow.document.write(html);
     printWindow.document.close();
     printWindow.focus();
@@ -617,6 +637,7 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
       setShareError("Cadastre ou confira o telefone do cliente para abrir o WhatsApp.");
       return;
     }
+    trackEvent("WHATSAPP_OPENED", { format: "TEXT" });
     window.open(buildTextUrl(phone), "_blank", "noopener,noreferrer");
   }
 

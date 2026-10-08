@@ -95,17 +95,6 @@ type SaveResult = {
   source: "database" | "local";
 };
 
-type StoreMap = Map<string, ModuleRecordItem[]>;
-
-const globalForModuleRecords = globalThis as unknown as {
-  moduleRecordStore?: StoreMap;
-};
-
-const moduleRecordStore =
-  globalForModuleRecords.moduleRecordStore ?? new Map<string, ModuleRecordItem[]>();
-
-globalForModuleRecords.moduleRecordStore = moduleRecordStore;
-
 const paymentMethodMap: Record<string, PaymentMethod> = {
   PIX: "PIX",
   DINHEIRO: "CASH",
@@ -794,15 +783,6 @@ async function logFieldVisitForModuleRecord(params: {
       clientPhone: params.clientPhone ?? undefined,
     },
   });
-}
-
-function buildKey(session: SessionData, slug: ModuleSlug) {
-  return `${session.organizationId}:${slug}`;
-}
-
-function listLocalRecords(session: SessionData, slug: ModuleSlug, take = 5) {
-  const key = buildKey(session, slug);
-  return (moduleRecordStore.get(key) ?? []).slice(0, take);
 }
 
 function mapPaymentMethod(value: string) {
@@ -3070,8 +3050,8 @@ async function listModuleRecordsBase(
         return [];
     }
   } catch (error) {
-    console.error(`[module-record-service] listModuleRecords (${slug}) falhou, retornando dados locais:`, error);
-    return listLocalRecords(session, slug, take);
+    console.error(`[module-record-service] listModuleRecords (${slug}) falhou:`, error);
+    throw new Error("Não foi possível carregar os registros do módulo.");
   }
 }
 
@@ -3341,7 +3321,7 @@ export async function listModuleClients(
     }
   } catch (error) {
     console.error(`[module-record-service] listModuleClients (${slug}) falhou:`, error);
-    return [];
+    throw new Error("Não foi possível carregar os clientes do módulo.");
   }
 }
 

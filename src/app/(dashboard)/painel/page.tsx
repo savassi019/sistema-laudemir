@@ -10,6 +10,7 @@ import {
   Megaphone,
   Notebook,
   Receipt,
+  ShieldAlert,
   Shield,
   Store,
   Table2,
@@ -23,6 +24,7 @@ import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth";
 import { formatCurrency } from "@/lib/format";
 import { getDashboardOverview, getPainelAlerts } from "@/server/services/dashboard-service";
+import { getOwnerControlSnapshot } from "@/server/services/owner-control-service";
 
 export const dynamic = "force-dynamic";
 
@@ -58,9 +60,10 @@ export default async function PainelPage() {
     redirect("/dashboard");
   }
 
-  const [overview, alerts] = await Promise.all([
+  const [overview, alerts, control] = await Promise.all([
     getDashboardOverview(session),
     getPainelAlerts(session),
+    getOwnerControlSnapshot(session),
   ]);
   const totalIncome  = overview.metrics.find((m) => m.label.toLowerCase().includes("receb"))?.value ?? "—";
   const pendingEntry = overview.metrics.find((m) => m.label.toLowerCase().includes("pend"));
@@ -85,6 +88,93 @@ export default async function PainelPage() {
             <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#fca5a5]">Pendências</p>
             <p className="mt-1 text-base font-bold text-[#fca5a5]">{totalPending}</p>
           </div>
+        </div>
+      </section>
+
+      {/* Exceções que exigem atenção do dono */}
+      <section className="rounded-2xl border border-[#d1a04f]/20 bg-[#0b0f0e]/55 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#d1a04f]">Central de controle</p>
+            <h2 className="mt-1 text-base font-semibold text-white">
+              {control.exceptions.length === 0 ? "Tudo conferido" : `${control.exceptions.length} ponto(s) de atenção`}
+            </h2>
+          </div>
+          <ShieldAlert className={`size-5 shrink-0 ${control.exceptions.length === 0 ? "text-[#4ade80]" : "text-[#fbbf24]"}`} />
+        </div>
+
+        <div className="mt-3 grid grid-cols-3 gap-2">
+          <div className="rounded-xl border border-white/[0.07] bg-black/10 p-2.5">
+            <p className="text-[9px] uppercase tracking-[0.08em] text-[#9a958b]">Caixa hoje</p>
+            <p className={`mt-1 text-xs font-semibold ${control.dayCloseStatus === "closed" ? "text-[#86efac]" : "text-[#fde68a]"}`}>
+              {control.dayCloseStatus === "closed" ? "Fechado" : control.dayCloseStatus === "reopened" ? "Reaberto" : "Em aberto"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/[0.07] bg-black/10 p-2.5">
+            <p className="text-[9px] uppercase tracking-[0.08em] text-[#9a958b]">Comprovantes</p>
+            <p className="mt-1 text-xs font-semibold text-white">{control.receiptsGeneratedToday} hoje</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.07] bg-black/10 p-2.5">
+            <p className="text-[9px] uppercase tracking-[0.08em] text-[#9a958b]">Auditoria</p>
+            <p className="mt-1 text-xs font-semibold text-white">{control.auditActionsLastSevenDays} ações</p>
+          </div>
+        </div>
+
+        <div className="mt-3 space-y-2">
+          {control.exceptions.length === 0 ? (
+            <p className="rounded-xl border border-[#4ade80]/20 bg-[#4ade80]/8 px-3 py-3 text-xs text-[#86efac]">
+              Nenhuma exceção operacional encontrada agora.
+            </p>
+          ) : (
+            control.exceptions.map((item) => (
+              <Link
+                key={item.id}
+                href={item.href}
+                className={`flex min-h-14 items-center gap-3 rounded-xl border px-3 py-2.5 active:bg-white/[0.04] ${item.level === "critical" ? "border-[#f87171]/25 bg-[#f87171]/8" : "border-[#fbbf24]/20 bg-[#fbbf24]/7"}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className={`text-sm font-semibold ${item.level === "critical" ? "text-[#fca5a5]" : "text-[#fde68a]"}`}>{item.title}</p>
+                  <p className="mt-0.5 text-xs leading-4 text-[#9a958b]">{item.detail}</p>
+                </div>
+                <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-black/20 text-xs font-bold text-white">{item.count}</span>
+                <ChevronRight className="size-4 shrink-0 text-[#9a958b]" />
+              </Link>
+            ))
+          )}
+        </div>
+      </section>
+
+      {/* Trilha recente, sempre traduzida e visível somente ao dono */}
+      <section className="rounded-2xl border border-white/[0.08] bg-[#0b0f0e]/35 p-4">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9a958b]">Auditoria recente</p>
+            <h2 className="mt-1 text-base font-semibold text-white">Quem alterou o quê</h2>
+          </div>
+          <span className="text-xs text-[#9a958b]">Últimas {control.recentAudit.length}</span>
+        </div>
+        <div className="mt-3 divide-y divide-white/[0.06]">
+          {control.recentAudit.length === 0 ? (
+            <p className="py-3 text-sm text-[#9a958b]">Nenhuma ação auditada ainda.</p>
+          ) : (
+            control.recentAudit.map((item) => (
+              <div key={item.id} className="flex min-h-14 items-center gap-3 py-2.5">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-white">{item.action}</p>
+                  <p className="mt-0.5 truncate text-xs text-[#9a958b]">{item.module} · {item.user}</p>
+                </div>
+                <time className="shrink-0 text-right text-[11px] text-[#7e786d]" dateTime={item.createdAt}>
+                  {new Intl.DateTimeFormat("pt-BR", {
+                    timeZone: "America/Sao_Paulo",
+                    day: "2-digit",
+                    month: "2-digit",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }).format(new Date(item.createdAt))}
+                </time>
+              </div>
+            ))
+          )}
         </div>
       </section>
 

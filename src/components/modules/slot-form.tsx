@@ -976,6 +976,8 @@ function SlotVisitForm({
           {saveError ? <p className="mt-3 text-sm text-[#f0c9ad]">{saveError}</p> : null}
           {!queuedReceipt ? <div className="mt-5 border-t border-[#8aa17c]/20 pt-4">
             <WhatsAppReceiptButton
+              moduleSlug="h-caca-niquel"
+              receiptId={lastSubmission?.receiptSourceId ?? undefined}
               defaultPhone={phone}
               closedAt={lastSubmission?.closedAt}
               title="Via do cliente — WhatsApp e PDF"

@@ -203,6 +203,18 @@ enum FieldVisitType {
   GENERAL
 }
 
+enum DailyCloseStatus {
+  CLOSED
+  REOPENED
+}
+
+enum ReceiptEventType {
+  GENERATED
+  SHARED
+  DOWNLOADED
+  WHATSAPP_OPENED
+}
+
 enum EntityType {
   ORGANIZATION
   USER
@@ -225,26 +237,26 @@ enum EntityType {
 }
 
 model FieldVisit {
-  id               String         @id @default(cuid())
-  organizationId   String
-  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId         String?
-  client           Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  targetId         String?
-  clientName       String?
-  clientPhone      String?
-  createdById      String?
-  createdBy        User?          @relation("VisitCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
-  assignedToName   String?
-  visitType        FieldVisitType @default(GENERAL)
-  occurredAt       DateTime
-  checkedItems     String[]
-  incomeAmount     Decimal        @default(0) @db.Decimal(14, 2)
-  expenseAmount    Decimal        @default(0) @db.Decimal(14, 2)
-  notes            String?
-  latitude         Float?
-  longitude        Float?
-  createdAt        DateTime       @default(now())
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId       String?
+  client         Client?        @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  targetId       String?
+  clientName     String?
+  clientPhone    String?
+  createdById    String?
+  createdBy      User?          @relation("VisitCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  assignedToName String?
+  visitType      FieldVisitType @default(GENERAL)
+  occurredAt     DateTime
+  checkedItems   String[]
+  incomeAmount   Decimal        @default(0) @db.Decimal(14, 2)
+  expenseAmount  Decimal        @default(0) @db.Decimal(14, 2)
+  notes          String?
+  latitude       Float?
+  longitude      Float?
+  createdAt      DateTime       @default(now())
 
   @@index([organizationId, occurredAt])
   @@index([clientId])
@@ -297,31 +309,36 @@ model Organization {
   slotMachines             SlotMachine[]
   slotCollections          SlotCollection[]
   fieldVisits              FieldVisit[]
+  dailyCloses              DailyClose[]
+  receiptEvents            ReceiptEvent[]
 }
 
 model User {
-  id                String             @id @default(cuid())
-  organizationId    String
-  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  role              UserRole
-  status            UserStatus         @default(ACTIVE)
-  name              String
-  username          String?            @unique
-  email             String             @unique
-  phone             String?
-  passwordHash      String
-  lastLoginAt       DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  modulePermissions ModulePermission[]
-  uploadedFiles     FileAsset[]
-  createdClients    Client[]           @relation("ClientCreatedBy")
-  paymentsCreated   Payment[]          @relation("PaymentCreatedBy")
-  auditLogs         AuditLog[]
-  notesCreated      Note[]             @relation("NoteCreatedBy")
-  remindersCreated  Reminder[]         @relation("ReminderCreatedBy")
-  remindersAssigned Reminder[]         @relation("ReminderAssignedTo")
-  fieldVisits       FieldVisit[]       @relation("VisitCreatedBy")
+  id                  String             @id @default(cuid())
+  organizationId      String
+  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role                UserRole
+  status              UserStatus         @default(ACTIVE)
+  name                String
+  username            String?            @unique
+  email               String             @unique
+  phone               String?
+  passwordHash        String
+  lastLoginAt         DateTime?
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  modulePermissions   ModulePermission[]
+  uploadedFiles       FileAsset[]
+  createdClients      Client[]           @relation("ClientCreatedBy")
+  paymentsCreated     Payment[]          @relation("PaymentCreatedBy")
+  auditLogs           AuditLog[]
+  notesCreated        Note[]             @relation("NoteCreatedBy")
+  remindersCreated    Reminder[]         @relation("ReminderCreatedBy")
+  remindersAssigned   Reminder[]         @relation("ReminderAssignedTo")
+  fieldVisits         FieldVisit[]       @relation("VisitCreatedBy")
+  dailyClosesCreated  DailyClose[]       @relation("DailyCloseCreatedBy")
+  dailyClosesReopened DailyClose[]       @relation("DailyCloseReopenedBy")
+  receiptEvents       ReceiptEvent[]
 }
 
 model ModulePermission {
@@ -600,6 +617,63 @@ model AuditLog {
   @@index([organizationId, entityType, entityId])
 }
 
+/// Conferencia imutavel do caixa de um dia. Um fechamento reaberto preserva
+/// os valores originais e exige motivo; um novo fechamento atualiza o mesmo
+/// registro com uma nova fotografia dos totais calculados.
+model DailyClose {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  businessDate     DateTime         @db.Date
+  status           DailyCloseStatus @default(CLOSED)
+  expectedCash     Decimal          @default(0) @db.Decimal(14, 2)
+  expectedPix      Decimal          @default(0) @db.Decimal(14, 2)
+  expectedCard     Decimal          @default(0) @db.Decimal(14, 2)
+  expectedOther    Decimal          @default(0) @db.Decimal(14, 2)
+  expectedIncome   Decimal          @default(0) @db.Decimal(14, 2)
+  expectedExpense  Decimal          @default(0) @db.Decimal(14, 2)
+  expectedPrize    Decimal          @default(0) @db.Decimal(14, 2)
+  expectedNet      Decimal          @default(0) @db.Decimal(14, 2)
+  countedCash      Decimal          @default(0) @db.Decimal(14, 2)
+  countedPix       Decimal          @default(0) @db.Decimal(14, 2)
+  countedCard      Decimal          @default(0) @db.Decimal(14, 2)
+  countedOther     Decimal          @default(0) @db.Decimal(14, 2)
+  differenceAmount Decimal          @default(0) @db.Decimal(14, 2)
+  notes            String?
+  createdById      String?
+  createdBy        User?            @relation("DailyCloseCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  closedAt         DateTime         @default(now())
+  reopenedById     String?
+  reopenedBy       User?            @relation("DailyCloseReopenedBy", fields: [reopenedById], references: [id], onDelete: SetNull)
+  reopenedAt       DateTime?
+  reopenReason     String?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  @@unique([organizationId, businessDate])
+  @@index([organizationId, status])
+}
+
+/// Historico operacional do comprovante. "Compartilhado" significa que o
+/// celular concluiu a folha de compartilhamento; nao afirma leitura no WhatsApp.
+model ReceiptEvent {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String?
+  user           User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  module         SystemModule
+  slug           String
+  receiptId      String
+  event          ReceiptEventType
+  phone          String?
+  metadata       Json?
+  createdAt      DateTime         @default(now())
+
+  @@index([organizationId, slug, receiptId])
+  @@index([organizationId, event, createdAt])
+}
+
 /// Chave persistente de idempotencia dos formularios. Impede que o mesmo
 /// envio seja gravado duas vezes mesmo depois de reinicio da aplicacao.
 model ModuleSubmission {
@@ -624,17 +698,17 @@ model ModuleSubmission {
 model ModuleOperationReview {
   id               String       @id @default(cuid())
   organizationId   String
-  userId            String
-  module            SystemModule
-  slug              String
-  entityId          String
-  status            String
-  correctedIncome   Decimal?     @db.Decimal(14, 2)
-  correctedExpense  Decimal?     @db.Decimal(14, 2)
-  correctedResult   Decimal?     @db.Decimal(14, 2)
-  reason            String
-  createdAt         DateTime     @default(now())
-  updatedAt         DateTime     @updatedAt
+  userId           String
+  module           SystemModule
+  slug             String
+  entityId         String
+  status           String
+  correctedIncome  Decimal?     @db.Decimal(14, 2)
+  correctedExpense Decimal?     @db.Decimal(14, 2)
+  correctedResult  Decimal?     @db.Decimal(14, 2)
+  reason           String
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   @@unique([organizationId, slug, entityId])
   @@index([organizationId, module, status])
@@ -957,23 +1031,23 @@ model CondominiumMarketEntry {
 }
 
 model MarketingContract {
-  id               String         @id @default(cuid())
-  organizationId   String
-  organization     Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  name             String
-  personType       PersonType
-  cpf              String?
-  cnpj             String?
-  serviceType      String
-  contractValue    Decimal        @db.Decimal(14, 2)
-  contractDate     DateTime
-  address          String?
-  phone            String?
-  email            String?
-  signatureLink    String?
-  signatureFileId  String?
-  expenseAmount    Decimal?       @db.Decimal(14, 2)
-  paymentMethod    PaymentMethod?
+  id                  String                 @id @default(cuid())
+  organizationId      String
+  organization        Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name                String
+  personType          PersonType
+  cpf                 String?
+  cnpj                String?
+  serviceType         String
+  contractValue       Decimal                @db.Decimal(14, 2)
+  contractDate        DateTime
+  address             String?
+  phone               String?
+  email               String?
+  signatureLink       String?
+  signatureFileId     String?
+  expenseAmount       Decimal?               @db.Decimal(14, 2)
+  paymentMethod       PaymentMethod?
   status              ContractStatus         @default(DRAFT)
   pipelineStage       MarketingPipelineStage @default(LEAD)
   onboardingChecklist Json?
@@ -1048,29 +1122,29 @@ model BxClient {
 }
 
 model BxTransaction {
-  id                String          @id @default(cuid())
-  organizationId    String
-  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId          String?
-  client            Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  clientName        String
-  phone             String?
-  cpf               String?
-  cep               String?
-  street            String?
-  neighborhood      String?
-  city              String?
-  state             String?
-  collectNumber     String?
-  occurredAt        DateTime
-  agentName         String?
-  receiverName      String?
-  sentToAgentAmount Decimal?        @db.Decimal(14, 2)
-  deliveredAmount   Decimal?        @db.Decimal(14, 2)
-  incomeAmount      Decimal?        @db.Decimal(14, 2)
-  expenseAmount     Decimal?        @db.Decimal(14, 2)
-  totalAmount       Decimal         @db.Decimal(14, 2)
-  discountAmount    Decimal?        @db.Decimal(14, 2)
+  id                  String          @id @default(cuid())
+  organizationId      String
+  organization        Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId            String?
+  client              Client?         @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  clientName          String
+  phone               String?
+  cpf                 String?
+  cep                 String?
+  street              String?
+  neighborhood        String?
+  city                String?
+  state               String?
+  collectNumber       String?
+  occurredAt          DateTime
+  agentName           String?
+  receiverName        String?
+  sentToAgentAmount   Decimal?        @db.Decimal(14, 2)
+  deliveredAmount     Decimal?        @db.Decimal(14, 2)
+  incomeAmount        Decimal?        @db.Decimal(14, 2)
+  expenseAmount       Decimal?        @db.Decimal(14, 2)
+  totalAmount         Decimal         @db.Decimal(14, 2)
+  discountAmount      Decimal?        @db.Decimal(14, 2)
   /// Divida do cliente ao ENTRAR nesta operacao (puxada da operacao
   /// anterior dele). O discountAmount desta operacao abate esse saldo,
   /// podendo ser parcial -- o resto carrega pra proxima operacao.
@@ -1078,15 +1152,15 @@ model BxTransaction {
   /// Divida nova que esta operacao gera (digitada pelo funcionario quando
   /// fica "Nao recebido"), somada ao saldo que sobra pra proxima operacao.
   generatedDebtAmount Decimal?        @db.Decimal(14, 2)
-  paymentMethod     PaymentMethod?
-  employeeFilled    Boolean         @default(true)
-  screenPhotoId     String?
-  paperPhotoId      String?
-  exceptionClient   Boolean         @default(false)
-  receiptStatus     BxReceiptStatus @default(NOT_RECEIVED)
-  notes             String?
-  createdById       String?
-  createdAt         DateTime        @default(now())
+  paymentMethod       PaymentMethod?
+  employeeFilled      Boolean         @default(true)
+  screenPhotoId       String?
+  paperPhotoId        String?
+  exceptionClient     Boolean         @default(false)
+  receiptStatus       BxReceiptStatus @default(NOT_RECEIVED)
+  notes               String?
+  createdById         String?
+  createdAt           DateTime        @default(now())
 
   @@index([organizationId, occurredAt])
 }
