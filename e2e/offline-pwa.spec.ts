@@ -15,7 +15,7 @@ test.describe("PWA operacional offline", () => {
     await page.getByLabel("Usuário").fill(username!);
     await page.locator("#password").fill(password!);
     await page.getByRole("button", { name: "Entrar no painel" }).click();
-    await expect(page).toHaveURL(/\/dashboard/);
+    await expect(page).toHaveURL(/\/(dashboard|modulos)$/);
 
     await page.goto("/modulos/bx");
     await expect(page.getByRole("button", { name: /Visita/ }).first()).toBeVisible();
