@@ -24,7 +24,9 @@ test.describe("PWA operacional offline", () => {
       const names = (await caches.keys()).filter((name) => name.startsWith("infinity-operations-"));
       for (const name of names) {
         const cache = await caches.open(name);
-        if (await cache.match("/modulos/bx")) return true;
+        const metaResponse = await cache.match("/__infinity_offline_meta__");
+        const meta = metaResponse ? await metaResponse.json() : null;
+        if (meta?.routes?.includes("/modulos/bx") && await cache.match("/modulos/bx")) return true;
       }
       return false;
     }, null, { timeout: 60_000 });

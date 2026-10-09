@@ -3,6 +3,7 @@ const STATIC_CACHE = `infinity-static-${BUILD_ID}`;
 const PRIVATE_CACHE_PREFIX = "infinity-operations-";
 const PRIVATE_CACHE_BUILD_PREFIX = `${PRIVATE_CACHE_PREFIX}${BUILD_ID}-`;
 const OFFLINE_META_URL = "/__infinity_offline_meta__";
+let preparationEpoch = 0;
 
 const PUBLIC_ASSETS = [
   "/manifest.webmanifest",
@@ -85,14 +86,25 @@ async function cacheDocumentResources(cache, response) {
 
 async function prepareOfflineOperations(scope, routes) {
   if (!scope || !Array.isArray(routes) || routes.length === 0) return;
+  const epoch = preparationEpoch;
   const cacheName = privateCacheName(scope);
   const cache = await caches.open(cacheName);
   const cachedRoutes = [];
+  const requestedRoutes = [...new Set(routes)].filter(
+    (route) => typeof route === "string" && route.startsWith("/"),
+  );
 
-  for (const route of [...new Set(routes)]) {
-    if (typeof route !== "string" || !route.startsWith("/")) continue;
+  for (const route of requestedRoutes) {
+    if (epoch !== preparationEpoch) {
+      await caches.delete(cacheName);
+      return;
+    }
     try {
       const response = await fetch(route, { credentials: "include", cache: "no-store" });
+      if (epoch !== preparationEpoch) {
+        await caches.delete(cacheName);
+        return;
+      }
       if (!isCacheableAuthenticatedResponse(response)) continue;
       await cache.put(route, response.clone());
       await cacheDocumentResources(cache, response);
@@ -109,7 +121,9 @@ async function prepareOfflineOperations(scope, routes) {
       headers: { "Content-Type": "application/json" },
     }),
   );
-  await clearPrivateCaches(cacheName);
+  // Uma falha isolada nao pode apagar a versao anterior que ainda funciona
+  // offline. O cache antigo so sai quando todas as rotas foram renovadas.
+  if (cachedRoutes.length === requestedRoutes.length) await clearPrivateCaches(cacheName);
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   windows.forEach((client) => client.postMessage({ type: "OFFLINE_OPERATIONS_READY", routes: cachedRoutes }));
 }
@@ -159,7 +173,10 @@ self.addEventListener("fetch", (event) => {
   if (request.method === "POST" && url.pathname === "/api/auth/logout") {
     event.respondWith(
       fetch(request).then(async (response) => {
-        if (response.status >= 200 && response.status < 400) await clearPrivateCaches();
+        if (response.status >= 200 && response.status < 400) {
+          preparationEpoch += 1;
+          await clearPrivateCaches();
+        }
         return response;
       }),
     );
