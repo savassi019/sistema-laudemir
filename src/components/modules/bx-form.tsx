@@ -127,20 +127,6 @@ function getFile(value: unknown) {
   return file instanceof File ? file : undefined;
 }
 
-async function uploadFile(file: File, category: string) {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("category", category);
-
-  const response = await fetch("/api/upload", { method: "POST", body: formData });
-  if (!response.ok) {
-    return null;
-  }
-
-  const result = (await response.json()) as { id: string };
-  return result.id;
-}
-
 type LoadedBxClient = { clientName: string; phone: string; debt: number };
 
 /**
@@ -352,12 +338,6 @@ export function BxForm({
       Math.max(clientDebt - Number(values.discountAmount), 0) +
       generatedDebtAmount;
 
-    const [screenPhotoFileId, paperPhotoFileId] = navigator.onLine
-      ? await Promise.all([
-          screenPhoto ? uploadFile(screenPhoto, "PROOF") : Promise.resolve(null),
-          paperPhoto ? uploadFile(paperPhoto, "PROOF") : Promise.resolve(null),
-        ])
-      : [null, null];
     let savedRecord: SavedModuleRecordResponse["record"];
 
     const payload = {
@@ -381,8 +361,8 @@ export function BxForm({
           receiptStatus,
           exceptionClient: values.exceptionClient,
           notes: values.notes,
-          screenPhotoFileId,
-          paperPhotoFileId,
+          screenPhotoFileId: null,
+          paperPhotoFileId: null,
     };
     try {
       const result = await postJsonWithOfflineQueue<SavedModuleRecordResponse>({
@@ -390,12 +370,10 @@ export function BxForm({
         payload,
         requestKey: submission.key(),
         label: `Operacao BX de ${values.clientName}`,
-        files: navigator.onLine
-          ? undefined
-          : [
-              ...(screenPhoto ? [{ file: screenPhoto, category: "PROOF", payloadPath: "screenPhotoFileId" }] : []),
-              ...(paperPhoto ? [{ file: paperPhoto, category: "PROOF", payloadPath: "paperPhotoFileId" }] : []),
-            ],
+        files: [
+          ...(screenPhoto ? [{ file: screenPhoto, category: "PROOF", payloadPath: "screenPhotoFileId" }] : []),
+          ...(paperPhoto ? [{ file: paperPhoto, category: "PROOF", payloadPath: "paperPhotoFileId" }] : []),
+        ],
       });
       submission.complete();
       if (result.queued) {

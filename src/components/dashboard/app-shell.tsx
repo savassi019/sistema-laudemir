@@ -8,11 +8,11 @@ import { useEffect, useState } from "react";
 import { cn } from "@/lib/cn";
 import { primaryNavigation } from "@/lib/navigation";
 import type { SessionData } from "@/types/app";
+import { OfflineOperationBootstrap } from "@/components/pwa/offline-operation-bootstrap";
 
 import { HeaderBrand } from "./header-brand";
 import { LeftSidebar, SIDEBAR_STORAGE_KEY } from "./left-sidebar";
 import { MobileNav } from "./mobile-nav";
-import { OfflineBanner } from "./offline-banner";
 import { PendingSyncBanner } from "./pending-sync-banner";
 
 export function AppShell({
@@ -62,6 +62,7 @@ export function AppShell({
 
   return (
     <div className="relative flex min-h-screen bg-[radial-gradient(circle_at_top_left,_rgba(209,160,79,0.12),_transparent_30%),radial-gradient(circle_at_bottom_right,_rgba(80,111,96,0.14),_transparent_25%),linear-gradient(180deg,#0b0f0e_0%,#101613_48%,#070908_100%)]">
+      <OfflineOperationBootstrap session={session} />
       {/* Grid texture */}
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(245,241,232,0.028)_1px,transparent_1px),linear-gradient(90deg,rgba(245,241,232,0.028)_1px,transparent_1px)] bg-[size:72px_72px] opacity-35" />
 
@@ -120,8 +121,7 @@ export function AppShell({
         </main>
 
         <MobileNav role={session.role} />
-        <PendingSyncBanner />
-        <OfflineBanner />
+        <PendingSyncBanner scope={`${session.organizationId}:${session.userId}`} />
       </div>
     </div>
   );

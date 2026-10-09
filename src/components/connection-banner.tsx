@@ -124,7 +124,7 @@ export function ConnectionBanner() {
           : <ServerCrash className="size-4 shrink-0" />}
         <span>
           {isOffline
-            ? "Sem conexão — os dados digitados serão salvos quando a internet voltar."
+            ? "Modo offline — operações confirmadas ficam protegidas neste aparelho e serão enviadas quando a internet voltar."
             : "Servidor temporariamente indisponível — aguarde, tentando reconectar…"}
         </span>
       </div>

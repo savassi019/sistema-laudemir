@@ -43,19 +43,6 @@ function getFile(value: unknown) {
   return file instanceof File ? file : undefined;
 }
 
-async function uploadFile(file: File, category: string) {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("category", category);
-  const response = await fetch("/api/upload", { method: "POST", body: formData });
-  if (!response.ok) {
-    const result = (await response.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(result?.error ?? "Nao foi possivel enviar a foto.");
-  }
-  const result = (await response.json()) as { id: string };
-  return result.id;
-}
-
 function todayStr() {
   const today = new Date();
   return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
@@ -660,7 +647,6 @@ function SlotVisitForm({
   } | null>(null);
   const savingRef = useRef(false);
   const visitKeyRef = useRef<string | null>(null);
-  const uploadedPhotosRef = useRef(new Map<string, { file: File; id: string }>());
 
   const form = useForm<VisitInput, unknown, VisitValues>({
     resolver: zodResolver(visitSchema),
@@ -796,111 +782,70 @@ function SlotVisitForm({
     const included = reviewValues.machines.filter((machine) => machine.included);
     try {
       visitKeyRef.current ??= globalThis.crypto.randomUUID();
-      if (!navigator.onLine) {
-        const files: Array<{ file: File; payloadPath: string; category: string }> = [];
-        const queuedMachines = included.map((machine, index) => {
-          const screenPhoto = getFile(machine.screenPhoto);
-          if (!screenPhoto) throw new Error(`Falta a foto da maquina ${machine.clientMachineNumber}.`);
-          files.push({ file: screenPhoto, payloadPath: `machines.${index}.screenPhotoFileId`, category: "PHOTO" });
-          return {
-            machineId: machine.machineId,
-            previousIncome: Number(machine.previousIncome),
-            currentIncome: Number(machine.currentIncome),
-            previousExpense: Number(machine.previousExpense),
-            currentExpense: Number(machine.currentExpense),
-            percentageSplit: Number(machine.percentageSplit),
-            optionalGreedAmount: Number(machine.optionalGreedAmount),
-            previousMachineDebt: Number(machine.previousMachineDebt),
-            finalMachineDebt: Number(machine.finalMachineDebt),
-            screenPhotoFileId: null,
-            notes: machine.notes,
-          };
+      const requestKey = visitKeyRef.current;
+      const files: Array<{ file: File; payloadPath: string; category: string }> = [];
+      const machines = included.map((machine, index) => {
+        const screenPhoto = getFile(machine.screenPhoto);
+        if (!screenPhoto) throw new Error(`Falta a foto da máquina ${machine.clientMachineNumber}.`);
+        files.push({
+          file: screenPhoto,
+          payloadPath: `machines.${index}.screenPhotoFileId`,
+          category: "PHOTO",
         });
-        const requestKey = visitKeyRef.current;
-        const queued = await postJsonWithOfflineQueue<never>({
-          endpoint: "/api/modules/h-caca-niquel/visits",
-          requestKey,
-          label: `Visita H de ${clientName}`,
-          files,
-          payload: {
-            visitKey: requestKey,
-            clientName,
-            occurredAt: reviewValues.occurredAt,
-            paymentMethod: reviewValues.paymentMethod,
-            previousCustomerDebt: Number(reviewValues.previousCustomerDebt),
-            customerDebtDiscounted: Number(reviewValues.customerDebtDiscounted),
-            machines: queuedMachines,
-          },
-        });
-        if (queued.queued) {
-          openReceiptPreview();
-          setQueuedReceipt(true);
-          setLastSubmission({
-            paymentMethod: reviewValues.paymentMethod,
-            occurredAt: reviewValues.occurredAt,
-            closedAt: new Date().toISOString(),
-            receiptSourceId: requestKey,
-          });
-          setReviewValues(null);
-          visitKeyRef.current = null;
-          return;
-        }
-      }
-
-      const uploadedMachines = await Promise.all(
-        included.map(async (machine) => {
-          const screenPhoto = getFile(machine.screenPhoto);
-          if (!screenPhoto) throw new Error(`Falta a foto da máquina ${machine.clientMachineNumber}.`);
-          const cached = uploadedPhotosRef.current.get(machine.machineId);
-          let screenPhotoFileId = cached?.file === screenPhoto ? cached.id : null;
-          if (!screenPhotoFileId) {
-            screenPhotoFileId = await uploadFile(screenPhoto, "PHOTO");
-            uploadedPhotosRef.current.set(machine.machineId, { file: screenPhoto, id: screenPhotoFileId });
-          }
-          return {
-            machineId: machine.machineId,
-            previousIncome: Number(machine.previousIncome),
-            currentIncome: Number(machine.currentIncome),
-            previousExpense: Number(machine.previousExpense),
-            currentExpense: Number(machine.currentExpense),
-            percentageSplit: Number(machine.percentageSplit),
-            optionalGreedAmount: Number(machine.optionalGreedAmount),
-            previousMachineDebt: Number(machine.previousMachineDebt),
-            finalMachineDebt: Number(machine.finalMachineDebt),
-            screenPhotoFileId,
-            notes: machine.notes,
-          };
-        }),
-      );
-
-      const response = await fetch("/api/modules/h-caca-niquel/visits", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          visitKey: visitKeyRef.current,
+        return {
+          machineId: machine.machineId,
+          previousIncome: Number(machine.previousIncome),
+          currentIncome: Number(machine.currentIncome),
+          previousExpense: Number(machine.previousExpense),
+          currentExpense: Number(machine.currentExpense),
+          percentageSplit: Number(machine.percentageSplit),
+          optionalGreedAmount: Number(machine.optionalGreedAmount),
+          previousMachineDebt: Number(machine.previousMachineDebt),
+          finalMachineDebt: Number(machine.finalMachineDebt),
+          screenPhotoFileId: null,
+          notes: machine.notes,
+        };
+      });
+      const result = await postJsonWithOfflineQueue<{
+        visitKey?: string;
+        results: MachineResult[];
+      }>({
+        endpoint: "/api/modules/h-caca-niquel/visits",
+        requestKey,
+        label: `Visita H de ${clientName}`,
+        files,
+        payload: {
+          visitKey: requestKey,
           clientName,
           occurredAt: reviewValues.occurredAt,
           paymentMethod: reviewValues.paymentMethod,
           previousCustomerDebt: Number(reviewValues.previousCustomerDebt),
           customerDebtDiscounted: Number(reviewValues.customerDebtDiscounted),
-          machines: uploadedMachines,
-        }),
+          machines,
+        },
       });
-      const responseBody = (await response.json().catch(() => null)) as
-        | { error?: string; visitKey?: string; results?: MachineResult[] }
-        | null;
-      if (!response.ok || !responseBody?.results) {
-        throw new Error(responseBody?.error ?? "Não foi possível salvar a visita.");
+      if (result.queued) {
+        openReceiptPreview();
+        setQueuedReceipt(true);
+        setLastSubmission({
+          paymentMethod: reviewValues.paymentMethod,
+          occurredAt: reviewValues.occurredAt,
+          closedAt: new Date().toISOString(),
+          receiptSourceId: requestKey,
+        });
+        setReviewValues(null);
+        visitKeyRef.current = null;
+        return;
       }
 
-      setResults(responseBody.results);
+      setResults(result.data.results);
       setIsReceiptPreview(false);
       setQueuedReceipt(false);
       setLastSubmission({
         paymentMethod: reviewValues.paymentMethod,
         occurredAt: reviewValues.occurredAt,
-        closedAt: responseBody.results[0]?.closedAt ?? new Date().toISOString(),
-        receiptSourceId: responseBody.visitKey ?? visitKeyRef.current,
+        closedAt: result.data.results[0]?.closedAt ?? new Date().toISOString(),
+        receiptSourceId: result.data.visitKey ?? requestKey,
       });
       setReviewValues(null);
     } catch (error) {
@@ -1027,7 +972,6 @@ function SlotVisitForm({
             setQueuedReceipt(false);
             setSaveError(null);
             visitKeyRef.current = null;
-            uploadedPhotosRef.current.clear();
             setReloadVersion((current) => current + 1);
           }}
           className="inline-flex min-h-11 items-center text-xs font-semibold text-[#9a958b] underline underline-offset-2 transition hover:text-white active:text-white"

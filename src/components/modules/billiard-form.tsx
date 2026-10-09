@@ -186,20 +186,6 @@ function getFileName(value: unknown) {
   return getFile(value)?.name;
 }
 
-async function uploadFile(file: File, category: string) {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("category", category);
-
-  const response = await fetch("/api/upload", { method: "POST", body: formData });
-  if (!response.ok) {
-    return null;
-  }
-
-  const result = (await response.json()) as { id: string };
-  return result.id;
-}
-
 function buildPointCode(routeNumber: number, pointName: string) {
   const route = String(routeNumber || 1).padStart(2, "0");
   const slug = pointName
@@ -573,20 +559,16 @@ export function BilliardForm({
     if (photoFile) filesToUpload.push({ file: photoFile, category: "PHOTO" });
     if (contractFile) filesToUpload.push({ file: contractFile, category: "CONTRACT" });
 
-    const uploadedIds = navigator.onLine
-      ? await Promise.all(filesToUpload.map(({ file, category }) => uploadFile(file, category)))
-      : [];
-    const photoFileIds = uploadedIds.filter((id): id is string => Boolean(id));
-
     const payload = {
       ...values,
       pointCode: values.pointCode?.trim() || buildPointCode(values.routeNumber, values.pointName),
       photoNames,
-      photoFileIds,
+      photoFileIds: [],
     };
 
     let source = "local";
     let savedRecord: SavedModuleRecordResponse["record"];
+    let photoFileIds: string[] = [];
 
     try {
       const result = await postJsonWithOfflineQueue<SavedModuleRecordResponse>({
@@ -594,13 +576,11 @@ export function BilliardForm({
         payload,
         requestKey: submission.key(),
         label: `Fechamento de ${values.pointName}`,
-        files: navigator.onLine
-          ? undefined
-          : filesToUpload.map(({ file, category }, index) => ({
-              file,
-              category,
-              payloadPath: `photoFileIds.${index}`,
-            })),
+        files: filesToUpload.map(({ file, category }, index) => ({
+          file,
+          category,
+          payloadPath: `photoFileIds.${index}`,
+        })),
       });
       submission.complete();
       if (result.queued) {
@@ -611,6 +591,9 @@ export function BilliardForm({
       savedSubmissionRef.current = true;
       source = result.data.source ?? "local";
       savedRecord = result.data.record;
+      photoFileIds = filesToUpload
+        .map((_, index) => result.uploadedFileIds[`photoFileIds.${index}`])
+        .filter((id): id is string => Boolean(id));
       setSaveStatus("saved");
       if (source === "database") {
         // Aguarda a atualizacao do ponto antes de abrir o comprovante. Quando

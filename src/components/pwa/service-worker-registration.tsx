@@ -18,7 +18,7 @@ export function ServiceWorkerRegistration() {
       return;
     }
 
-    navigator.serviceWorker.register("/sw.js").catch(() => {});
+    navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" }).catch(() => {});
   }, []);
   return null;
 }

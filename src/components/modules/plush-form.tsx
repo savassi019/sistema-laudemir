@@ -120,20 +120,6 @@ function getFile(value: unknown) {
   return file instanceof File ? file : undefined;
 }
 
-async function uploadFile(file: File, category: string) {
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("category", category);
-
-  const response = await fetch("/api/upload", { method: "POST", body: formData });
-  if (!response.ok) {
-    return null;
-  }
-
-  const result = (await response.json()) as { id: string };
-  return result.id;
-}
-
 type LoadedMachine = { clientName: string; phone: string; code: string; name: string; machineNumber: string; coinPhotoRule: boolean; giftPhotoRule: boolean };
 
 export function PlushForm({ hideFinancials = false, initialClientName = "", initialPhone = "", initialClientId }: { hideFinancials?: boolean; initialClientName?: string; initialPhone?: string; initialClientId?: string } = {}) {
@@ -233,12 +219,6 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
     const coinPhoto = getFile(values.coinPhoto);
     const giftPhoto = getFile(values.giftPhoto);
 
-    const [coinPhotoFileId, giftPhotoFileId] = navigator.onLine
-      ? await Promise.all([
-          coinPhoto ? uploadFile(coinPhoto, "PHOTO") : Promise.resolve(null),
-          giftPhoto ? uploadFile(giftPhoto, "PHOTO") : Promise.resolve(null),
-        ])
-      : [null, null];
     let savedRecord: SavedModuleRecordResponse["record"];
 
     const payload = {
@@ -264,8 +244,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
           compensationStatus: values.compensationStatus,
           noteiro: values.noteiro,
           notes: values.notes,
-          coinPhotoFileId,
-          giftPhotoFileId,
+          coinPhotoFileId: null,
+          giftPhotoFileId: null,
     };
     try {
       const result = await postJsonWithOfflineQueue<SavedModuleRecordResponse>({
@@ -273,12 +253,10 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
         payload,
         requestKey: submission.key(),
         label: `Fechamento GRUA de ${values.clientName}`,
-        files: navigator.onLine
-          ? undefined
-          : [
-              ...(coinPhoto ? [{ file: coinPhoto, category: "PHOTO", payloadPath: "coinPhotoFileId" }] : []),
-              ...(giftPhoto ? [{ file: giftPhoto, category: "PHOTO", payloadPath: "giftPhotoFileId" }] : []),
-            ],
+        files: [
+          ...(coinPhoto ? [{ file: coinPhoto, category: "PHOTO", payloadPath: "coinPhotoFileId" }] : []),
+          ...(giftPhoto ? [{ file: giftPhoto, category: "PHOTO", payloadPath: "giftPhotoFileId" }] : []),
+        ],
       });
       submission.complete();
       if (result.queued) {
