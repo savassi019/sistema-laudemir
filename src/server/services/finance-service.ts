@@ -5,6 +5,7 @@ import { z } from "zod";
 import { demoFinance } from "@/data/demo";
 import { canViewCalculatedFinancials } from "@/lib/access-policy";
 import { currentBusinessDayRange } from "@/lib/business-date";
+import { calculateReceivedInterest, isCreditOverdue } from "@/lib/credit-finance";
 import { formatCurrency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import {
@@ -73,6 +74,7 @@ const registerModulePaymentSchema = z.object({
   amount: z.coerce.number().min(0.01, "Informe o valor pago."),
   paymentMethod: z.string().min(1, "Informe a forma de pagamento."),
   notes: z.string().optional(),
+  proofFileId: z.string().min(1).max(191).nullish(),
 });
 
 const updateModuleFinancialEntrySchema = z.object({
@@ -119,6 +121,9 @@ export type ModuleFinancialEntryItem = {
   totalAmount: number;
   paidAmount: number;
   remainingAmount: number;
+  interestAmount: number;
+  receivedInterest: number;
+  installmentsCount: number;
   paymentMethod: string | null;
   origin: "MANUAL" | "OPERATION";
   category: string;
@@ -129,6 +134,7 @@ export type ModuleFinancialEntryItem = {
   details: string[];
   notes: string | null;
   dueDate: string | null;
+  canRegisterPayment: boolean;
   payments: ModuleFinancialPaymentItem[];
   createdAt: string;
 };
@@ -266,24 +272,65 @@ function mapManualFinancialEntry(
   entry: FinancialEntryWithPayments,
   operatorName: string | null,
 ): ModuleFinancialEntryItem {
+  const totalAmount = Number(entry.totalAmount);
+  const paidAmount = Number(entry.paidAmount);
+  const remainingAmount = Number(entry.remainingAmount);
+  const interestAmount = Number(entry.interestAmount);
+  const linkedCredit =
+    entry.module === "MACHINE" && entry.sourceEntityType === "MACHINE_CONTRACT";
+  const status = isCreditOverdue({
+    dueDate: entry.dueDate,
+    remainingAmount,
+    status: entry.status,
+  })
+    ? "OVERDUE"
+    : (entry.status as ModuleFinancialStatus);
+
   return {
     id: entry.id,
     description: entry.description,
     direction: entry.direction,
-    status: entry.status as ModuleFinancialStatus,
-    totalAmount: Number(entry.totalAmount),
-    paidAmount: Number(entry.paidAmount),
-    remainingAmount: Number(entry.remainingAmount),
+    status,
+    totalAmount,
+    paidAmount,
+    remainingAmount,
+    interestAmount,
+    receivedInterest: calculateReceivedInterest(paidAmount, interestAmount),
+    installmentsCount: entry.installmentsCount,
     paymentMethod: entry.paymentMethod,
-    origin: "MANUAL",
-    category: entry.direction === "INCOME" ? "MANUAL_INCOME" : "MANUAL_EXPENSE",
-    categoryLabel: entry.direction === "INCOME" ? "Entrada avulsa" : "Despesa avulsa",
-    clientName: null,
+    origin: entry.sourceEntityId ? "OPERATION" : "MANUAL",
+    category: linkedCredit
+      ? entry.direction === "INCOME"
+        ? "CREDIT_RECEIVABLE"
+        : "CREDIT_EXPENSE"
+      : entry.direction === "INCOME"
+        ? "MANUAL_INCOME"
+        : "MANUAL_EXPENSE",
+    categoryLabel: linkedCredit
+      ? entry.direction === "INCOME"
+        ? "Empréstimo a receber"
+        : "Despesa do empréstimo"
+      : entry.direction === "INCOME"
+        ? "Entrada avulsa"
+        : "Despesa avulsa",
+    clientName: linkedCredit
+      ? entry.description.replace(/^Cobranca de /, "").replace(/^Despesa do emprestimo de /, "")
+      : null,
     operatorName,
-    sourceEntityId: null,
-    details: [],
+    sourceEntityId: entry.sourceEntityId,
+    details: linkedCredit
+      ? [
+          `Parcelas: ${entry.installmentsCount}`,
+          `Juros contratados: ${formatCurrency(interestAmount)}`,
+          `Juros recebidos: ${formatCurrency(calculateReceivedInterest(paidAmount, interestAmount))}`,
+        ]
+      : [],
     notes: entry.notes,
     dueDate: entry.dueDate?.toISOString() ?? null,
+    canRegisterPayment:
+      entry.direction === "INCOME" &&
+      !["PAID", "CANCELLED"].includes(entry.status) &&
+      remainingAmount > 0,
     payments: entry.payments.map((payment) => ({
       id: payment.id,
       amount: Number(payment.amount),
@@ -332,10 +379,28 @@ export async function listModuleFinancialEntries(
           },
         }
       : {};
+  const entryDateWhere =
+    effectiveRange?.from || effectiveRange?.to
+      ? {
+          OR: [
+            dateWhere,
+            {
+              payments: {
+                some: {
+                  paymentDate: {
+                    ...(effectiveRange.from ? { gte: effectiveRange.from } : {}),
+                    ...(effectiveRange.to ? { lte: effectiveRange.to } : {}),
+                  },
+                },
+              },
+            },
+          ],
+        }
+      : {};
 
   const [entries, records] = await Promise.all([
     prisma.financialEntry.findMany({
-      where: { organizationId: session.organizationId, module, ...dateWhere },
+      where: { organizationId: session.organizationId, module, ...entryDateWhere },
       include: financialEntryInclude,
       orderBy: { createdAt: "desc" },
     }),
@@ -364,7 +429,12 @@ export async function listModuleFinancialEntries(
   // modulo) fica invisivel nessa aba. Mesma fonte que o Relatorio usa,
   // nunca duplica. Quando o modulo fornece a quebra financeira, preservamos
   // premio, desconto e demais categorias como linhas da mesma operacao.
-  const operacionais: ModuleFinancialEntryItem[] = records.flatMap((r) => {
+  const linkedSourceIds = new Set(
+    entries.map((entry) => entry.sourceEntityId).filter((id): id is string => Boolean(id)),
+  );
+  const operacionais: ModuleFinancialEntryItem[] = records
+    .filter((record) => !linkedSourceIds.has(record.id))
+    .flatMap((r) => {
     const operatorName =
       r.operatorName ??
       (r.summary.startsWith("Funcionário: ") ? r.summary.slice("Funcionário: ".length) : null);
@@ -406,6 +476,9 @@ export async function listModuleFinancialEntries(
           totalAmount: part.amount,
           paidAmount: status === "PAID" ? part.amount : 0,
           remainingAmount: status === "PAID" ? 0 : part.amount,
+          interestAmount: 0,
+          receivedInterest: 0,
+          installmentsCount: 1,
           paymentMethod: r.paymentMethod ?? null,
           origin: "OPERATION" as const,
           category: part.category,
@@ -416,6 +489,7 @@ export async function listModuleFinancialEntries(
           details: r.details,
           notes: null,
           dueDate: null,
+          canRegisterPayment: false,
           payments: [],
           createdAt: r.createdAt,
         };
@@ -573,6 +647,18 @@ export async function registerModuleFinancialPayment(
   const amount = Math.round(input.amount * 100) / 100;
   const method = paymentMethodMap[input.paymentMethod] ?? "OTHER";
 
+  if (input.proofFileId) {
+    const proof = await prisma.fileAsset.findFirst({
+      where: {
+        id: input.proofFileId,
+        organizationId: session.organizationId,
+        category: { in: ["PROOF", "PHOTO"] },
+      },
+      select: { id: true },
+    });
+    if (!proof) throw new Error("O comprovante enviado nao pertence a esta empresa.");
+  }
+
   await prisma.$transaction(async (tx) => {
     const existing = await tx.financialEntry.findFirstOrThrow({
       where: {
@@ -588,8 +674,26 @@ export async function registerModuleFinancialPayment(
     if (remainingAmount <= 0) throw new Error("Este lancamento ja foi pago.");
     if (amount > remainingAmount) throw new Error("O pagamento supera o saldo restante.");
 
-    const paidAmount = Math.round((Number(existing.paidAmount) + amount) * 100) / 100;
-    const remaining = Math.round((remainingAmount - amount) * 100) / 100;
+    const updatedCount = await tx.financialEntry.updateMany({
+      where: {
+        id,
+        organizationId: session.organizationId,
+        module,
+        status: { not: "CANCELLED" },
+        remainingAmount: { gte: amount },
+      },
+      data: {
+        paidAmount: { increment: amount },
+        remainingAmount: { decrement: amount },
+      },
+    });
+    if (updatedCount.count !== 1) {
+      throw new Error("O saldo mudou durante o pagamento. Atualize a tela e confira novamente.");
+    }
+
+    const updatedEntry = await tx.financialEntry.findUniqueOrThrow({ where: { id } });
+    const paidAmount = Number(updatedEntry.paidAmount);
+    const remaining = Number(updatedEntry.remainingAmount);
     const status = remaining === 0 ? "PAID" : "PARTIAL";
     const payment = await tx.payment.create({
       data: {
@@ -597,6 +701,7 @@ export async function registerModuleFinancialPayment(
         financialEntryId: id,
         amount,
         method,
+        proofFileId: input.proofFileId ?? null,
         notes: input.notes,
         createdById: session.userId,
       },
@@ -606,12 +711,20 @@ export async function registerModuleFinancialPayment(
       where: { id },
       data: {
         status,
-        paidAmount,
-        remainingAmount: remaining,
         paidAt: status === "PAID" ? new Date() : null,
         paymentMethod: method,
       },
     });
+
+    if (existing.sourceEntityType === "MACHINE_CONTRACT" && existing.sourceEntityId) {
+      await tx.machineContract.updateMany({
+        where: {
+          id: existing.sourceEntityId,
+          organizationId: session.organizationId,
+        },
+        data: { status: status === "PAID" ? "CLOSED" : "ACTIVE" },
+      });
+    }
 
     await tx.auditLog.create({
       data: {
@@ -625,7 +738,7 @@ export async function registerModuleFinancialPayment(
         newData: { amount, paidAmount, remainingAmount: remaining, status, method },
       },
     });
-  });
+  }, { isolationLevel: "Serializable" });
 
   return getManualFinancialEntryItem(session, id);
 }

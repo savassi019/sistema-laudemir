@@ -25,6 +25,8 @@ export type OfflineUpload = {
   fileType?: string;
   lastModified?: number;
   uploadedFileId?: string;
+  status?: "waiting" | "uploading" | "uploaded" | "attention";
+  lastError?: string;
 };
 
 export type OfflineSubmission = {
@@ -309,6 +311,8 @@ async function stageSubmission(item: OfflineSubmission, files: PendingFile[] = [
       fileType: pendingFile.file.type,
       lastModified: pendingFile.file.lastModified,
       uploadedFileId: previous?.uploadedFileId,
+      status: previous?.uploadedFileId ? "uploaded" : "waiting",
+      lastError: previous?.lastError,
     } satisfies OfflineUpload;
   });
   const staged = { ...item, uploads };
@@ -386,24 +390,70 @@ async function sendSubmission<T>(original: OfflineSubmission) {
     let fileId = upload.uploadedFileId;
     if (!fileId) {
       const file = await readFile(upload.fileKey);
-      if (!file) throw new OfflineDataError(`Foto offline nao encontrada: ${upload.fileName}.`);
+      if (!file) {
+        upload.status = "attention";
+        upload.lastError = `Foto offline nao encontrada: ${upload.fileName}.`;
+        const uploads = [...(item.uploads ?? [])];
+        uploads[index] = upload;
+        item = { ...item, uploads };
+        await saveSubmission(item);
+        throw new OfflineDataError(upload.lastError);
+      }
+      upload.status = "uploading";
+      upload.lastError = undefined;
+      let uploads = [...(item.uploads ?? [])];
+      uploads[index] = upload;
+      item = { ...item, uploads };
+      await saveSubmission(item);
       const formData = new FormData();
       formData.append("file", file, upload.fileName);
       formData.append("category", upload.category);
-      const response = await fetch("/api/upload", {
-        method: "POST",
-        body: formData,
-        signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
-      });
-      if (!response.ok) throw new HttpResponseError(await readError(response), response.status);
+      let response: Response;
+      try {
+        response = await fetch("/api/upload", {
+          method: "POST",
+          body: formData,
+          signal: AbortSignal.timeout(UPLOAD_TIMEOUT_MS),
+        });
+      } catch (error) {
+        upload.status = "waiting";
+        upload.lastError = "Sem conexao para enviar esta foto.";
+        uploads = [...(item.uploads ?? [])];
+        uploads[index] = upload;
+        item = { ...item, uploads };
+        await saveSubmission(item);
+        throw error;
+      }
+      if (!response.ok) {
+        const message = await readError(response);
+        upload.status = classifyOfflineResponseStatus(response.status) === "attention"
+          ? "attention"
+          : "waiting";
+        upload.lastError = message;
+        uploads = [...(item.uploads ?? [])];
+        uploads[index] = upload;
+        item = { ...item, uploads };
+        await saveSubmission(item);
+        throw new HttpResponseError(message, response.status);
+      }
       const uploaded = (await response.json()) as { id?: string };
-      if (!uploaded.id) throw new OfflineDataError(`O servidor nao confirmou a foto ${upload.fileName}.`);
+      if (!uploaded.id) {
+        upload.status = "attention";
+        upload.lastError = `O servidor nao confirmou a foto ${upload.fileName}.`;
+        uploads = [...(item.uploads ?? [])];
+        uploads[index] = upload;
+        item = { ...item, uploads };
+        await saveSubmission(item);
+        throw new OfflineDataError(upload.lastError);
+      }
       fileId = uploaded.id;
       // Mantem o ID tambem no objeto recebido pelo chamador. Se o envio do
       // fechamento falhar depois do upload, markFailure nao pode apagar essa
       // confirmacao e provocar outro upload da mesma foto na tentativa seguinte.
       upload.uploadedFileId = fileId;
-      const uploads = [...(item.uploads ?? [])];
+      upload.status = "uploaded";
+      upload.lastError = undefined;
+      uploads = [...(item.uploads ?? [])];
       uploads[index] = upload;
       item = { ...item, uploads };
       await saveSubmission(item, false);

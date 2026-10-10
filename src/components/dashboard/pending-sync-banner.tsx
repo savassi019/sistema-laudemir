@@ -130,6 +130,31 @@ export function PendingSyncBanner({ scope }: { scope: string }) {
               <p className="mt-1 text-[11px] text-[#a99d85]">
                 {new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(new Date(item.createdAt))}
               </p>
+              {(item.uploads?.length ?? 0) > 0 ? (
+                <div className="mt-2 space-y-1.5 rounded-lg border border-white/[0.07] bg-black/15 p-2">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-[#c8b991]">
+                    Fotos e comprovantes {item.uploads?.filter((upload) => upload.uploadedFileId).length}/{item.uploads?.length}
+                  </p>
+                  {item.uploads?.map((upload) => {
+                    const status = upload.uploadedFileId ? "uploaded" : (upload.status ?? "waiting");
+                    const label = status === "uploaded"
+                      ? "Enviado"
+                      : status === "uploading"
+                        ? "Enviando"
+                        : status === "attention"
+                          ? "Conferir"
+                          : "Aguardando";
+                    return (
+                      <div key={upload.fileKey} className="flex items-start justify-between gap-2 text-[11px]">
+                        <span className="min-w-0 truncate text-[#d8d0c0]">{upload.fileName}</span>
+                        <span className={status === "attention" ? "shrink-0 text-[#fca5a5]" : status === "uploaded" ? "shrink-0 text-[#bfe3c2]" : "shrink-0 text-[#f8dfae]"}>
+                          {label}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : null}
               {item.lastError ? <p className="mt-1 text-[11px] leading-4 text-[#fca5a5]">{item.lastError}</p> : null}
             </div>
           ))}

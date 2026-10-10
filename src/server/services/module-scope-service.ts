@@ -4,6 +4,7 @@ import {
   type ModuleSlug,
 } from "@/server/services/module-record-service";
 import { currentBusinessDayRange } from "@/lib/business-date";
+import { prisma } from "@/lib/prisma";
 import type { ModuleName, SessionData } from "@/types/app";
 
 export type ModuleScopeSummary = {
@@ -102,6 +103,54 @@ export async function getModuleScopeSummary(
         : listModuleRecords(session, slug, SCOPE_RECORD_CAP, recordsRange),
       listModuleClients(session, slug, SCOPE_RECORD_CAP),
     ]);
+
+    if (slug === "credito-financeiro") {
+      if (session.role === "STAFF") {
+        return { ...fallbackSummary, clientsCount: clients.length };
+      }
+      const paymentRange = session.role === "ADMIN" ? currentBusinessDayRange() : null;
+      const entries = await prisma.financialEntry.findMany({
+        where: {
+          organizationId: session.organizationId,
+          module: "MACHINE",
+          sourceEntityType: "MACHINE_CONTRACT",
+          status: { not: "CANCELLED" },
+          ...(paymentRange
+            ? {
+                payments: {
+                  some: { paymentDate: { gte: paymentRange.from, lte: paymentRange.to } },
+                },
+              }
+            : {}),
+        },
+        include: {
+          payments: paymentRange
+            ? { where: { paymentDate: { gte: paymentRange.from, lte: paymentRange.to } } }
+            : true,
+        },
+      });
+      const incomeAmount = entries
+        .filter((entry) => entry.direction === "INCOME")
+        .flatMap((entry) => entry.payments)
+        .reduce((sum, payment) => sum + Number(payment.amount), 0);
+      const expenseAmount = entries
+        .filter((entry) => entry.direction === "EXPENSE")
+        .flatMap((entry) => entry.payments)
+        .reduce((sum, payment) => sum + Number(payment.amount), 0);
+      const pendingAmount = session.role === "OWNER"
+        ? entries
+            .filter((entry) => entry.direction === "INCOME")
+            .reduce((sum, entry) => sum + Number(entry.remainingAmount), 0)
+        : 0;
+
+      return {
+        clientsCount: clients.length,
+        incomeAmount,
+        expenseAmount,
+        pendingAmount,
+        balanceAmount: incomeAmount - expenseAmount,
+      };
+    }
 
     const incomeAmount = records.reduce((sum, record) => sum + (record.incomeValue ?? 0), 0);
     const expenseAmount = records.reduce((sum, record) => sum + (record.expenseValue ?? 0), 0);

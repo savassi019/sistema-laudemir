@@ -1,4 +1,4 @@
-const BUILD_ID = "BUILD_ID_PLACEHOLDER";
+const BUILD_ID = "L3i6O_VP8HWe-rFvafGK7";
 const STATIC_CACHE = `infinity-static-${BUILD_ID}`;
 const PRIVATE_CACHE_PREFIX = "infinity-operations-";
 const PRIVATE_CACHE_BUILD_PREFIX = `${PRIVATE_CACHE_PREFIX}${BUILD_ID}-`;
@@ -96,13 +96,11 @@ async function prepareOfflineOperations(scope, routes) {
 
   for (const route of requestedRoutes) {
     if (epoch !== preparationEpoch) {
-      await caches.delete(cacheName);
       return;
     }
     try {
       const response = await fetch(route, { credentials: "include", cache: "no-store" });
       if (epoch !== preparationEpoch) {
-        await caches.delete(cacheName);
         return;
       }
       if (!isCacheableAuthenticatedResponse(response)) continue;
@@ -121,17 +119,38 @@ async function prepareOfflineOperations(scope, routes) {
       headers: { "Content-Type": "application/json" },
     }),
   );
-  // Uma falha isolada nao pode apagar a versao anterior que ainda funciona
-  // offline. O cache antigo so sai quando todas as rotas foram renovadas.
-  if (cachedRoutes.length === requestedRoutes.length) await clearPrivateCaches(cacheName);
+  // Nao apaga caches privados aqui: duas preparacoes podem se sobrepor durante
+  // login/atualizacao do service worker, e uma limpeza tardia destruiria a via
+  // que acabou de ser preparada. O logout continua removendo todos os caches.
   const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
   windows.forEach((client) => client.postMessage({ type: "OFFLINE_OPERATIONS_READY", routes: cachedRoutes }));
 }
 
 async function matchPrivate(request, keyFactory) {
+  const key = keyFactory(request);
+  const targetUrl = new URL(key.url);
+  const direct = await caches.match(`${targetUrl.pathname}${targetUrl.search}`, {
+    ignoreVary: true,
+  });
+  if (direct) return direct;
   for (const cacheName of await privateCacheNames()) {
-    const cached = await caches.match(keyFactory(request), { cacheName });
+    // Consulta o cache privado diretamente. Alguns navegadores aceitam
+    // `cacheName` em CacheStorage.match, mas ignoram essa opcao durante uma
+    // navegacao offline e devolvem falso negativo mesmo com a rota gravada.
+    const cache = await caches.open(cacheName);
+    const cached = await cache.match(key, { ignoreVary: true });
     if (cached) return cached;
+
+    // Respaldo para navegadores que normalizam de forma diferente uma chave
+    // criada com string relativa e uma criada com Request absoluto.
+    const equivalentKey = (await cache.keys()).find((candidate) => {
+      const candidateUrl = new URL(candidate.url);
+      return candidateUrl.pathname === targetUrl.pathname && candidateUrl.search === targetUrl.search;
+    });
+    if (equivalentKey) {
+      const equivalent = await cache.match(equivalentKey, { ignoreVary: true });
+      if (equivalent) return equivalent;
+    }
   }
   return null;
 }
@@ -203,6 +222,13 @@ self.addEventListener("fetch", (event) => {
   if (request.mode === "navigate") {
     event.respondWith(
       (async () => {
+        // Quando o navegador ja sabe que esta offline, nao inicia uma
+        // requisicao que o Chromium pode abortar antes de a Promise cair no
+        // `catch`. A via preparada abre imediatamente a partir do cache.
+        if (self.navigator.onLine === false) {
+          const offlineCached = await matchPrivate(request, navigationKey);
+          if (offlineCached) return offlineCached;
+        }
         try {
           const response = await fetch(request);
           if (isCacheableAuthenticatedResponse(response)) {

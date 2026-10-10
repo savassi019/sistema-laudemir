@@ -1,14 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
+import { clickAfterHydration, loginByApi } from "./helpers/auth";
+
 const bxPassword = process.env.E2E_BX_PASSWORD;
 const bxUsername = process.env.E2E_BX_USERNAME ?? "bx";
 
 async function login(page: Page, username: string, password: string) {
-  await page.goto("/login");
-  await page.getByLabel("Usuário").fill(username);
-  await page.locator("#password").fill(password);
-  await page.getByRole("button", { name: "Entrar no painel" }).click();
-  await expect(page).toHaveURL(/\/dashboard/, { timeout: 15_000 });
+  await loginByApi(page, username, password);
 }
 
 async function expectNoHorizontalOverflow(page: Page) {
@@ -38,13 +36,17 @@ test.describe("acesso móvel do BX", () => {
     await expect(page.getByText("Resultado hoje", { exact: true })).toBeVisible();
     await expectNoHorizontalOverflow(page);
 
-    await page.getByRole("button", { name: /Financeiro Entradas/ }).click();
-    await expect(page.getByText("Financeiro de hoje", { exact: true })).toBeVisible();
+    await clickAfterHydration(
+      page.getByRole("button", { name: /Financeiro Entradas/ }),
+      page.getByText("Financeiro de hoje", { exact: true }),
+    );
     await expect(page.getByText(/O consolidado completo fica disponível apenas para o dono/)).toBeVisible();
 
     await page.goto("/modulos/bx");
-    await page.getByRole("button", { name: /Comprovantes Reenviar/ }).click();
-    await expect(page.getByRole("heading", { name: "Comprovantes", exact: true }).last()).toBeVisible();
+    await clickAfterHydration(
+      page.getByRole("button", { name: /Comprovantes Reenviar/ }),
+      page.getByRole("heading", { name: "Comprovantes", exact: true }).last(),
+    );
     const invalidReceiptEventStatus = await page.evaluate(async () => {
       const response = await fetch("/api/receipts/events", {
         method: "POST",

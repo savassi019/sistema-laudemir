@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { EntityType, Prisma, SystemModule } from "@prisma/client";
+import { z } from "zod";
 
 import { getSession, hasModuleAccess } from "@/lib/auth";
 import { getModuleBySlug } from "@/lib/module-catalog";
@@ -7,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { assertBusinessDayOpen } from "@/server/services/daily-close-service";
 import {
   listModuleRecords,
+  ModuleRecordValidationError,
   moduleSlugs,
   saveModuleRecord,
   type ModuleSlug,
@@ -266,12 +268,11 @@ export async function POST(
     return NextResponse.json({ error: "Sem permissao para este modulo." }, { status: 403 });
   }
 
-  const payload = (await request.json()) as Record<string, unknown>;
-  const rawRequestKey = request.headers.get("x-idempotency-key");
-  const requestKey =
-    rawRequestKey && /^[a-zA-Z0-9-]{16,80}$/.test(rawRequestKey) ? rawRequestKey : null;
-
   try {
+    const payload = (await request.json()) as Record<string, unknown>;
+    const rawRequestKey = request.headers.get("x-idempotency-key");
+    const requestKey =
+      rawRequestKey && /^[a-zA-Z0-9-]{16,80}$/.test(rawRequestKey) ? rawRequestKey : null;
     await assertBusinessDayOpen(session, operationDate(payload));
     const result = await saveIdempotently(
       session,
@@ -284,6 +285,18 @@ export async function POST(
   } catch (error) {
     if (error instanceof SubmissionAlreadyReceivedError) {
       return NextResponse.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof SyntaxError) {
+      return NextResponse.json({ error: "Envio invalido. Confira os dados informados." }, { status: 400 });
+    }
+    if (error instanceof z.ZodError) {
+      return NextResponse.json(
+        { error: error.issues[0]?.message ?? "Confira os campos informados." },
+        { status: 400 },
+      );
+    }
+    if (error instanceof ModuleRecordValidationError) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
     }
     if (error instanceof Error && error.message.includes("caixa deste dia já foi fechado")) {
       return NextResponse.json({ error: error.message }, { status: 409 });

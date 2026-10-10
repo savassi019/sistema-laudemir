@@ -22,11 +22,25 @@ const usernames = {
   admin: `${runId}-admin`,
   staff: `${runId}-staff`,
 };
+const organizationSlug = `smoke-${runId}`;
+const operationalModules = [
+  "CARRETA_KIDS",
+  "RENTAL",
+  "PLUSH",
+  "BILLIARD",
+  "BRASIL_BETS",
+  "MACHINE",
+  "CONDOMINIUM_MARKET",
+  "MARKETING",
+  "PERSONAL_FINANCE",
+  "BX",
+  "SLOT_H",
+] as const;
 
 async function main() {
   if (command === "cleanup") {
-    const deleted = await prisma.user.deleteMany({ where: { email: { in: Object.values(emails) } } });
-    console.log(JSON.stringify({ cleaned: deleted.count, emails }));
+    const deleted = await prisma.organization.deleteMany({ where: { slug: organizationSlug } });
+    console.log(JSON.stringify({ cleanedOrganizations: deleted.count, organizationSlug }));
     return;
   }
   if (command !== "create") throw new Error("Comando deve ser create ou cleanup.");
@@ -34,12 +48,13 @@ async function main() {
     throw new Error("Defina SMOKE_PASSWORD com pelo menos 12 caracteres.");
   }
 
-  const organization = await prisma.organization.findFirst({ orderBy: { createdAt: "asc" } });
-  if (!organization) throw new Error("Nenhuma organizacao encontrada.");
   const passwordHash = await bcrypt.hash(password, 12);
 
   await prisma.$transaction(async (tx) => {
-    await tx.user.deleteMany({ where: { email: { in: Object.values(emails) } } });
+    await tx.organization.deleteMany({ where: { slug: organizationSlug } });
+    const organization = await tx.organization.create({
+      data: { name: `Teste automatizado ${runId}`, slug: organizationSlug },
+    });
     await tx.user.create({
       data: {
         organizationId: organization.id,
@@ -52,6 +67,9 @@ async function main() {
       },
     });
     for (const [role, email, username] of [["ADMIN", emails.admin, usernames.admin], ["STAFF", emails.staff, usernames.staff]] as const) {
+      // Os dois perfis recebem apenas BX para o teste provar que a permissao
+      // por modulo realmente bloqueia as demais unidades de negocio.
+      const allowedModules = operationalModules.filter((module) => module === "BX");
       await tx.user.create({
         data: {
           organizationId: organization.id,
@@ -62,23 +80,23 @@ async function main() {
           email,
           passwordHash,
           modulePermissions: {
-            create: {
+            create: allowedModules.map((module) => ({
               organizationId: organization.id,
-              module: "BX",
+              module,
               canView: true,
               canCreate: true,
               canUpdate: role === "ADMIN",
               canDelete: false,
               canApprove: role === "ADMIN",
               canExport: role === "ADMIN",
-            },
+            })),
           },
         },
       });
     }
   });
 
-  console.log(JSON.stringify({ created: 3, organizationId: organization.id, usernames }));
+  console.log(JSON.stringify({ created: 3, organizationSlug, usernames }));
 }
 
 main()

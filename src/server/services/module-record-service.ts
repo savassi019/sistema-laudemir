@@ -10,6 +10,7 @@ import { randomUUID } from "crypto";
 import { z } from "zod";
 
 import { currentBusinessDayRange } from "@/lib/business-date";
+import { calculateCreditTerms, isCreditOverdue } from "@/lib/credit-finance";
 import { formatCurrency, formatMachineCounter, formatShortDate } from "@/lib/format";
 import {
   calculateBilliardFinancials,
@@ -150,9 +151,6 @@ const createPlushSchema = z.object({
   machineNumber: z.string(),
   noteNumber: z.string().optional(),
   noteiroFixed: z.string().optional(),
-  coinPhotoRule: z.boolean().optional(),
-  giftPhotoRule: z.boolean().optional(),
-  active: z.boolean().optional(),
   collectionDate: z.string(),
   grossAmount: z.number(),
   commissionPercentage: z.number(),
@@ -339,6 +337,13 @@ const createSlotVisitSchema = z
   });
 
 export class SlotVisitConflictError extends Error {}
+
+/**
+ * Erro de regra de negocio causado por um envio invalido do cliente.
+ * A rota HTTP transforma este erro em 400, evitando que a fila offline tente
+ * reenviar para sempre uma operacao que precisa ser corrigida pelo usuario.
+ */
+export class ModuleRecordValidationError extends Error {}
 
 export type SlotVisitMachineResult = {
   recordId: string;
@@ -666,25 +671,29 @@ export async function getSlotClientMachines(
   };
 }
 
+// ASVS v5.0.0-2.2.1/2.2.2: o endpoint valida formato, faixa e lista
+// permitida no servidor; a validacao do formulario serve apenas para UX.
 const createMachineContractSchema = z.object({
-  clientCode: z.string(),
-  clientName: z.string(),
-  amount: z.number(),
-  contractDate: z.string(),
-  year: z.number(),
-  percentage: z.number().optional(),
-  monthlyInterest: z.number().optional(),
+  clientCode: z.string().trim().min(1).max(80),
+  clientName: z.string().trim().min(2).max(160),
+  amount: z.number().positive(),
+  contractDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  year: z.number().int().min(2000).max(2200),
+  percentage: z.number().min(0).max(100).optional(),
+  monthlyInterest: z.number().min(0).max(100).optional(),
+  installmentsCount: z.number().int().min(1).max(120),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   installmentFixed: z.boolean(),
   guaranteeEnabled: z.boolean(),
-  signatureLink: z.string().optional(),
-  signatureFileId: z.string().nullish(),
-  streetLoanAmount: z.number().optional(),
-  monthlyInterestTotal: z.number().optional(),
-  generalPercentageAvg: z.number().optional(),
-  expenseAmount: z.number().optional(),
-  paymentMethod: z.string().optional(),
-  status: z.string(),
-  notes: z.string().optional(),
+  signatureLink: z.union([z.url().max(2_048), z.literal("")]).optional(),
+  signatureFileId: z.string().min(1).max(191).nullish(),
+  streetLoanAmount: z.number().min(0).optional(),
+  monthlyInterestTotal: z.number().min(0).optional(),
+  generalPercentageAvg: z.number().min(0).max(100).optional(),
+  expenseAmount: z.number().min(0).optional(),
+  paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]).optional(),
+  status: z.enum(["DRAFT", "OPEN", "ACTIVE", "CLOSED"]),
+  notes: z.string().trim().max(4_000).optional(),
 });
 
 const createMarketSchema = z.object({
@@ -1435,40 +1444,56 @@ async function saveWithPrisma(
     }
     case "maquinas-de-pelucia": {
       const data = createPlushSchema.parse(payload);
-      const machine = await prisma.plushMachine.upsert({
+      const savedMachine = await prisma.plushMachine.findUnique({
         where: {
           organizationId_code: {
             organizationId: session.organizationId,
             code: data.code,
           },
         },
-        create: {
-          organizationId: session.organizationId,
-          clientName: data.clientName,
-          cpf: data.cpf,
-          phone: data.phone,
-          code: data.code,
-          name: data.name,
-          machineNumber: data.machineNumber,
-          noteNumber: data.noteNumber,
-          noteiroFixed: data.noteiroFixed,
-          coinPhotoRule: data.coinPhotoRule ?? true,
-          giftPhotoRule: data.giftPhotoRule ?? true,
-          active: data.active ?? true,
-        },
-        update: {
-          clientName: data.clientName,
-          cpf: data.cpf,
-          phone: data.phone,
-          name: data.name,
-          machineNumber: data.machineNumber,
-          noteNumber: data.noteNumber,
-          noteiroFixed: data.noteiroFixed,
-          coinPhotoRule: data.coinPhotoRule ?? true,
-          giftPhotoRule: data.giftPhotoRule ?? true,
-          active: data.active ?? true,
+        select: {
+          id: true,
+          coinPhotoRule: true,
+          giftPhotoRule: true,
+          active: true,
         },
       });
+
+      // A configuracao vem exclusivamente do cadastro salvo. Um funcionario
+      // pode adulterar o JSON do navegador; isso nunca pode tornar a foto
+      // opcional nem reativar uma maquina durante o fechamento.
+      const coinPhotoRequired = savedMachine?.coinPhotoRule ?? true;
+      const giftPhotoRequired = savedMachine?.giftPhotoRule ?? true;
+      if (savedMachine && !savedMachine.active) {
+        throw new ModuleRecordValidationError(
+          "Esta maquina esta inativa. Reative-a no cadastro antes de fechar a visita.",
+        );
+      }
+      if (coinPhotoRequired && !data.coinPhotoFileId) {
+        throw new ModuleRecordValidationError("A foto das moedas e obrigatoria nesta maquina.");
+      }
+      if (giftPhotoRequired && !data.giftPhotoFileId) {
+        throw new ModuleRecordValidationError("A foto dos brindes e obrigatoria nesta maquina.");
+      }
+
+      const submittedPhotoIds = [data.coinPhotoFileId, data.giftPhotoFileId].filter(
+        (id): id is string => Boolean(id),
+      );
+      if (submittedPhotoIds.length > 0) {
+        const validPhotos = await prisma.fileAsset.findMany({
+          where: {
+            id: { in: submittedPhotoIds },
+            organizationId: session.organizationId,
+            category: "PHOTO",
+          },
+          select: { id: true },
+        });
+        if (new Set(validPhotos.map((photo) => photo.id)).size !== new Set(submittedPhotoIds).size) {
+          throw new ModuleRecordValidationError(
+            "Uma das fotos nao pertence a esta empresa ou nao e uma foto valida.",
+          );
+        }
+      }
 
       const plushTotals = calculatePlushFinancials({
         grossAmount: data.grossAmount,
@@ -1479,29 +1504,63 @@ async function saveWithPrisma(
       const clientAmount = plushTotals.clientAmount;
       const companyAmount = plushTotals.netAmount;
 
-      const record = await prisma.plushCollection.create({
-        data: {
-          organizationId: session.organizationId,
-          createdById: session.userId,
-          plushMachineId: machine.id,
-          grossAmount: data.grossAmount,
-          commissionPercentage: data.commissionPercentage,
-          clientAmount,
-          companyAmount,
-          plushCountOut: data.plushCountOut,
-          paymentMethod: mapPaymentMethod(data.paymentMethod),
-          discountAmount: data.discountAmount ?? 0,
-          discountReason: data.discountReason,
-          ownerExpenseAmount: data.ownerExpenseAmount ?? 0,
-          compensationStatus: data.compensationStatus,
-          noteiro: data.noteiro,
-          coinPhotoId: data.coinPhotoFileId,
-          giftPhotoId: data.giftPhotoFileId,
-          notes: data.notes,
-        },
-        include: {
-          plushMachine: true,
-        },
+      const record = await prisma.$transaction(async (tx) => {
+        const machine = await tx.plushMachine.upsert({
+          where: {
+            organizationId_code: {
+              organizationId: session.organizationId,
+              code: data.code,
+            },
+          },
+          create: {
+            organizationId: session.organizationId,
+            clientName: data.clientName,
+            cpf: data.cpf,
+            phone: data.phone,
+            code: data.code,
+            name: data.name,
+            machineNumber: data.machineNumber,
+            noteNumber: data.noteNumber,
+            noteiroFixed: data.noteiroFixed,
+            coinPhotoRule: true,
+            giftPhotoRule: true,
+            active: true,
+          },
+          update: {
+            clientName: data.clientName,
+            cpf: data.cpf,
+            phone: data.phone,
+            name: data.name,
+            machineNumber: data.machineNumber,
+            noteNumber: data.noteNumber,
+            noteiroFixed: data.noteiroFixed,
+          },
+        });
+
+        return tx.plushCollection.create({
+          data: {
+            organizationId: session.organizationId,
+            createdById: session.userId,
+            plushMachineId: machine.id,
+            grossAmount: data.grossAmount,
+            commissionPercentage: data.commissionPercentage,
+            clientAmount,
+            companyAmount,
+            plushCountOut: data.plushCountOut,
+            paymentMethod: mapPaymentMethod(data.paymentMethod),
+            discountAmount: data.discountAmount ?? 0,
+            discountReason: data.discountReason,
+            ownerExpenseAmount: data.ownerExpenseAmount ?? 0,
+            compensationStatus: data.compensationStatus,
+            noteiro: data.noteiro,
+            coinPhotoId: data.coinPhotoFileId,
+            giftPhotoId: data.giftPhotoFileId,
+            notes: data.notes,
+          },
+          include: {
+            plushMachine: true,
+          },
+        });
       });
 
       await logFieldVisitForModuleRecord({
@@ -2080,32 +2139,122 @@ async function saveWithPrisma(
     }
     case "credito-financeiro": {
       const data = createMachineContractSchema.parse(payload);
-      const record = await prisma.machineContract.create({
-        data: {
-          organizationId: session.organizationId,
-          createdById: session.userId,
-          clientCode: data.clientCode,
-          clientName: data.clientName,
-          amount: data.amount,
-          contractDate: toDate(data.contractDate),
-          year: data.year,
-          percentage: data.percentage,
-          monthlyInterest: data.monthlyInterest,
-          installmentFixed: data.installmentFixed,
-          guaranteeEnabled: data.guaranteeEnabled,
-          signatureLink: data.signatureLink,
-          signatureFileId: data.signatureFileId,
-          streetLoanAmount: data.streetLoanAmount,
-          monthlyInterestTotal: data.monthlyInterestTotal,
-          generalPercentageAvg: data.generalPercentageAvg,
-          expenseAmount: data.expenseAmount ?? 0,
-          paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
-          status: mapContractStatus(data.status),
-          notes: data.notes,
-        },
+      const credit = calculateCreditTerms(
+        data.amount,
+        data.monthlyInterest ?? 0,
+        data.installmentsCount,
+      );
+      const issueDate = toDate(data.contractDate);
+      const dueDate = toDate(data.dueDate);
+      if (dueDate.getTime() < issueDate.getTime()) {
+        throw new ModuleRecordValidationError(
+          "O vencimento nao pode ser anterior a data do emprestimo.",
+        );
+      }
+
+      if (data.signatureFileId) {
+        const signatureFile = await prisma.fileAsset.findFirst({
+          where: {
+            id: data.signatureFileId,
+            organizationId: session.organizationId,
+            category: "CONTRACT",
+          },
+          select: { id: true },
+        });
+        if (!signatureFile) {
+          throw new ModuleRecordValidationError(
+            "O contrato anexado nao pertence a esta empresa ou nao e valido.",
+          );
+        }
+      }
+
+      const record = await prisma.$transaction(async (tx) => {
+        const contract = await tx.machineContract.create({
+          data: {
+            organizationId: session.organizationId,
+            createdById: session.userId,
+            clientCode: data.clientCode,
+            clientName: data.clientName,
+            amount: credit.principal,
+            contractDate: issueDate,
+            year: data.year,
+            percentage: data.percentage,
+            monthlyInterest: credit.monthlyInterestRate,
+            installmentFixed: data.installmentFixed,
+            guaranteeEnabled: data.guaranteeEnabled,
+            signatureLink: data.signatureLink,
+            signatureFileId: data.signatureFileId,
+            streetLoanAmount: data.streetLoanAmount,
+            monthlyInterestTotal: credit.totalInterest,
+            generalPercentageAvg: data.generalPercentageAvg,
+            expenseAmount: data.expenseAmount ?? 0,
+            paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
+            status: mapContractStatus(data.status),
+            notes: data.notes,
+          },
+        });
+
+        await tx.financialEntry.create({
+          data: {
+            organizationId: session.organizationId,
+            module: "MACHINE",
+            kind: "RECEIVABLE",
+            direction: "INCOME",
+            status: "PENDING",
+            description: `Cobranca de ${contract.clientName}`,
+            referenceCode: `CRED-${contract.clientCode}`,
+            sourceEntityType: "MACHINE_CONTRACT",
+            sourceEntityId: contract.id,
+            issueDate,
+            dueDate,
+            totalAmount: credit.totalReceivable,
+            paidAmount: 0,
+            interestAmount: credit.totalInterest,
+            remainingAmount: credit.totalReceivable,
+            installmentsCount: credit.installmentsCount,
+            notes: data.notes,
+            createdById: session.userId,
+          },
+        });
+
+        const operationExpense = data.expenseAmount ?? 0;
+        if (operationExpense > 0) {
+          const expense = await tx.financialEntry.create({
+            data: {
+              organizationId: session.organizationId,
+              module: "MACHINE",
+              kind: "EXPENSE",
+              direction: "EXPENSE",
+              status: "PAID",
+              description: `Despesa do emprestimo de ${contract.clientName}`,
+              referenceCode: `CRED-${contract.clientCode}-DESP`,
+              sourceEntityType: "MACHINE_CONTRACT",
+              sourceEntityId: contract.id,
+              issueDate,
+              paidAt: issueDate,
+              totalAmount: operationExpense,
+              paidAmount: operationExpense,
+              remainingAmount: 0,
+              paymentMethod: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : undefined,
+              createdById: session.userId,
+            },
+          });
+          await tx.payment.create({
+            data: {
+              organizationId: session.organizationId,
+              financialEntryId: expense.id,
+              amount: operationExpense,
+              paymentDate: issueDate,
+              method: data.paymentMethod ? mapPaymentMethod(data.paymentMethod) : "OTHER",
+              notes: "Despesa registrada junto ao emprestimo",
+              createdById: session.userId,
+            },
+          });
+        }
+
+        return contract;
       });
 
-      const netAmount = Number(record.amount) - Number(record.expenseAmount ?? 0);
       const signed = Boolean(record.signatureLink || record.signatureFileId);
 
       return {
@@ -2115,12 +2264,15 @@ async function saveWithPrisma(
           summary: `Contrato ${record.clientCode}`,
           details: [
             `Ano: ${record.year}`,
-            `Juros: ${record.monthlyInterest ?? 0}%`,
+            `Juros: ${record.monthlyInterest ?? 0}% ao mes`,
+            `Parcelas: ${credit.installmentsCount} de ${formatCurrency(credit.installmentAmount)}`,
+            `Vencimento: ${formatShortDate(dueDate)}`,
+            `Total a receber: ${formatCurrency(credit.totalReceivable)}`,
             `Garantia: ${record.guaranteeEnabled ? "Sim" : "Nao"}`,
             `Assinatura: ${signed ? "Sim" : "Pendente"}`,
             `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
           ],
-          amount: formatCurrency(netAmount),
+          amount: formatCurrency(credit.totalReceivable),
           badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
           createdAt: record.createdAt.toISOString(),
         },
@@ -2801,9 +2953,35 @@ async function listModuleRecordsBase(
           orderBy: { createdAt: "desc" },
           take,
         });
+        const contractIds = records.map((record) => record.id);
+        const receivables = contractIds.length
+          ? await prisma.financialEntry.findMany({
+              where: {
+                organizationId: session.organizationId,
+                module: "MACHINE",
+                sourceEntityType: "MACHINE_CONTRACT",
+                sourceEntityId: { in: contractIds },
+                direction: "INCOME",
+              },
+            })
+          : [];
+        const receivableByContract = new Map(
+          receivables.map((entry) => [entry.sourceEntityId, entry]),
+        );
 
         return records.map((record) => {
-          const netAmount = Number(record.amount) - Number(record.expenseAmount ?? 0);
+          const receivable = receivableByContract.get(record.id);
+          const principal = Number(record.amount);
+          const totalAmount = Number(receivable?.totalAmount ?? principal);
+          const paidAmount = Number(receivable?.paidAmount ?? 0);
+          const remainingAmount = Number(receivable?.remainingAmount ?? totalAmount);
+          const overdue = receivable
+            ? isCreditOverdue({
+                dueDate: receivable.dueDate,
+                remainingAmount,
+                status: receivable.status,
+              })
+            : false;
           const signed = Boolean(record.signatureLink || record.signatureFileId);
 
           return {
@@ -2813,16 +2991,26 @@ async function listModuleRecordsBase(
             details: [
               `Ano: ${record.year}`,
               `Juros: ${record.monthlyInterest ?? 0}%`,
+              ...(receivable
+                ? [
+                    `Parcelas: ${receivable.installmentsCount}`,
+                    `Vencimento: ${receivable.dueDate ? formatShortDate(receivable.dueDate) : "Nao informado"}`,
+                    `Total a receber: ${formatCurrency(totalAmount)}`,
+                    `Recebido: ${formatCurrency(paidAmount)}`,
+                    `Saldo devedor: ${formatCurrency(remainingAmount)}`,
+                  ]
+                : []),
               `Garantia: ${record.guaranteeEnabled ? "Sim" : "Nao"}`,
               `Assinatura: ${signed ? "Sim" : "Pendente"}`,
               `Despesa: ${formatCurrency(Number(record.expenseAmount ?? 0))}`,
               `Pagamento: ${record.paymentMethod ? rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL) : "Não informado"}`,
             ],
-            amount: formatCurrency(netAmount),
-            amountValue: netAmount,
-            incomeValue: Number(record.amount),
+            amount: formatCurrency(remainingAmount),
+            amountValue: remainingAmount,
+            incomeValue: receivable ? paidAmount : principal,
             expenseValue: Number(record.expenseAmount ?? 0),
-            badge: rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
+            paymentMethod: record.paymentMethod,
+            badge: overdue ? "Vencido" : rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL),
             createdAt: record.createdAt.toISOString(),
           };
         });
@@ -3279,8 +3467,8 @@ export async function listModuleClients(
             id: record.id,
             name: record.clientName,
             subtitle: `Codigo ${record.clientCode}`,
-            tags: [record.status],
-            badge: formatCurrency(Number(record.amount)),
+            tags: [rotuloDeStatus(record.status, CONTRACT_STATUS_LABEL)],
+            badge: session.role === "STAFF" ? undefined : formatCurrency(Number(record.amount)),
           }));
       }
       case "marketing": {

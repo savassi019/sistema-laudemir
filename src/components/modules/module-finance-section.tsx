@@ -181,6 +181,12 @@ type SummaryTotals = { income: number; expense: number; net: number; pending: nu
 type BxTotals = { prize: number; other: number; discount: number; total: number };
 type SlotHTotals = { received: number; pending: number; negative: number; net: number };
 type BilliardTotals = { received: number; pending: number; negative: number; net: number };
+type CreditTotals = {
+  principal: number;
+  received: number;
+  outstanding: number;
+  receivedInterest: number;
+};
 type MethodTotal = { method: string; label: string; amount: number };
 
 function calculateBxTotals(entries: ModuleFinancialEntryItem[]): BxTotals {
@@ -231,6 +237,35 @@ function calculateBilliardTotals(entries: ModuleFinancialEntryItem[]): BilliardT
     .reduce((sum, entry) => sum + entry.totalAmount, 0);
 
   return { received, pending, negative, net: received + pending - negative };
+}
+
+function calculateCreditTotals(entries: ModuleFinancialEntryItem[]): CreditTotals {
+  const receivables = entries.filter(
+    (entry) => entry.status !== "CANCELLED" && entry.category === "CREDIT_RECEIVABLE",
+  );
+  return {
+    principal: receivables.reduce(
+      (sum, entry) => sum + Math.max(0, entry.totalAmount - entry.interestAmount),
+      0,
+    ),
+    received: receivables.reduce((sum, entry) => sum + entry.paidAmount, 0),
+    outstanding: receivables.reduce((sum, entry) => sum + entry.remainingAmount, 0),
+    receivedInterest: receivables.reduce((sum, entry) => sum + entry.receivedInterest, 0),
+  };
+}
+
+async function uploadPaymentProof(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("category", "PROOF");
+  const response = await fetch("/api/upload", { method: "POST", body: formData });
+  if (!response.ok) {
+    const body = (await response.json().catch(() => null)) as { error?: string } | null;
+    throw new Error(body?.error ?? "Não foi possível enviar o comprovante.");
+  }
+  const body = (await response.json()) as { id?: string };
+  if (!body.id) throw new Error("O servidor não confirmou o comprovante.");
+  return body.id;
 }
 
 function calculateMethodTotals(entries: ModuleFinancialEntryItem[]): MethodTotal[] {
@@ -383,7 +418,7 @@ function EntryDetails({
   onCancel: () => void;
 }) {
   const isManual = entry.origin === "MANUAL";
-  const canChange = isManual && entry.status !== "CANCELLED";
+  const showPaymentHistory = isManual || entry.canRegisterPayment || entry.payments.length > 0;
 
   return (
     <div className="border-t border-white/[0.07] px-3 pb-3 pt-3">
@@ -410,6 +445,7 @@ function EntryDetails({
         {entry.clientName ? <p><span className="text-[#7e786d]">Cliente/local:</span> {entry.clientName}</p> : null}
         {entry.operatorName ? <p><span className="text-[#7e786d]">Funcionário:</span> {entry.operatorName}</p> : null}
         <p><span className="text-[#7e786d]">Forma de pagamento:</span> {paymentLabel(entry.paymentMethod)}</p>
+        {entry.dueDate ? <p><span className="text-[#7e786d]">Vencimento:</span> {formatShortDate(entry.dueDate)}</p> : null}
         <p><span className="text-[#7e786d]">Registrado em:</span> {formatDateTime(entry.createdAt)}</p>
         {entry.notes ? <p><span className="text-[#7e786d]">Observação:</span> {entry.notes}</p> : null}
       </div>
@@ -423,7 +459,7 @@ function EntryDetails({
         </div>
       ) : null}
 
-      {isManual ? (
+      {showPaymentHistory ? (
         <div className="mt-3">
           <div className="flex items-center gap-2">
             <History className="size-3.5 text-[#9a958b]" />
@@ -466,9 +502,9 @@ function EntryDetails({
         </p>
       )}
 
-      {canChange ? (
+      {entry.canRegisterPayment || (isManual && entry.status !== "CANCELLED") ? (
         <div className="mt-3 flex flex-wrap gap-2">
-          {entry.remainingAmount > 0 ? (
+          {entry.canRegisterPayment ? (
             <button
               type="button"
               onClick={onTogglePayment}
@@ -477,20 +513,24 @@ function EntryDetails({
               <CheckCircle2 className="size-4" /> Registrar pagamento
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={onToggleEdit}
-            className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 text-xs font-semibold text-[#c9c2b4] active:bg-white/[0.05]"
-          >
-            <Pencil className="size-4" /> Corrigir
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#b46c5d]/25 px-3 text-xs font-semibold text-[#f0a08f] active:bg-[#b46c5d]/10"
-          >
-            <Ban className="size-4" /> Estornar
-          </button>
+          {isManual ? (
+            <>
+              <button
+                type="button"
+                onClick={onToggleEdit}
+                className="flex min-h-11 flex-1 items-center justify-center gap-2 rounded-xl border border-white/10 px-3 text-xs font-semibold text-[#c9c2b4] active:bg-white/[0.05]"
+              >
+                <Pencil className="size-4" /> Corrigir
+              </button>
+              <button
+                type="button"
+                onClick={onCancel}
+                className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#b46c5d]/25 px-3 text-xs font-semibold text-[#f0a08f] active:bg-[#b46c5d]/10"
+              >
+                <Ban className="size-4" /> Estornar
+              </button>
+            </>
+          ) : null}
         </div>
       ) : null}
 
@@ -512,6 +552,11 @@ function EntryDetails({
           <label className="block space-y-1.5">
             <span className={labelClass}>Observação</span>
             <input name="notes" className={fieldClass} placeholder="Opcional" />
+          </label>
+          <label className="block space-y-1.5">
+            <span className={labelClass}>Comprovante do pagamento</span>
+            <input name="proof" type="file" accept=".pdf,image/*" className={fieldClass} />
+            <span className="block text-xs text-[#7e786d]">PDF ou foto real do comprovante.</span>
           </label>
           <button type="submit" disabled={busy} className="min-h-11 w-full rounded-xl bg-[#6b9d6f] px-4 text-sm font-semibold text-[#071008] disabled:opacity-50">
             {busy ? "Salvando..." : "Confirmar pagamento"}
@@ -633,6 +678,11 @@ export function ModuleFinanceSection({
   const billiardTotals = useMemo<BilliardTotals | null>(() => {
     if (slug !== "bilhar-pebolim") return null;
     return calculateBilliardTotals(activeEntries);
+  }, [activeEntries, slug]);
+
+  const creditTotals = useMemo<CreditTotals | null>(() => {
+    if (slug !== "credito-financeiro") return null;
+    return calculateCreditTotals(activeEntries);
   }, [activeEntries, slug]);
 
   const methodTotals = useMemo(() => calculateMethodTotals(activeEntries), [activeEntries]);
@@ -828,10 +878,15 @@ export function ModuleFinanceSection({
     const data = new FormData(form);
     startTransition(async () => {
       try {
+        const proof = data.get("proof");
+        const proofFileId = proof instanceof File && proof.size > 0
+          ? await uploadPaymentProof(proof)
+          : null;
         const updated = await registerModuleFinancialPaymentAction(slug, entry.id, {
           amount: Number(data.get("amount") ?? 0),
           paymentMethod: String(data.get("paymentMethod") ?? ""),
           notes: String(data.get("notes") ?? "").trim() || undefined,
+          proofFileId,
         });
         replaceEntry(updated);
         setPaymentId(null);
@@ -1047,6 +1102,21 @@ export function ModuleFinanceSection({
         {error ? <p className="mt-2 text-xs text-[#f0a08f]">{error}</p> : null}
       </div>
 
+      {creditTotals ? (
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          {[
+            { label: "Capital emprestado", value: creditTotals.principal, color: "border-l-[#60a5fa]" },
+            { label: "Recebido", value: creditTotals.received, color: "border-l-[#4ade80]" },
+            { label: "Ainda a receber", value: creditTotals.outstanding, color: "border-l-[#fbbf24]" },
+            { label: "Juros recebidos", value: creditTotals.receivedInterest, color: "border-l-[#a78bfa]" },
+          ].map((card) => (
+            <article key={card.label} className={cn("rounded-2xl border border-white/10 border-l-4 bg-[#111513] p-3.5", card.color)}>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#a9b2ac]">{card.label}</p>
+              <p className="mt-2 break-words text-lg font-bold text-white">{formatCurrency(card.value)}</p>
+            </article>
+          ))}
+        </div>
+      ) : (
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
         <article className="rounded-2xl border border-white/10 border-l-4 border-l-[#4ade80] bg-[#111513] p-4">
           <div className="flex items-center gap-2 text-[#d7ded9]"><TrendingUp className="size-4 text-[#4ade80]" /><p className="text-xs font-semibold uppercase tracking-[0.12em]">Entradas</p></div>
@@ -1067,6 +1137,7 @@ export function ModuleFinanceSection({
           <p className="mt-1 text-[11px] text-[#8f9992]">Entradas menos despesas</p>
         </article>
       </div>
+      )}
 
       {bxTotals ? (
         <div className="rounded-2xl border border-white/10 bg-[#101412] p-4">

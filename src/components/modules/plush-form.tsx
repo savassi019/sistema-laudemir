@@ -230,9 +230,6 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
           machineNumber: values.machineNumber,
           noteNumber: values.noteNumber,
           noteiroFixed: values.noteiroFixed,
-          coinPhotoRule: values.coinPhotoRule,
-          giftPhotoRule: values.giftPhotoRule,
-          active: values.active,
           collectionDate: values.collectionDate,
           grossAmount: Number(values.grossAmount),
           commissionPercentage: Number(values.commissionPercentage),
@@ -298,18 +295,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
 
   });
 
-  const photoRuleText = [
-    coinPhotoRule ? "foto de moedas obrigatória" : "foto de moedas opcional",
-    giftPhotoRule ? "foto de brindes obrigatória" : "foto de brindes opcional",
-  ].join(" | ");
-
   return (
     <div className="space-y-5">
-      <div className="rounded-[24px] border border-[#8aa17c]/25 bg-[#243528]/72 p-4 text-sm leading-6 text-[#dbe6d4]">
-        <p className="font-medium">Regras da grua</p>
-        <p>{photoRuleText}</p>
-      </div>
-
       {hideFinancials ? null : (
         <div className="grid gap-3 sm:grid-cols-3">
           <article className="rounded-[24px] border border-white/8 bg-white/[0.03] p-4">
@@ -536,40 +523,52 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
-            <input type="checkbox" {...form.register("coinPhotoRule")} />
-            Foto de moedas obrigatória
-          </label>
-          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
-            <input type="checkbox" {...form.register("giftPhotoRule")} />
-            Foto de brindes obrigatória
-          </label>
-          <label className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/70 px-4 py-3 text-sm text-slate-200">
-            <input type="checkbox" {...form.register("active")} />
-            Máquina ativa
-          </label>
-          <div className="space-y-2">
-            <label className={labelClass} htmlFor="compensationStatus">
-              Cliente compensa?
-            </label>
-            <select
-              id="compensationStatus"
-              className={selectClass}
-              {...form.register("compensationStatus", {
-                onChange: () => {
-                  setCompensationManuallySet(true);
-                },
-              })}
-            >
-              <option value="NOT_WORTH_IT">Não compensa</option>
-              <option value="WORTH_IT">Compensa</option>
-            </select>
-            <p className={hintClass}>
-              Sugerido automaticamente pelo bruto (≥ {formatCurrency(COMPENSATION_THRESHOLD)} = compensa) — pode trocar manualmente.
+        <section className="space-y-3" aria-labelledby="visit-settings-title">
+          <div className="px-1">
+            <h3 id="visit-settings-title" className="text-sm font-semibold text-white">
+              Exigências desta visita
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-slate-400">
+              As regras vêm do cadastro da máquina e não podem ser alteradas durante o fechamento.
             </p>
           </div>
-        </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.025] p-4">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#cdb47c]">
+                Fotos da visita
+              </p>
+              <div className="mt-3 space-y-2 text-sm text-slate-200">
+                <p>Foto das moedas: <strong>{coinPhotoRule ? "obrigatória" : "opcional"}</strong></p>
+                <p>Foto dos brindes: <strong>{giftPhotoRule ? "obrigatória" : "opcional"}</strong></p>
+              </div>
+            </div>
+
+            <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.025] p-2">
+              <div className="px-3 pb-2 pt-3">
+                <label className={labelClass} htmlFor="compensationStatus">
+                  Vale a pena manter este ponto?
+                </label>
+                <select
+                  id="compensationStatus"
+                  aria-describedby="compensation-status-help"
+                  className={`${selectClass} mt-2`}
+                  {...form.register("compensationStatus", {
+                    onChange: () => {
+                      setCompensationManuallySet(true);
+                    },
+                  })}
+                >
+                  <option value="WORTH_IT">Compensa</option>
+                  <option value="NOT_WORTH_IT">Não compensa</option>
+                </select>
+                <p id="compensation-status-help" className={`${hintClass} mt-2`}>
+                  Sugestão automática pelo valor bruto: a partir de {formatCurrency(COMPENSATION_THRESHOLD)}, o ponto compensa. Você pode alterar.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
 
         <div className="space-y-2">
           <label className={labelClass} htmlFor="noteiro">
