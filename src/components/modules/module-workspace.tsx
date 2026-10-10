@@ -45,8 +45,9 @@ import { RoutesSection } from "@/components/modules/routes-section";
 import { SlotForm } from "@/components/modules/slot-form";
 import { cn } from "@/lib/cn";
 import { formatCurrency } from "@/lib/format";
+import { MODULE_CAPABILITIES } from "@/lib/module-capabilities";
 import type { ModuleFinancialEntryItem } from "@/server/services/finance-service";
-import type { ModuleClientItem } from "@/server/services/module-record-service";
+import type { ModuleClientItem, ModuleSlug } from "@/server/services/module-record-service";
 import type { ModuleScopeSummary } from "@/server/services/module-scope-service";
 import type { ClientListItem, ClientVisitSummary } from "@/types/app";
 
@@ -98,20 +99,6 @@ const SECTION_CFG: Record<SectionKey, SectionCfg> = {
 
 const ALL_SECTIONS: SectionKey[] = ["operacao", "visita", "premio", "rotas", "calendario", "clientes", "financeiro", "contas-pagar", "comprovantes", "historico"];
 
-const slugsWithoutClientConcept = new Set(["mercado-autonomo", "plataforma-online", "financas-pessoais"]);
-// Rotas de campo hoje so existem no Bilhar (RoutePlan/BilliardPoint).
-const slugsWithRoutes = new Set(["bilhar-pebolim"]);
-// Agenda de conteudo/reuniao hoje so existe no Marketing (MarketingContent).
-const slugsWithCalendar = new Set(["marketing"]);
-// O premio e registrado no proprio fechamento do BX.
-const slugsWithPremio = new Set(["bx"]);
-const slugsWithReceipts = new Set([
-  "bilhar-pebolim", "maquinas-de-pelucia", "bx", "h-caca-niquel", "carreta-kids", "locacao",
-]);
-const slugsWithVisitTracking = new Set([
-  "bilhar-pebolim", "maquinas-de-pelucia", "bx", "h-caca-niquel", "carreta-kids", "locacao",
-]);
-
 export function ModuleWorkspace({
   slug,
   moduleTitle,
@@ -137,16 +124,17 @@ export function ModuleWorkspace({
   financeDailyOnly?: boolean;
   hideFinancials?: boolean;
 }) {
-  const hasClientConcept = !slugsWithoutClientConcept.has(slug);
-  const hasVisitTracking = slugsWithVisitTracking.has(slug);
-  const hasRoutes = slugsWithRoutes.has(slug);
-  const hasCalendar = slugsWithCalendar.has(slug);
-  const hasPremio = slugsWithPremio.has(slug);
+  const capabilities = MODULE_CAPABILITIES[slug as ModuleSlug];
+  const hasClientConcept = capabilities?.clients ?? false;
+  const hasVisitTracking = capabilities?.visit ?? false;
+  const hasRoutes = capabilities?.routes ?? false;
+  const hasCalendar = capabilities?.calendar ?? false;
+  const hasPremio = capabilities?.prize ?? false;
   const needsClientPreselect = hasVisitTracking;
   // No Marketing o calendario e a tela principal: o menu de abas na frente
   // fazia o modulo parecer generico, igual aos de campo.
   const [activeSection, setActiveSection] = useState<SectionKey | null>(
-    slugsWithCalendar.has(slug) ? "calendario" : null,
+    hasCalendar ? "calendario" : null,
   );
   const [showRegisterForm, setShowRegisterForm] = useState(false);
   const [visitPreset, setVisitPreset] = useState<{ id?: string; name: string; phone: string } | null>(null);
@@ -191,9 +179,9 @@ export function ModuleWorkspace({
     // "Contas" o usuario pediu de volta -- agora renderiza MarketingAccounts
     // (abaixo), uma tela dedicada que le a mesma tabela dos Lancamentos
     // (cliente + despesas da agencia juntos), entao nao reabre o problema.
-    if (k === "financeiro"    && (hideFinancials || hasCalendar)) return false;
+    if (k === "financeiro"    && (hideFinancials || !capabilities?.finance)) return false;
     if (k === "contas-pagar"  && hideFinancials)                  return false;
-    if (k === "comprovantes"  && (!slugsWithReceipts.has(slug) || hideFinancials)) return false;
+    if (k === "comprovantes"  && (!capabilities?.receipts || hideFinancials)) return false;
     return true;
   });
 

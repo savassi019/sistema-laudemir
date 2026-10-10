@@ -1,11 +1,14 @@
 import {
+  Activity,
   BarChart2,
   ChevronRight,
   CircleDollarSign,
   Clock,
   CreditCard,
+  Database,
   Gift,
   Globe,
+  HardDriveUpload,
   LayoutGrid,
   Megaphone,
   Notebook,
@@ -13,6 +16,7 @@ import {
   ShieldAlert,
   Shield,
   Store,
+  Smartphone,
   Table2,
   Ticket,
   Users,
@@ -91,6 +95,91 @@ export default async function PainelPage() {
         </div>
       </section>
 
+      {/* Resumo objetivo do dia, calculado das mesmas fontes do fechamento. */}
+      <section className="rounded-2xl border border-white/[0.08] bg-[#0b0f0e]/45 p-4">
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#d1a04f]">Resumo de hoje</p>
+            <h2 className="mt-1 text-base font-semibold text-white">Movimento operacional</h2>
+          </div>
+          <Link href="/relatorio" className="inline-flex min-h-11 items-center rounded-xl border border-white/10 px-3 text-xs font-semibold text-[#f3dfae] active:bg-white/[0.05]">
+            Ver relatório
+          </Link>
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+          {[
+            ["Entradas", control.dailyReport.expectedIncome, "text-[#86efac]"],
+            ["Despesas", control.dailyReport.expectedExpense, "text-[#fca5a5]"],
+            ["Prêmios", control.dailyReport.expectedPrize, "text-[#f3dfae]"],
+            ["Saldo", control.dailyReport.expectedNet, control.dailyReport.expectedNet >= 0 ? "text-[#93c5fd]" : "text-[#fca5a5]"],
+          ].map(([label, value, tone]) => (
+            <div key={String(label)} className="rounded-xl border border-white/[0.07] bg-black/10 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.1em] text-[#7e786d]">{label}</p>
+              <p className={`mt-1 text-base font-bold ${tone}`}>{formatCurrency(Number(value))}</p>
+            </div>
+          ))}
+        </div>
+        <div className="mt-3 grid gap-2 md:grid-cols-2">
+          <div className="rounded-xl border border-white/[0.07] bg-black/10 p-3">
+            <p className="text-xs font-semibold text-white">Por módulo · {control.dailyReport.operationCount} operação(ões)</p>
+            <p className="mt-1 text-xs leading-5 text-[#9a958b]">
+              {control.dailyReport.byModule.length > 0
+                ? control.dailyReport.byModule.map((item) => `${item.module}: ${item.count}`).join(" · ")
+                : "Nenhuma operação registrada hoje."}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/[0.07] bg-black/10 p-3">
+            <p className="text-xs font-semibold text-white">Por funcionário</p>
+            <p className="mt-1 text-xs leading-5 text-[#9a958b]">
+              {control.dailyReport.byUser.length > 0
+                ? control.dailyReport.byUser.map((item) => `${item.user}: ${item.count}`).join(" · ")
+                : "Nenhuma operação registrada hoje."}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      {/* Saude da infraestrutura e dos envios recebidos pelo servidor. */}
+      <section className="rounded-2xl border border-[#60a5fa]/15 bg-[#0b1017]/55 p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#93c5fd]">Saúde do sistema</p>
+            <h2 className="mt-1 text-base font-semibold text-white">Operação e sincronização</h2>
+          </div>
+          <Activity className="size-5 text-[#93c5fd]" />
+        </div>
+        <div className="mt-3 grid grid-cols-2 gap-2 md:grid-cols-4">
+          <div className="rounded-xl border border-[#4ade80]/20 bg-[#4ade80]/8 p-3">
+            <Database className="size-4 text-[#86efac]" />
+            <p className="mt-2 text-xs text-[#9a958b]">Banco de dados</p>
+            <p className="mt-0.5 text-sm font-semibold text-[#86efac]">Conectado</p>
+          </div>
+          <div className={`rounded-xl border p-3 ${control.watchdogStatus === "ok" ? "border-[#4ade80]/20 bg-[#4ade80]/8" : "border-[#f87171]/25 bg-[#f87171]/8"}`}>
+            <Activity className={control.watchdogStatus === "ok" ? "size-4 text-[#86efac]" : "size-4 text-[#fca5a5]"} />
+            <p className="mt-2 text-xs text-[#9a958b]">Monitoramento</p>
+            <p className={`mt-0.5 text-sm font-semibold ${control.watchdogStatus === "ok" ? "text-[#86efac]" : "text-[#fca5a5]"}`}>
+              {control.watchdogStatus === "ok" ? "Protegido" : control.watchdogStatus === "stopped" ? "Parado" : "Atenção"}
+            </p>
+          </div>
+          <div className="rounded-xl border border-white/[0.07] bg-black/10 p-3">
+            <HardDriveUpload className="size-4 text-[#93c5fd]" />
+            <p className="mt-2 text-xs text-[#9a958b]">Arquivos hoje</p>
+            <p className="mt-0.5 text-sm font-semibold text-white">{control.filesUploadedToday}</p>
+          </div>
+          <div className="rounded-xl border border-white/[0.07] bg-black/10 p-3">
+            <Smartphone className="size-4 text-[#c4b5fd]" />
+            <p className="mt-2 text-xs text-[#9a958b]">Usuários hoje</p>
+            <p className="mt-0.5 text-sm font-semibold text-white">{control.activeUsersToday}</p>
+          </div>
+        </div>
+        <p className="mt-3 text-xs leading-5 text-[#9a958b]">
+          Envios confirmados hoje: <strong className="text-white">{control.successfulSubmissionsToday}</strong>
+          {control.failedSubmissions > 0 || control.staleSubmissions > 0
+            ? ` · ${control.failedSubmissions} com falha · ${control.staleSubmissions} preso(s)`
+            : " · nenhum envio preso ou com falha"}.
+        </p>
+      </section>
+
       {/* Exceções que exigem atenção do dono */}
       <section className="rounded-2xl border border-[#d1a04f]/20 bg-[#0b0f0e]/55 p-4">
         <div className="flex items-start justify-between gap-3">
@@ -151,7 +240,9 @@ export default async function PainelPage() {
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9a958b]">Auditoria recente</p>
             <h2 className="mt-1 text-base font-semibold text-white">Quem alterou o quê</h2>
           </div>
-          <span className="text-xs text-[#9a958b]">Últimas {control.recentAudit.length}</span>
+          <Link href="/painel/auditoria" className="inline-flex min-h-11 items-center rounded-xl border border-white/10 px-3 text-xs font-semibold text-[#f3dfae] active:bg-white/[0.05]">
+            Ver histórico completo
+          </Link>
         </div>
         <div className="mt-3 divide-y divide-white/[0.06]">
           {control.recentAudit.length === 0 ? (

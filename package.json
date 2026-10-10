@@ -53,5 +53,20 @@
     "tailwindcss": "^4",
     "tsx": "^4.22.4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "baseline-browser-mapping": "2.11.28",
+    "browserslist": "4.29.3",
+    "deepmerge-ts": "8.0.2",
+    "esbuild": "0.28.2",
+    "js-yaml": "4.3.2",
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.21"
+    },
+    "minimatch@10.2.5": {
+      "brace-expansion": "5.0.12"
+    },
+    "mysql2": "3.24.5",
+    "source-map-js": "1.2.2"
   }
 }

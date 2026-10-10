@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { Prisma } from "@prisma/client";
+import { Prisma, SystemModule } from "@prisma/client";
 import bcrypt from "bcryptjs";
 
 import { prisma } from "@/lib/prisma";
@@ -9,6 +9,7 @@ import type { ModuleName, SessionData, StaffMember } from "@/types/app";
 const globalForUsers = globalThis as unknown as {
   localStaffStore?: Map<string, StaffMember[]>;
 };
+const supportedModules = Object.values(SystemModule);
 const localStaffStore =
   globalForUsers.localStaffStore ?? new Map<string, StaffMember[]>();
 globalForUsers.localStaffStore = localStaffStore;
@@ -44,7 +45,12 @@ export async function listStaff(session: SessionData): Promise<StaffMember[]> {
         role: { in: ["STAFF", "ADMIN"] },
       },
       orderBy: { createdAt: "desc" },
-      include: { modulePermissions: { select: { module: true, canView: true } } },
+      include: {
+        modulePermissions: {
+          where: { module: { in: supportedModules } },
+          select: { module: true, canView: true },
+        },
+      },
     });
 
     return users.map((u) => ({
@@ -105,24 +111,43 @@ export async function createStaff(
     // Nenhum e-mail real é pedido nem mostrado para novas contas.
     const email = emailTecnicoDoUsuario(username);
 
-    const user = await prisma.user.create({
-      data: {
-        organizationId: session.organizationId,
-        name: data.name,
-        username,
-        email,
-        phone: data.phone || undefined,
-        passwordHash,
-        role: data.role,
-        modulePermissions: {
-          create: grantedModules.map((module) => ({
-            organizationId: session.organizationId,
-            module,
-            canView: true,
-            canCreate: true,
-          })),
+    const user = await prisma.$transaction(async (tx) => {
+      const created = await tx.user.create({
+        data: {
+          organizationId: session.organizationId,
+          name: data.name,
+          username,
+          email,
+          phone: data.phone || undefined,
+          passwordHash,
+          role: data.role,
+          modulePermissions: {
+            create: grantedModules.map((module) => ({
+              organizationId: session.organizationId,
+              module,
+              canView: true,
+              canCreate: true,
+            })),
+          },
         },
-      },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId: session.organizationId,
+          userId: session.userId,
+          module: "SETTINGS",
+          action: "USER_CREATED",
+          entityType: "USER",
+          entityId: created.id,
+          newData: {
+            name: created.name,
+            username,
+            role: created.role,
+            modules: data.modules,
+          },
+        },
+      });
+      return created;
     });
 
     return {
@@ -187,6 +212,12 @@ export async function updateStaff(
 
   const alvo = await prisma.user.findFirst({
     where: { id: userId, organizationId: session.organizationId },
+    include: {
+      modulePermissions: {
+        where: { module: { in: supportedModules } },
+        select: { module: true, canView: true },
+      },
+    },
   });
   if (!alvo) throw new Error("Funcionário não encontrado.");
   if (alvo.role === "OWNER") throw new Error("Não é possível editar o Dono por aqui.");
@@ -234,7 +265,11 @@ export async function updateStaff(
     ]);
   } else {
     const permissoes = await prisma.modulePermission.findMany({
-      where: { userId, organizationId: session.organizationId },
+      where: {
+        userId,
+        organizationId: session.organizationId,
+        module: { in: supportedModules },
+      },
       select: { module: true, canView: true },
     });
     modulos = permissoes
@@ -242,6 +277,34 @@ export async function updateStaff(
       .map((p) => p.module as ModuleName)
       .filter((m) => m !== "DASHBOARD");
   }
+
+  const modulosAnteriores = alvo.modulePermissions
+    .filter((permission) => permission.canView && permission.module !== "DASHBOARD")
+    .map((permission) => permission.module);
+  await prisma.auditLog.create({
+    data: {
+      organizationId: session.organizationId,
+      userId: session.userId,
+      module: "SETTINGS",
+      action: "USER_UPDATED",
+      entityType: "USER",
+      entityId: userId,
+      oldData: {
+        name: alvo.name,
+        username: alvo.username ?? usuarioLegadoDoEmail(alvo.email),
+        phone: alvo.phone,
+        role: alvo.role,
+        modules: modulosAnteriores,
+      },
+      newData: {
+        name: updated.name,
+        username: updated.username ?? usuarioLegadoDoEmail(updated.email),
+        phone: updated.phone,
+        role: updated.role,
+        modules: modulos,
+      },
+    },
+  });
 
   return {
     id: updated.id,
@@ -269,7 +332,20 @@ export async function resetStaffPassword(
   if (alvo.role === "OWNER") throw new Error("Não é possível redefinir a senha do Dono por aqui.");
 
   const passwordHash = await bcrypt.hash(newPassword, 10);
-  await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: userId }, data: { passwordHash } });
+    await tx.auditLog.create({
+      data: {
+        organizationId: session.organizationId,
+        userId: session.userId,
+        module: "SETTINGS",
+        action: "USER_PASSWORD_RESET",
+        entityType: "USER",
+        entityId: userId,
+        newData: { passwordChanged: true },
+      },
+    });
+  });
 }
 
 export async function setStaffStatus(
@@ -297,8 +373,23 @@ export async function setStaffStatus(
   if (!alvo) throw new Error("Funcionário não encontrado.");
   if (alvo.role === "OWNER") throw new Error("Não é possível desativar o Dono.");
 
-  await prisma.user.update({
-    where: { id: userId },
-    data: { status: status === "ativo" ? "ACTIVE" : "INACTIVE" },
+  const nextStatus = status === "ativo" ? "ACTIVE" : "INACTIVE";
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
+      where: { id: userId },
+      data: { status: nextStatus },
+    });
+    await tx.auditLog.create({
+      data: {
+        organizationId: session.organizationId,
+        userId: session.userId,
+        module: "SETTINGS",
+        action: "USER_STATUS_CHANGED",
+        entityType: "USER",
+        entityId: userId,
+        oldData: { status: alvo.status },
+        newData: { status: nextStatus },
+      },
+    });
   });
 }

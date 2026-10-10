@@ -1,6 +1,9 @@
 import { randomUUID } from "crypto";
+import type { FieldVisitType, SystemModule } from "@prisma/client";
 
+import { hasModuleAccess } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { assertBusinessDayOpen } from "@/server/services/business-day-lock-service";
 import type { ClientListItem, ClientVisitSummary, SessionData, VisitRecord } from "@/types/app";
 
 const globalForVisits = globalThis as unknown as {
@@ -30,6 +33,23 @@ const visitTypeMap: Record<string, string> = {
   RENTAL: "Locação",
   GENERAL: "Geral",
 };
+
+const visitModuleMap: Record<FieldVisitType, SystemModule> = {
+  BILLIARD: "BILLIARD",
+  PLUSH: "PLUSH",
+  BX: "BX",
+  SLOT_H: "SLOT_H",
+  CARRETA_KIDS: "CARRETA_KIDS",
+  RENTAL: "RENTAL",
+  GENERAL: "CORE",
+};
+
+function assertVisitAccess(session: SessionData, visitType: FieldVisitType) {
+  if (visitType === "GENERAL") return;
+  if (!hasModuleAccess(session, visitModuleMap[visitType])) {
+    throw new Error("Sem permissão para registrar ou alterar visitas deste módulo.");
+  }
+}
 
 function labelToKey(label: string): string {
   const entry = Object.entries(visitTypeMap).find(([, v]) => v === label);
@@ -61,25 +81,44 @@ export async function saveVisit(
       | "RENTAL"
       | "GENERAL";
 
-    await prisma.fieldVisit.create({
-      data: {
-        id: visit.id,
-        organizationId: session.organizationId,
-        clientId: data.clientId || undefined,
-        targetId: data.targetId || undefined,
-        clientName: data.clientName || undefined,
-        clientPhone: data.clientPhone || undefined,
-        createdById: session.userId,
-        assignedToName: data.assignedToName || undefined,
-        visitType: typeKey,
-        occurredAt: new Date(data.occurredAt),
-        checkedItems: data.checkedItems,
-        incomeAmount: data.incomeAmount,
-        expenseAmount: data.expenseAmount,
-        notes: data.notes || undefined,
-        latitude: data.latitude ?? undefined,
-        longitude: data.longitude ?? undefined,
-      },
+    assertVisitAccess(session, typeKey);
+    await assertBusinessDayOpen(session, data.occurredAt);
+    await prisma.$transaction(async (tx) => {
+      await tx.fieldVisit.create({
+        data: {
+          id: visit.id,
+          organizationId: session.organizationId,
+          clientId: data.clientId || undefined,
+          targetId: data.targetId || undefined,
+          clientName: data.clientName || undefined,
+          clientPhone: data.clientPhone || undefined,
+          createdById: session.userId,
+          assignedToName: data.assignedToName || undefined,
+          visitType: typeKey,
+          occurredAt: new Date(data.occurredAt),
+          checkedItems: data.checkedItems,
+          incomeAmount: data.incomeAmount,
+          expenseAmount: data.expenseAmount,
+          notes: data.notes || undefined,
+          latitude: data.latitude ?? undefined,
+          longitude: data.longitude ?? undefined,
+        },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId: session.organizationId,
+          userId: session.userId,
+          module: visitModuleMap[typeKey],
+          action: "VISIT_CREATED",
+          entityType: "OTHER",
+          entityId: visit.id,
+          newData: {
+            visitType: typeKey,
+            occurredAt: data.occurredAt,
+            clientName: data.clientName || null,
+          },
+        },
+      });
     });
   } catch (error) {
     console.error("[visit-service] saveVisit falhou:", error);
@@ -184,24 +223,67 @@ export async function updateVisit(
 
   try {
     const owned = await prisma.fieldVisit.findFirst({
-      where: { id: visitId, organizationId: session.organizationId },
-      select: { id: true },
+      where: {
+        id: visitId,
+        organizationId: session.organizationId,
+        ...(session.role === "STAFF" ? { createdById: session.userId } : {}),
+      },
+      select: {
+        id: true,
+        visitType: true,
+        occurredAt: true,
+        incomeAmount: true,
+        expenseAmount: true,
+        notes: true,
+      },
     });
     if (!owned) return null;
+
+    await assertBusinessDayOpen(session, owned.occurredAt);
+    await assertBusinessDayOpen(session, data.occurredAt);
 
     const typeKey = labelToKey(data.visitType) as
       | "BILLIARD" | "PLUSH" | "BX" | "SLOT_H" | "CARRETA_KIDS" | "RENTAL" | "GENERAL";
 
-    const row = await prisma.fieldVisit.update({
-      where: { id: visitId },
-      data: {
-        visitType: typeKey,
-        occurredAt: new Date(data.occurredAt),
-        incomeAmount: data.incomeAmount,
-        expenseAmount: data.expenseAmount,
-        notes: data.notes || null,
-      },
-      include: { createdBy: true },
+    assertVisitAccess(session, owned.visitType);
+    assertVisitAccess(session, typeKey);
+    const row = await prisma.$transaction(async (tx) => {
+      const updated = await tx.fieldVisit.update({
+        where: { id: visitId },
+        data: {
+          visitType: typeKey,
+          occurredAt: new Date(data.occurredAt),
+          incomeAmount: data.incomeAmount,
+          expenseAmount: data.expenseAmount,
+          notes: data.notes || null,
+        },
+        include: { createdBy: true },
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId: session.organizationId,
+          userId: session.userId,
+          module: visitModuleMap[typeKey],
+          action: "VISIT_UPDATED",
+          entityType: "OTHER",
+          entityId: visitId,
+          oldData: {
+            visitType: owned.visitType,
+            occurredAt: owned.occurredAt.toISOString(),
+            incomeAmount: Number(owned.incomeAmount),
+            expenseAmount: Number(owned.expenseAmount),
+            notes: owned.notes,
+          },
+          newData: {
+            visitType: typeKey,
+            occurredAt: data.occurredAt,
+            incomeAmount: data.incomeAmount,
+            expenseAmount: data.expenseAmount,
+            notes: data.notes || null,
+          },
+        },
+      });
+      return updated;
     });
 
     return {
@@ -239,12 +321,40 @@ export async function deleteVisit(
 
   try {
     const owned = await prisma.fieldVisit.findFirst({
-      where: { id: visitId, organizationId: session.organizationId },
-      select: { id: true },
+      where: {
+        id: visitId,
+        organizationId: session.organizationId,
+        ...(session.role === "STAFF" ? { createdById: session.userId } : {}),
+      },
+      select: {
+        id: true,
+        visitType: true,
+        occurredAt: true,
+        clientName: true,
+      },
     });
     if (!owned) return false;
 
-    await prisma.fieldVisit.delete({ where: { id: visitId } });
+    assertVisitAccess(session, owned.visitType);
+    await assertBusinessDayOpen(session, owned.occurredAt);
+    await prisma.$transaction(async (tx) => {
+      await tx.fieldVisit.delete({ where: { id: visitId } });
+      await tx.auditLog.create({
+        data: {
+          organizationId: session.organizationId,
+          userId: session.userId,
+          module: visitModuleMap[owned.visitType],
+          action: "VISIT_DELETED",
+          entityType: "OTHER",
+          entityId: visitId,
+          oldData: {
+            visitType: owned.visitType,
+            occurredAt: owned.occurredAt.toISOString(),
+            clientName: owned.clientName,
+          },
+        },
+      });
+    });
     return true;
   } catch (error) {
     console.error("[visit-service] deleteVisit falhou:", error);

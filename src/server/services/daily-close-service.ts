@@ -1,16 +1,14 @@
 import { z } from "zod";
 
 import { currentBusinessDate } from "@/lib/business-date";
-import {
-  isBusinessDayLocked,
-  summarizeDailyMovements,
-  type DailyCloseTotals,
-} from "@/lib/daily-close-calculations";
+import { summarizeDailyMovements, type DailyCloseTotals } from "@/lib/daily-close-calculations";
 import { getModuleBySlug } from "@/lib/module-catalog";
 import { prisma } from "@/lib/prisma";
 import { listModuleFinancialEntries } from "@/server/services/finance-service";
 import { moduleSlugs } from "@/server/services/module-record-service";
 import type { SessionData } from "@/types/app";
+
+export { assertBusinessDayOpen } from "@/server/services/business-day-lock-service";
 
 const closeInputSchema = z.object({
   businessDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
@@ -119,7 +117,10 @@ function mapClose(row: {
   };
 }
 
-async function calculateTotals(session: SessionData, businessDate: string): Promise<DailyCloseTotals> {
+export async function getDailyBusinessTotals(
+  session: SessionData,
+  businessDate: string,
+): Promise<DailyCloseTotals> {
   const { from, to } = businessDateRange(businessDate);
   const moduleEntries = await Promise.all(
     moduleSlugs.map(async (slug) => {
@@ -159,7 +160,7 @@ export async function getDailyCloseSnapshot(
   closeInputSchema.shape.businessDate.parse(businessDate);
   const { storedDate } = businessDateRange(businessDate);
   const [totals, closed] = await Promise.all([
-    calculateTotals(session, businessDate),
+    getDailyBusinessTotals(session, businessDate),
     prisma.dailyClose.findUnique({
       where: {
         organizationId_businessDate: {
@@ -184,7 +185,7 @@ export async function getDailyCloseSnapshot(
 export async function closeBusinessDay(session: SessionData, payload: unknown) {
   assertOwner(session);
   const input = closeInputSchema.parse(payload);
-  const totals = await calculateTotals(session, input.businessDate);
+  const totals = await getDailyBusinessTotals(session, input.businessDate);
   const { storedDate } = businessDateRange(input.businessDate);
   const countedTotal = input.countedCash + input.countedPix + input.countedCard + input.countedOther;
   const differenceAmount = countedTotal - totals.expectedIncome;
@@ -285,28 +286,4 @@ export async function reopenBusinessDay(session: SessionData, payload: unknown) 
       },
     });
   });
-}
-
-export async function assertBusinessDayOpen(session: SessionData, value?: string | Date | null) {
-  if (session.role === "OWNER") return;
-  const businessDate =
-    typeof value === "string"
-      ? value.slice(0, 10)
-      : value instanceof Date
-        ? currentBusinessDate(value)
-        : currentBusinessDate();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(businessDate)) return;
-  const { storedDate } = businessDateRange(businessDate);
-  const closed = await prisma.dailyClose.findUnique({
-    where: {
-      organizationId_businessDate: {
-        organizationId: session.organizationId,
-        businessDate: storedDate,
-      },
-    },
-    select: { status: true },
-  });
-  if (isBusinessDayLocked(session.role, closed?.status)) {
-    throw new Error("O caixa deste dia já foi fechado pelo dono. Solicite a reabertura para lançar ou corrigir valores.");
-  }
 }

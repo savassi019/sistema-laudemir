@@ -9,6 +9,10 @@ import { calculateReceivedInterest, isCreditOverdue } from "@/lib/credit-finance
 import { formatCurrency } from "@/lib/format";
 import { prisma } from "@/lib/prisma";
 import {
+  assertBusinessDayOpen,
+  assertFinancialEntryDayOpen,
+} from "@/server/services/business-day-lock-service";
+import {
   DIRECTION_LABEL,
   FINANCIAL_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
@@ -508,6 +512,11 @@ export async function updateModuleFinancialEntryStatus(
   status: "PENDING" | "PARTIAL" | "PAID",
 ): Promise<ModuleFinancialEntryItem> {
   assertModuleFinancialAccess(session);
+  if (status === "PAID") {
+    await assertBusinessDayOpen(session);
+  } else {
+    await assertFinancialEntryDayOpen(session, module, id);
+  }
   if (status === "PARTIAL") {
     throw new Error("Informe o valor do pagamento parcial.");
   }
@@ -568,6 +577,7 @@ export async function createModuleFinancialEntry(
   payload: Record<string, unknown>,
 ): Promise<ModuleFinancialEntryItem> {
   assertModuleFinancialAccess(session);
+  await assertBusinessDayOpen(session);
   const input = createModuleFinancialEntrySchema.parse(payload);
   const kind: FinancialKind = input.direction === "INCOME" ? "RECEIVABLE" : "PAYABLE";
   const paidAmount =
@@ -643,6 +653,7 @@ export async function registerModuleFinancialPayment(
   payload: Record<string, unknown>,
 ): Promise<ModuleFinancialEntryItem> {
   assertModuleFinancialAccess(session);
+  await assertBusinessDayOpen(session);
   const input = registerModulePaymentSchema.parse(payload);
   const amount = Math.round(input.amount * 100) / 100;
   const method = paymentMethodMap[input.paymentMethod] ?? "OTHER";
@@ -750,6 +761,7 @@ export async function updateModuleFinancialEntry(
   payload: Record<string, unknown>,
 ): Promise<ModuleFinancialEntryItem> {
   assertModuleFinancialAccess(session);
+  await assertFinancialEntryDayOpen(session, module, id);
   const input = updateModuleFinancialEntrySchema.parse(payload);
 
   await prisma.$transaction(async (tx) => {
@@ -812,6 +824,7 @@ export async function cancelModuleFinancialEntry(
   id: string,
 ): Promise<ModuleFinancialEntryItem> {
   assertModuleFinancialAccess(session);
+  await assertFinancialEntryDayOpen(session, module, id);
 
   await prisma.$transaction(async (tx) => {
     const existing = await tx.financialEntry.findFirstOrThrow({
@@ -940,6 +953,7 @@ export async function createFinancialEntry(
   session: SessionData,
   payload: Record<string, unknown>,
 ): Promise<FinanceEntryListItem> {
+  await assertBusinessDayOpen(session);
   const input = createFinancialEntrySchema.parse(payload);
   const direction = input.kind === "RECEIVABLE" ? "INCOME" : "EXPENSE";
   const id = randomUUID();

@@ -1,4 +1,4 @@
-const BUILD_ID = "L3i6O_VP8HWe-rFvafGK7";
+const BUILD_ID = "uQGIQ5UWk-yn7jynRMcs6";
 const STATIC_CACHE = `infinity-static-${BUILD_ID}`;
 const PRIVATE_CACHE_PREFIX = "infinity-operations-";
 const PRIVATE_CACHE_BUILD_PREFIX = `${PRIVATE_CACHE_PREFIX}${BUILD_ID}-`;

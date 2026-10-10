@@ -2,8 +2,9 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
 import { currentBusinessDate, currentBusinessDayRange } from "@/lib/business-date";
-import { moduleCatalog } from "@/lib/module-catalog";
+import { auditActionLabel, auditModuleLabel } from "@/lib/audit-labels";
 import { prisma } from "@/lib/prisma";
+import { getDailyBusinessTotals } from "@/server/services/daily-close-service";
 import type { SessionData } from "@/types/app";
 
 export type OwnerException = {
@@ -19,6 +20,14 @@ export type OwnerControlSnapshot = {
   businessDate: string;
   dayCloseStatus: "open" | "closed" | "reopened";
   watchdogStatus: "ok" | "degraded" | "stopped" | "unknown";
+  watchdogCheckedAt: string | null;
+  databaseStatus: "ok";
+  successfulSubmissionsToday: number;
+  failedSubmissions: number;
+  staleSubmissions: number;
+  filesUploadedToday: number;
+  activeUsersToday: number;
+  lastSuccessfulSubmissionAt: string | null;
   auditActionsLastSevenDays: number;
   receiptsGeneratedToday: number;
   receiptsPendingShareToday: number;
@@ -29,27 +38,17 @@ export type OwnerControlSnapshot = {
     user: string;
     createdAt: string;
   }>;
+  dailyReport: {
+    operationCount: number;
+    expectedIncome: number;
+    expectedExpense: number;
+    expectedPrize: number;
+    expectedNet: number;
+    byModule: Array<{ module: string; count: number }>;
+    byUser: Array<{ user: string; count: number }>;
+  };
   exceptions: OwnerException[];
 };
-
-const auditActionLabels: Record<string, string> = {
-  CLIENT_CREATED: "Cliente cadastrado",
-  MODULE_CLIENT_CREATED: "Cliente do módulo cadastrado",
-  MODULE_OPERATION_CREATED: "Operação registrada",
-  FINANCIAL_ENTRY_CREATED: "Lançamento financeiro criado",
-  FINANCIAL_ENTRY_UPDATED: "Lançamento financeiro alterado",
-  FINANCIAL_ENTRY_CANCELLED: "Lançamento financeiro cancelado",
-  FINANCIAL_PAYMENT_REGISTERED: "Pagamento registrado",
-  FINANCIAL_STATUS_UPDATED: "Situação financeira alterada",
-  MODULE_OPERATION_CORRECTED: "Operação corrigida",
-  MODULE_OPERATION_CANCELLED: "Operação cancelada",
-  DAILY_CLOSE_COMPLETED: "Fechamento diário concluído",
-  DAILY_CLOSE_REOPENED: "Fechamento diário reaberto",
-};
-
-function moduleLabel(module: string) {
-  return moduleCatalog.find((item) => item.module === module)?.title ?? "Sistema";
-}
 
 function assertOwner(session: SessionData) {
   if (session.role !== "OWNER") {
@@ -57,7 +56,10 @@ function assertOwner(session: SessionData) {
   }
 }
 
-async function readWatchdogStatus(): Promise<OwnerControlSnapshot["watchdogStatus"]> {
+async function readWatchdogStatus(): Promise<{
+  status: OwnerControlSnapshot["watchdogStatus"];
+  checkedAt: string | null;
+}> {
   try {
     const raw = await readFile(join(process.cwd(), ".watchdog-status"), "utf8");
     const [state, timestamp] = raw.trim().split("|");
@@ -65,12 +67,15 @@ async function readWatchdogStatus(): Promise<OwnerControlSnapshot["watchdogStatu
       ? (Date.now() - Number(timestamp) * 1000) / 60_000
       : Number.POSITIVE_INFINITY;
 
-    if (!Number.isFinite(ageMinutes) || ageMinutes > 30) return "stopped";
-    if (state === "ok") return "ok";
-    if (state === "degradado") return "degraded";
-    return "unknown";
+    const checkedAt = timestamp && Number.isFinite(Number(timestamp))
+      ? new Date(Number(timestamp) * 1000).toISOString()
+      : null;
+    if (!Number.isFinite(ageMinutes) || ageMinutes > 30) return { status: "stopped", checkedAt };
+    if (state === "ok") return { status: "ok", checkedAt };
+    if (state === "degradado") return { status: "degraded", checkedAt };
+    return { status: "unknown", checkedAt };
   } catch {
-    return "unknown";
+    return { status: "unknown", checkedAt: null };
   }
 }
 
@@ -89,11 +94,17 @@ export async function getOwnerControlSnapshot(
   const [
     failedSubmissions,
     staleSubmissions,
+    successfulSubmissionsToday,
+    lastSuccessfulSubmission,
+    filesUploadedToday,
+    activeUsersToday,
+    todayOperations,
+    dailyTotals,
     receiptEvents,
     dailyClose,
     auditActionsLastSevenDays,
     recentAuditRows,
-    watchdogStatus,
+    watchdog,
   ] = await Promise.all([
     prisma.moduleSubmission.count({
       where: { organizationId: session.organizationId, status: "FAILED" },
@@ -105,6 +116,34 @@ export async function getOwnerControlSnapshot(
         updatedAt: { lt: staleSubmissionLimit },
       },
     }),
+    prisma.moduleSubmission.count({
+      where: {
+        organizationId: session.organizationId,
+        status: "SUCCEEDED",
+        updatedAt: { gte: from, lte: to },
+      },
+    }),
+    prisma.moduleSubmission.findFirst({
+      where: { organizationId: session.organizationId, status: "SUCCEEDED" },
+      select: { updatedAt: true },
+      orderBy: { updatedAt: "desc" },
+    }),
+    prisma.fileAsset.count({
+      where: { organizationId: session.organizationId, createdAt: { gte: from, lte: to } },
+    }),
+    prisma.user.count({
+      where: { organizationId: session.organizationId, lastLoginAt: { gte: from, lte: to } },
+    }),
+    prisma.auditLog.findMany({
+      where: {
+        organizationId: session.organizationId,
+        action: { in: ["MODULE_OPERATION_CREATED", "VISIT_CREATED"] },
+        createdAt: { gte: from, lte: to },
+      },
+      select: { module: true, user: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
+    getDailyBusinessTotals(session, businessDate),
     prisma.receiptEvent.findMany({
       where: {
         organizationId: session.organizationId,
@@ -142,6 +181,15 @@ export async function getOwnerControlSnapshot(
     }),
     readWatchdogStatus(),
   ]);
+
+  const operationsByModule = new Map<string, number>();
+  const operationsByUser = new Map<string, number>();
+  for (const operation of todayOperations) {
+    const moduleName = auditModuleLabel(operation.module);
+    const user = operation.user?.name ?? "Sistema";
+    operationsByModule.set(moduleName, (operationsByModule.get(moduleName) ?? 0) + 1);
+    operationsByUser.set(user, (operationsByUser.get(user) ?? 0) + 1);
+  }
 
   const receipts = new Map<string, Set<string>>();
   for (const event of receiptEvents) {
@@ -209,11 +257,11 @@ export async function getOwnerControlSnapshot(
       href: "/financeiro",
     });
   }
-  if (watchdogStatus !== "ok") {
+  if (watchdog.status !== "ok") {
     exceptions.push({
       id: "watchdog",
       level: "critical",
-      title: watchdogStatus === "stopped" ? "Monitoramento parado" : "Proteção precisa de atenção",
+      title: watchdog.status === "stopped" ? "Monitoramento parado" : "Proteção precisa de atenção",
       detail: "O vigia de banco, arquivos ou aplicação não confirmou estado saudável.",
       count: 1,
       href: "/painel",
@@ -223,17 +271,38 @@ export async function getOwnerControlSnapshot(
   return {
     businessDate,
     dayCloseStatus,
-    watchdogStatus,
+    watchdogStatus: watchdog.status,
+    watchdogCheckedAt: watchdog.checkedAt,
+    databaseStatus: "ok",
+    successfulSubmissionsToday,
+    failedSubmissions,
+    staleSubmissions,
+    filesUploadedToday,
+    activeUsersToday,
+    lastSuccessfulSubmissionAt: lastSuccessfulSubmission?.updatedAt.toISOString() ?? null,
     auditActionsLastSevenDays,
     receiptsGeneratedToday,
     receiptsPendingShareToday,
     recentAudit: recentAuditRows.map((row) => ({
       id: row.id,
-      action: auditActionLabels[row.action] ?? "Alteração registrada",
-      module: moduleLabel(row.module),
+      action: auditActionLabel(row.action),
+      module: auditModuleLabel(row.module),
       user: row.user?.name ?? "Sistema",
       createdAt: row.createdAt.toISOString(),
     })),
+    dailyReport: {
+      operationCount: todayOperations.length,
+      expectedIncome: dailyTotals.expectedIncome,
+      expectedExpense: dailyTotals.expectedExpense,
+      expectedPrize: dailyTotals.expectedPrize,
+      expectedNet: dailyTotals.expectedNet,
+      byModule: [...operationsByModule.entries()]
+        .map(([module, count]) => ({ module, count }))
+        .sort((a, b) => b.count - a.count),
+      byUser: [...operationsByUser.entries()]
+        .map(([user, count]) => ({ user, count }))
+        .sort((a, b) => b.count - a.count),
+    },
     exceptions,
   };
 }

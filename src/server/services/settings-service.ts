@@ -30,28 +30,41 @@ export async function setContactPhones(
   session: SessionData,
   payload: { ownerPhone: string; staffPhone: string },
 ): Promise<ContactPhones> {
-  await Promise.all([
-    prisma.systemSetting.upsert({
-      where: { organizationId_key: { organizationId: session.organizationId, key: OWNER_WHATSAPP_KEY } },
-      create: {
+  const before = await getContactPhones(session);
+  await prisma.$transaction(async (tx) => {
+    await tx.systemSetting.upsert({
+        where: { organizationId_key: { organizationId: session.organizationId, key: OWNER_WHATSAPP_KEY } },
+        create: {
+          organizationId: session.organizationId,
+          key: OWNER_WHATSAPP_KEY,
+          value: payload.ownerPhone,
+          updatedById: session.userId,
+        },
+        update: { value: payload.ownerPhone, updatedById: session.userId },
+      });
+    await tx.systemSetting.upsert({
+        where: { organizationId_key: { organizationId: session.organizationId, key: STAFF_WHATSAPP_KEY } },
+        create: {
+          organizationId: session.organizationId,
+          key: STAFF_WHATSAPP_KEY,
+          value: payload.staffPhone,
+          updatedById: session.userId,
+        },
+        update: { value: payload.staffPhone, updatedById: session.userId },
+      });
+    await tx.auditLog.create({
+      data: {
         organizationId: session.organizationId,
-        key: OWNER_WHATSAPP_KEY,
-        value: payload.ownerPhone,
-        updatedById: session.userId,
+        userId: session.userId,
+        module: "SETTINGS",
+        action: "CONTACT_PHONES_UPDATED",
+        entityType: "ORGANIZATION",
+        entityId: session.organizationId,
+        oldData: before,
+        newData: payload,
       },
-      update: { value: payload.ownerPhone, updatedById: session.userId },
-    }),
-    prisma.systemSetting.upsert({
-      where: { organizationId_key: { organizationId: session.organizationId, key: STAFF_WHATSAPP_KEY } },
-      create: {
-        organizationId: session.organizationId,
-        key: STAFF_WHATSAPP_KEY,
-        value: payload.staffPhone,
-        updatedById: session.userId,
-      },
-      update: { value: payload.staffPhone, updatedById: session.userId },
-    }),
-  ]);
+    });
+  });
 
   return { ownerPhone: payload.ownerPhone, staffPhone: payload.staffPhone };
 }

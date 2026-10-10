@@ -86,7 +86,6 @@ export async function updateModuleFinancialEntryStatusAction(
   status: "PENDING" | "PARTIAL" | "PAID",
 ) {
   const { session, moduleItem } = await requireModuleFinancialAccess(slug);
-  await assertBusinessDayOpen(session);
   return updateModuleFinancialEntryStatus(session, moduleItem.module, id, status);
 }
 
@@ -106,12 +105,10 @@ export async function updateModuleFinancialEntryAction(
   payload: Record<string, unknown>,
 ) {
   const { session, moduleItem } = await requireModuleFinancialAccess(slug);
-  await assertBusinessDayOpen(session);
   return updateModuleFinancialEntry(session, moduleItem.module, id, payload);
 }
 
 export async function cancelModuleFinancialEntryAction(slug: string, id: string) {
   const { session, moduleItem } = await requireModuleFinancialAccess(slug);
-  await assertBusinessDayOpen(session);
   return cancelModuleFinancialEntry(session, moduleItem.module, id);
 }

@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import { SystemModule } from "@prisma/client";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -10,11 +11,10 @@ import { prisma } from "@/lib/prisma";
 import { normalizarUsuario } from "@/lib/user-validation";
 import type { ModuleName, SessionData } from "@/types/app";
 
-const ALL_MODULES: ModuleName[] = [
-  "CORE", "DASHBOARD", "CLIENTS", "FINANCE", "REPORTS", "SETTINGS",
-  "CARRETA_KIDS", "RENTAL", "PLUSH", "BILLIARD", "BRASIL_BETS",
-  "MACHINE", "CONDOMINIUM_MARKET", "MARKETING", "PERSONAL_FINANCE", "BX", "SLOT_H",
-];
+const ALL_MODULES = Object.values(SystemModule) as ModuleName[];
+const supportedPermissionInclude = {
+  where: { module: { in: ALL_MODULES } },
+} as const;
 
 const AUTH_COOKIE = "sgm_session";
 const TOKEN_TTL = 60 * 60 * 12;
@@ -62,7 +62,7 @@ export async function getSession() {
         organizationId: tokenSession.organizationId,
         status: "ACTIVE",
       },
-      include: { modulePermissions: true },
+      include: { modulePermissions: supportedPermissionInclude },
     });
 
     if (!user) {
@@ -123,7 +123,7 @@ export async function authenticateUser(identifier: string, password: string) {
 
   let user = await prisma.user.findUnique({
     where: { username: normalizedIdentifier },
-    include: { modulePermissions: true },
+    include: { modulePermissions: supportedPermissionInclude },
   });
 
   // Compatibilidade de transição: contas antigas continuam entrando pelo
@@ -131,13 +131,13 @@ export async function authenticateUser(identifier: string, password: string) {
   if (!user && identifier.includes("@")) {
     user = await prisma.user.findUnique({
       where: { email: identifier.trim().toLowerCase() },
-      include: { modulePermissions: true },
+      include: { modulePermissions: supportedPermissionInclude },
     });
   }
   if (!user && !identifier.includes("@")) {
     const legacyMatches = await prisma.user.findMany({
       where: { email: { startsWith: `${normalizedIdentifier}@`, mode: "insensitive" } },
-      include: { modulePermissions: true },
+      include: { modulePermissions: supportedPermissionInclude },
       take: 2,
     });
     if (legacyMatches.length === 1) user = legacyMatches[0];

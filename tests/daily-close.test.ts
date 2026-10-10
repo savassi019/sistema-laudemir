@@ -60,9 +60,9 @@ test("fechamento diário separa formas de recebimento e despesas sem duplicar", 
   });
 });
 
-test("funcionário não altera dia fechado, mas dono pode corrigir", () => {
+test("dia fechado bloqueia funcionario, gestor e dono ate a reabertura", () => {
   assert.equal(isBusinessDayLocked("STAFF", "CLOSED"), true);
   assert.equal(isBusinessDayLocked("ADMIN", "CLOSED"), true);
-  assert.equal(isBusinessDayLocked("OWNER", "CLOSED"), false);
+  assert.equal(isBusinessDayLocked("OWNER", "CLOSED"), true);
   assert.equal(isBusinessDayLocked("STAFF", "REOPENED"), false);
 });

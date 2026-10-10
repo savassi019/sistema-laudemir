@@ -84,5 +84,6 @@ export function summarizeDailyMovements(
 }
 
 export function isBusinessDayLocked(role: string, closeStatus: string | null | undefined) {
-  return role !== "OWNER" && closeStatus === "CLOSED";
+  void role;
+  return closeStatus === "CLOSED";
 }

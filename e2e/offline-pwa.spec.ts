@@ -20,12 +20,11 @@ test.describe("PWA operacional offline", () => {
     let offlineCopy: {
       ready: boolean;
       hasVisit: boolean;
-      hasFinance: boolean;
-    } = { ready: false, hasVisit: false, hasFinance: false };
+    } = { ready: false, hasVisit: false };
     await expect.poll(async () => {
       offlineCopy = await page.evaluate(async () => {
         if (!navigator.serviceWorker.controller) {
-          return { ready: false, hasVisit: false, hasFinance: false };
+          return { ready: false, hasVisit: false };
         }
         const names = (await caches.keys()).filter((name) => name.startsWith("infinity-operations-"));
         for (const name of names) {
@@ -38,18 +37,18 @@ test.describe("PWA operacional offline", () => {
             return {
               ready: true,
               hasVisit: html.includes("Visita"),
-              hasFinance: html.includes("Financeiro"),
             };
           }
         }
-        return { ready: false, hasVisit: false, hasFinance: false };
+        return { ready: false, hasVisit: false };
       });
       return offlineCopy.ready;
     }, { timeout: 60_000 }).toBe(true);
 
     await context.setOffline(true);
     expect(await page.evaluate(() => navigator.onLine)).toBe(false);
-    expect(offlineCopy).toEqual({ ready: true, hasVisit: true, hasFinance: true });
+    expect(offlineCopy).toEqual({ ready: true, hasVisit: true });
+    await page.reload({ waitUntil: "domcontentloaded" });
     await expect(page.getByRole("button", { name: /Visita/ }).first()).toBeVisible();
     await context.setOffline(false);
 

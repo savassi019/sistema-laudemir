@@ -18,6 +18,10 @@ test.describe("perfis de acesso em celular", () => {
     await expect(page.getByRole("heading", { name: "Equipe", exact: true })).toBeVisible();
     await page.goto("/painel");
     await expect(page).toHaveURL(/\/painel/);
+    await expect(page.getByRole("heading", { name: "Painel do Dono" })).toBeVisible();
+    await expect(page.getByText("Saúde do sistema", { exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "Ver histórico completo" }).click();
+    await expect(page.getByRole("heading", { name: "Histórico de auditoria" })).toBeVisible();
   });
 
   test("gestor enxerga somente o financeiro do dia", async ({ page }) => {
