@@ -249,6 +249,7 @@ export function BilliardForm({
   const [cepError, setCepError] = useState<string | null>(null);
   const [loadingPointHistory, setLoadingPointHistory] = useState(false);
   const [showPointHistory, setShowPointHistory] = useState(false);
+  const [showSummaryHistory, setShowSummaryHistory] = useState(false);
   const [showOptionalCosts, setShowOptionalCosts] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
@@ -517,6 +518,7 @@ export function BilliardForm({
     form.setValue("accumulatedChips", point.accumulatedChips);
     setLoadedPoint(point);
     setShowPointHistory(false);
+    setShowSummaryHistory(false);
     setActiveStep("ponto");
 
     setLoadingPointHistory(true);
@@ -861,6 +863,7 @@ export function BilliardForm({
                       setLoadedPoint(null);
                       setPointHistory([]);
                       setShowPointHistory(false);
+                      setShowSummaryHistory(false);
                       setActiveStep("ponto");
                     }}
                     className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#d1a04f]/25 bg-[#d1a04f]/10 px-4 py-3 text-sm font-semibold text-[#f3dfae]"
@@ -1576,18 +1579,48 @@ export function BilliardForm({
                       </div>
                     ) : null}
 
-                    {/* 5. Histórico completo */}
-                    <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-[#9a958b]">
-                      Histórico completo
-                    </p>
-                    {loadingPointHistory ? (
-                      <p className={hintClass}>Carregando histórico...</p>
-                    ) : (
-                      <BilliardPointHistoryList
-                        entries={pointHistory}
-                        hideFinancials={hideFinancials}
-                      />
-                    )}
+                    {/* 5. Histórico completo, recolhido para manter o resumo limpo */}
+                    <div className="rounded-2xl border border-white/10 bg-white/[0.025]">
+                      <button
+                        type="button"
+                        aria-expanded={showSummaryHistory}
+                        aria-controls="billiard-summary-history"
+                        onClick={() => setShowSummaryHistory((current) => !current)}
+                        className="flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl px-3 py-2.5 text-left active:bg-white/[0.04]"
+                      >
+                        <span>
+                          <span className="block text-sm font-semibold text-[#dbe6d4]">
+                            {showSummaryHistory ? "Ocultar histórico completo" : "Ver histórico completo"}
+                          </span>
+                          <span className="mt-0.5 block text-xs text-[#9a958b]">
+                            {pointHistory.length} registro{pointHistory.length === 1 ? "" : "s"}
+                          </span>
+                        </span>
+                        <ChevronDown
+                          aria-hidden="true"
+                          className={cn(
+                            "size-4 shrink-0 text-[#9a958b] transition-transform",
+                            showSummaryHistory ? "rotate-180" : "",
+                          )}
+                        />
+                      </button>
+
+                      {showSummaryHistory ? (
+                        <div
+                          id="billiard-summary-history"
+                          className="border-t border-white/10 p-3"
+                        >
+                          {loadingPointHistory ? (
+                            <p className={hintClass}>Carregando histórico...</p>
+                          ) : (
+                            <BilliardPointHistoryList
+                              entries={pointHistory}
+                              hideFinancials={hideFinancials}
+                            />
+                          )}
+                        </div>
+                      ) : null}
+                    </div>
                   </>
                 )}
               </StepPanel>
