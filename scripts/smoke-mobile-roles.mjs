@@ -209,7 +209,7 @@ try {
 
     if (profile.role === "owner") {
       const pdfPopupPromise = page.waitForEvent("popup");
-      await page.getByRole("button", { name: "Baixar como PDF", exact: true }).click();
+      await page.getByRole("button", { name: "Gerar via do cliente em PDF", exact: true }).click();
       const pdfPopup = await pdfPopupPromise;
       await pdfPopup.waitForLoadState("domcontentloaded");
       await pdfPopup.getByText("COMPROVANTE DE FECHAMENTO", { exact: true }).waitFor();
