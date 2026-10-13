@@ -208,6 +208,26 @@ enum DailyCloseStatus {
   REOPENED
 }
 
+enum EmployeeCashStatus {
+  OPEN
+  SUBMITTED
+  APPROVED
+  RETURNED
+}
+
+enum EmployeeExpenseCategory {
+  MEAL
+  FUEL
+  TOLL
+  OTHER
+}
+
+enum EmployeeExpenseFunding {
+  COMPANY_ADVANCE
+  EMPLOYEE_OWN
+  COMPANY_DIRECT
+}
+
 enum ReceiptEventType {
   GENERATED
   SHARED
@@ -311,34 +331,37 @@ model Organization {
   fieldVisits              FieldVisit[]
   dailyCloses              DailyClose[]
   receiptEvents            ReceiptEvent[]
+  employeeDailyCashBoxes   EmployeeDailyCash[]
 }
 
 model User {
-  id                  String             @id @default(cuid())
-  organizationId      String
-  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  role                UserRole
-  status              UserStatus         @default(ACTIVE)
-  name                String
-  username            String?            @unique
-  email               String             @unique
-  phone               String?
-  passwordHash        String
-  lastLoginAt         DateTime?
-  createdAt           DateTime           @default(now())
-  updatedAt           DateTime           @updatedAt
-  modulePermissions   ModulePermission[]
-  uploadedFiles       FileAsset[]
-  createdClients      Client[]           @relation("ClientCreatedBy")
-  paymentsCreated     Payment[]          @relation("PaymentCreatedBy")
-  auditLogs           AuditLog[]
-  notesCreated        Note[]             @relation("NoteCreatedBy")
-  remindersCreated    Reminder[]         @relation("ReminderCreatedBy")
-  remindersAssigned   Reminder[]         @relation("ReminderAssignedTo")
-  fieldVisits         FieldVisit[]       @relation("VisitCreatedBy")
-  dailyClosesCreated  DailyClose[]       @relation("DailyCloseCreatedBy")
-  dailyClosesReopened DailyClose[]       @relation("DailyCloseReopenedBy")
-  receiptEvents       ReceiptEvent[]
+  id                     String              @id @default(cuid())
+  organizationId         String
+  organization           Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  role                   UserRole
+  status                 UserStatus          @default(ACTIVE)
+  name                   String
+  username               String?             @unique
+  email                  String              @unique
+  phone                  String?
+  passwordHash           String
+  lastLoginAt            DateTime?
+  createdAt              DateTime            @default(now())
+  updatedAt              DateTime            @updatedAt
+  modulePermissions      ModulePermission[]
+  uploadedFiles          FileAsset[]
+  createdClients         Client[]            @relation("ClientCreatedBy")
+  paymentsCreated        Payment[]           @relation("PaymentCreatedBy")
+  auditLogs              AuditLog[]
+  notesCreated           Note[]              @relation("NoteCreatedBy")
+  remindersCreated       Reminder[]          @relation("ReminderCreatedBy")
+  remindersAssigned      Reminder[]          @relation("ReminderAssignedTo")
+  fieldVisits            FieldVisit[]        @relation("VisitCreatedBy")
+  dailyClosesCreated     DailyClose[]        @relation("DailyCloseCreatedBy")
+  dailyClosesReopened    DailyClose[]        @relation("DailyCloseReopenedBy")
+  receiptEvents          ReceiptEvent[]
+  employeeDailyCashBoxes EmployeeDailyCash[] @relation("EmployeeDailyCashEmployee")
+  employeeCashReviews    EmployeeDailyCash[] @relation("EmployeeDailyCashReviewer")
 }
 
 model ModulePermission {
@@ -463,45 +486,50 @@ model FinancialCategory {
 }
 
 model FinancialEntry {
-  id                String             @id @default(cuid())
-  organizationId    String
-  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  clientId          String?
-  client            Client?            @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  accountId         String?
-  account           FinancialAccount?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
-  categoryId        String?
-  category          FinancialCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  module            SystemModule
-  kind              FinancialKind
-  direction         FinancialDirection
-  status            FinancialStatus    @default(PENDING)
-  description       String
-  referenceCode     String?
-  sourceEntityType  EntityType?
-  sourceEntityId    String?
-  issueDate         DateTime           @default(now())
-  dueDate           DateTime?
-  paidAt            DateTime?
-  totalAmount       Decimal            @db.Decimal(14, 2)
-  paidAmount        Decimal            @default(0) @db.Decimal(14, 2)
-  discountAmount    Decimal            @default(0) @db.Decimal(14, 2)
-  interestAmount    Decimal            @default(0) @db.Decimal(14, 2)
-  remainingAmount   Decimal            @db.Decimal(14, 2)
-  installmentsCount Int                @default(1)
-  paymentMethod     PaymentMethod?
-  notes             String?
-  createdById       String?
-  approvedById      String?
-  approvedAt        DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  payments          Payment[]
+  id                      String                   @id @default(cuid())
+  organizationId          String
+  organization            Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientId                String?
+  client                  Client?                  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  accountId               String?
+  account                 FinancialAccount?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  categoryId              String?
+  category                FinancialCategory?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  module                  SystemModule
+  kind                    FinancialKind
+  direction               FinancialDirection
+  status                  FinancialStatus          @default(PENDING)
+  description             String
+  referenceCode           String?
+  sourceEntityType        EntityType?
+  sourceEntityId          String?
+  issueDate               DateTime                 @default(now())
+  dueDate                 DateTime?
+  paidAt                  DateTime?
+  totalAmount             Decimal                  @db.Decimal(14, 2)
+  paidAmount              Decimal                  @default(0) @db.Decimal(14, 2)
+  discountAmount          Decimal                  @default(0) @db.Decimal(14, 2)
+  interestAmount          Decimal                  @default(0) @db.Decimal(14, 2)
+  remainingAmount         Decimal                  @db.Decimal(14, 2)
+  installmentsCount       Int                      @default(1)
+  paymentMethod           PaymentMethod?
+  notes                   String?
+  employeeDailyCashId     String?
+  employeeDailyCash       EmployeeDailyCash?       @relation(fields: [employeeDailyCashId], references: [id], onDelete: SetNull)
+  employeeExpenseCategory EmployeeExpenseCategory?
+  employeeExpenseFunding  EmployeeExpenseFunding?
+  createdById             String?
+  approvedById            String?
+  approvedAt              DateTime?
+  createdAt               DateTime                 @default(now())
+  updatedAt               DateTime                 @updatedAt
+  payments                Payment[]
 
   @@index([organizationId, module])
   @@index([organizationId, status])
   @@index([organizationId, dueDate])
   @@index([clientId])
+  @@index([employeeDailyCashId])
 }
 
 model Payment {
@@ -652,6 +680,34 @@ model DailyClose {
 
   @@unique([organizationId, businessDate])
   @@index([organizationId, status])
+}
+
+/// Caixa diario do funcionario por modulo. Os valores efetivamente gastos
+/// continuam tendo uma unica fonte financeira: FinancialEntry.
+model EmployeeDailyCash {
+  id             String             @id @default(cuid())
+  organizationId String
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  employeeId     String
+  employee       User               @relation("EmployeeDailyCashEmployee", fields: [employeeId], references: [id], onDelete: Restrict)
+  module         SystemModule
+  businessDate   DateTime           @db.Date
+  advanceAmount  Decimal            @default(0) @db.Decimal(14, 2)
+  status         EmployeeCashStatus @default(OPEN)
+  employeeNotes  String?
+  submittedAt    DateTime?
+  reviewedById   String?
+  reviewedBy     User?              @relation("EmployeeDailyCashReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+  reviewedAt     DateTime?
+  reviewNotes    String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+  expenses       FinancialEntry[]
+
+  @@unique([organizationId, employeeId, module, businessDate])
+  @@index([organizationId, module, businessDate, status])
+  @@index([employeeId, businessDate])
+  @@index([reviewedById])
 }
 
 /// Historico operacional do comprovante. "Compartilhado" significa que o

@@ -80,6 +80,29 @@ export const FINANCIAL_STATUS_LABEL: Record<string, string> = {
   CANCELLED: "Cancelado",
 };
 
+/** EmployeeCashStatus */
+export const EMPLOYEE_CASH_STATUS_LABEL: Record<string, string> = {
+  OPEN: "Em preenchimento",
+  SUBMITTED: "Aguardando aprovação",
+  APPROVED: "Aprovado",
+  RETURNED: "Devolvido para correção",
+};
+
+/** EmployeeExpenseCategory */
+export const EMPLOYEE_EXPENSE_CATEGORY_LABEL: Record<string, string> = {
+  MEAL: "Alimentação",
+  FUEL: "Combustível",
+  TOLL: "Pedágio",
+  OTHER: "Outros gastos",
+};
+
+/** EmployeeExpenseFunding */
+export const EMPLOYEE_EXPENSE_FUNDING_LABEL: Record<string, string> = {
+  COMPANY_ADVANCE: "Dinheiro entregue pela empresa",
+  EMPLOYEE_OWN: "Dinheiro do funcionário",
+  COMPANY_DIRECT: "Pago diretamente pela empresa",
+};
+
 /** FinancialDirection */
 export const DIRECTION_LABEL: Record<string, string> = {
   INCOME: "Entrada",

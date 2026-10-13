@@ -48,10 +48,14 @@ npm run build
 test -f "$DEPLOY_RELEASE_DIR/.next/BUILD_ID"
 
 # O Next iniciado pelo PM2 resolve dependencias a partir da raiz ativa. Mantem
-# o node_modules dessa raiz exatamente igual ao usado no build validado.
+# o node_modules dessa raiz exatamente igual ao usado no build validado. O
+# schema da raiz ativa pode estar deliberadamente preservado/dirty; por isso o
+# Prisma Client vem do worktree limpo da revisao que acabou de ser compilada.
 cd "$DEPLOY_APP_ROOT"
 npm ci
-npx prisma generate
+mkdir -p "$DEPLOY_APP_ROOT/node_modules/.prisma/client"
+cp -a "$DEPLOY_RELEASE_DIR/node_modules/.prisma/client/." \
+  "$DEPLOY_APP_ROOT/node_modules/.prisma/client/"
 
 cp -a "$DEPLOY_RELEASE_DIR/.next" "$DEPLOY_NEXT_STAGE"
 test -f "$DEPLOY_NEXT_STAGE/BUILD_ID"

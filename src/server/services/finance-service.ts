@@ -14,6 +14,8 @@ import {
 } from "@/server/services/business-day-lock-service";
 import {
   DIRECTION_LABEL,
+  EMPLOYEE_EXPENSE_CATEGORY_LABEL,
+  EMPLOYEE_EXPENSE_FUNDING_LABEL,
   FINANCIAL_STATUS_LABEL,
   PAYMENT_METHOD_LABEL,
   rotuloDeStatus,
@@ -282,6 +284,9 @@ function mapManualFinancialEntry(
   const interestAmount = Number(entry.interestAmount);
   const linkedCredit =
     entry.module === "MACHINE" && entry.sourceEntityType === "MACHINE_CONTRACT";
+  const employeeExpense = Boolean(
+    entry.employeeDailyCashId && entry.employeeExpenseCategory && entry.employeeExpenseFunding,
+  );
   const status = isCreditOverdue({
     dueDate: entry.dueDate,
     remainingAmount,
@@ -302,15 +307,21 @@ function mapManualFinancialEntry(
     receivedInterest: calculateReceivedInterest(paidAmount, interestAmount),
     installmentsCount: entry.installmentsCount,
     paymentMethod: entry.paymentMethod,
-    origin: entry.sourceEntityId ? "OPERATION" : "MANUAL",
-    category: linkedCredit
+    // Gastos da equipe ja entram pelo Payment no fechamento diario. Mantelos
+    // como MANUAL evita somar o mesmo dinheiro novamente como operacao.
+    origin: employeeExpense ? "MANUAL" : entry.sourceEntityId ? "OPERATION" : "MANUAL",
+    category: employeeExpense
+      ? `EMPLOYEE_${entry.employeeExpenseCategory}`
+      : linkedCredit
       ? entry.direction === "INCOME"
         ? "CREDIT_RECEIVABLE"
         : "CREDIT_EXPENSE"
       : entry.direction === "INCOME"
         ? "MANUAL_INCOME"
         : "MANUAL_EXPENSE",
-    categoryLabel: linkedCredit
+    categoryLabel: employeeExpense
+      ? `Gasto da equipe - ${rotuloDeStatus(entry.employeeExpenseCategory, EMPLOYEE_EXPENSE_CATEGORY_LABEL)}`
+      : linkedCredit
       ? entry.direction === "INCOME"
         ? "Empréstimo a receber"
         : "Despesa do empréstimo"
@@ -322,7 +333,11 @@ function mapManualFinancialEntry(
       : null,
     operatorName,
     sourceEntityId: entry.sourceEntityId,
-    details: linkedCredit
+    details: employeeExpense
+      ? [
+          `Origem do dinheiro: ${rotuloDeStatus(entry.employeeExpenseFunding, EMPLOYEE_EXPENSE_FUNDING_LABEL)}`,
+        ]
+      : linkedCredit
       ? [
           `Parcelas: ${entry.installmentsCount}`,
           `Juros contratados: ${formatCurrency(interestAmount)}`,
@@ -872,8 +887,8 @@ export async function getFinanceOverview(session: SessionData): Promise<FinanceO
         prisma.financialEntry.aggregate({ where: { organizationId, direction: "INCOME", status: "PAID", ...dateWhere }, _sum: { paidAmount: true, totalAmount: true } }),
         prisma.financialEntry.aggregate({ where: { organizationId, direction: "EXPENSE", status: { not: "PAID" }, ...dateWhere }, _sum: { remainingAmount: true } }),
         prisma.financialEntry.aggregate({ where: { organizationId, status: "PARTIAL", ...dateWhere }, _sum: { remainingAmount: true } }),
-        prisma.financialEntry.aggregate({ where: { organizationId, direction: "INCOME", ...dateWhere }, _sum: { paidAmount: true, totalAmount: true } }),
-        prisma.financialEntry.aggregate({ where: { organizationId, direction: "EXPENSE", ...dateWhere }, _sum: { paidAmount: true, totalAmount: true } }),
+        prisma.financialEntry.aggregate({ where: { organizationId, direction: "INCOME", status: { not: "CANCELLED" }, ...dateWhere }, _sum: { paidAmount: true, totalAmount: true } }),
+        prisma.financialEntry.aggregate({ where: { organizationId, direction: "EXPENSE", status: { not: "CANCELLED" }, ...dateWhere }, _sum: { paidAmount: true, totalAmount: true } }),
       ]),
       prisma.financialEntry.findMany({
         where: { organizationId, ...dateWhere },

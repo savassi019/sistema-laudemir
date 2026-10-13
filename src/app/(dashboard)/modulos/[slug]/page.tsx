@@ -82,6 +82,7 @@ export default async function ModuleDetailPage({
         financeInitialTo={initialFinanceDate}
         financeDailyOnly={financeDailyOnly}
         hideFinancials={hideFinancials}
+        canReviewEmployeeCash={session.role === "OWNER"}
       />
 
     </div>

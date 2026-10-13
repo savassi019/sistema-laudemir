@@ -3317,10 +3317,13 @@ export async function listModuleRecords(
   return recordsVisibleToSession(session, records);
 }
 
-function recordsVisibleToSession(session: SessionData, records: ModuleRecordItem[]) {
-  if (session.role !== "STAFF") return records;
+export function moduleRecordVisibleToSession(
+  session: SessionData,
+  record: ModuleRecordItem,
+): ModuleRecordItem {
+  if (session.role !== "STAFF") return record;
 
-  return records.map((record) => ({
+  return {
     ...record,
     amount: undefined,
     amountValue: undefined,
@@ -3328,7 +3331,11 @@ function recordsVisibleToSession(session: SessionData, records: ModuleRecordItem
     expenseValue: undefined,
     financialBreakdown: [],
     details: record.details.filter((detail) => !detail.includes("R$")),
-  }));
+  };
+}
+
+function recordsVisibleToSession(session: SessionData, records: ModuleRecordItem[]) {
+  return records.map((record) => moduleRecordVisibleToSession(session, record));
 }
 
 export type ModuleClientItem = {

@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { assertBusinessDayOpen } from "@/server/services/daily-close-service";
 import {
   listModuleRecords,
+  moduleRecordVisibleToSession,
   ModuleRecordValidationError,
   moduleSlugs,
   saveModuleRecord,
@@ -281,7 +282,10 @@ export async function POST(
       requestKey,
       catalogItem?.module ?? "CORE",
     );
-    return NextResponse.json(result, { status: 201 });
+    return NextResponse.json(
+      { ...result, record: moduleRecordVisibleToSession(session, result.record) },
+      { status: 201 },
+    );
   } catch (error) {
     if (error instanceof SubmissionAlreadyReceivedError) {
       return NextResponse.json({ error: error.message }, { status: 409 });

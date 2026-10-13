@@ -250,7 +250,6 @@ export function BilliardForm({
   const [loadingPointHistory, setLoadingPointHistory] = useState(false);
   const [showPointHistory, setShowPointHistory] = useState(false);
   const [showSummaryHistory, setShowSummaryHistory] = useState(false);
-  const [showOptionalCosts, setShowOptionalCosts] = useState(false);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
   const [loading, setLoading] = useState(false);
@@ -349,12 +348,7 @@ export function BilliardForm({
     installmentAmount: roofInstallmentAmount,
     paidAmount: roofPaidAmount,
   });
-  const employeeCost = Number(watched.employeeCost ?? 0);
-  const installationCost = Number(watched.installationCost ?? 0);
-  const maintenanceCost = Number(watched.maintenanceCost ?? 0);
-  const otherCost = Number(watched.otherCost ?? 0);
   const structureCost = Number(watched.structureCost ?? 0);
-  const hasOptionalCosts = employeeCost + installationCost + maintenanceCost + otherCost > 0;
   const routeNumber = Number(watched.routeNumber ?? 0);
   const pointName = String(watched.pointName ?? "");
 
@@ -381,13 +375,7 @@ export function BilliardForm({
 
   const totals = useMemo(() => {
     const grossAmount = quantityOfChips * chipValue;
-    const totalCosts =
-      employeeCost +
-      installationCost +
-      maintenanceCost +
-      otherCost +
-      structureCost +
-      discountAmount;
+    const totalCosts = structureCost + discountAmount;
     const finalValue = grossAmount + roofPaidAmount - totalCosts;
     const clothTotal = accumulatedChips + quantityOfChips;
 
@@ -403,10 +391,6 @@ export function BilliardForm({
     accumulatedChips,
     chipValue,
     discountAmount,
-    employeeCost,
-    installationCost,
-    maintenanceCost,
-    otherCost,
     quantityOfChips,
     roofPaidAmount,
     structureCost,
@@ -968,42 +952,6 @@ export function BilliardForm({
                       </Field>
                     ) : null}
                   </div>
-
-                  {/* Custos */}
-                  {!hideFinancials ? (
-                    <>
-                      <button
-                        type="button"
-                        aria-expanded={showOptionalCosts}
-                        onClick={() => setShowOptionalCosts((current) => !current)}
-                        className="mt-4 inline-flex min-h-11 w-full items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.025] px-4 py-3 text-left text-sm font-medium text-[#c9c2b4] transition active:bg-white/[0.06]"
-                      >
-                        <span>Custos opcionais</span>
-                        <span className="inline-flex items-center gap-2 text-xs text-[#9a958b]">
-                          {showOptionalCosts ? "Ocultar" : hasOptionalCosts ? "Revisar custos" : "Adicionar custos"}
-                          <ChevronDown
-                            className={cn("size-4 transition-transform", showOptionalCosts && "rotate-180")}
-                          />
-                        </span>
-                      </button>
-                      {showOptionalCosts ? (
-                        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                          <Field label="Empregado (R$)">
-                            <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("employeeCost")} />
-                          </Field>
-                          <Field label="Instalação (R$)">
-                            <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("installationCost")} />
-                          </Field>
-                          <Field label="Manutenção (R$)">
-                            <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("maintenanceCost")} />
-                          </Field>
-                          <Field label="Outros (R$)">
-                            <input className={fieldClass} inputMode="decimal" type="number" min="0" step="0.01" {...form.register("otherCost")} />
-                          </Field>
-                        </div>
-                      ) : null}
-                    </>
-                  ) : null}
 
                   {/* Acerto do telhado: parcela e pagamento sao separados para manter saldo parcial. */}
                   <div className="mt-4 overflow-hidden rounded-2xl border border-[#d1a04f]/20 bg-[#11130f] shadow-[0_14px_35px_rgba(0,0,0,0.16)]">

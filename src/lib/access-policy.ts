@@ -16,6 +16,10 @@ export function canManageTeam(role: RoleName) {
   return role === "OWNER";
 }
 
+export function canReviewEmployeeCash(role: RoleName) {
+  return role === "OWNER";
+}
+
 export function canViewOwnerDashboard(role: RoleName) {
   return role === "OWNER";
 }

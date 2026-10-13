@@ -4,6 +4,7 @@ import { auditActionLabel, auditModuleLabel } from "@/lib/audit-labels";
 import { formatCurrency } from "@/lib/format";
 import { moduleCatalog } from "@/lib/module-catalog";
 import { prisma } from "@/lib/prisma";
+import { EMPLOYEE_CASH_STATUS_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import type { SessionData } from "@/types/app";
 
 const PAGE_SIZE = 50;
@@ -74,6 +75,18 @@ function auditDetails(
     return [value ? `Valor ${value}` : null, situation ? `Situação ${situation}` : null]
       .filter(Boolean)
       .join(" · ") || "Alteração financeira registrada com os valores anteriores preservados.";
+  }
+  if (action.startsWith("EMPLOYEE_")) {
+    const value = asMoney(after.amount ?? after.advanceAmount);
+    const situation = typeof after.status === "string"
+      ? rotuloDeStatus(after.status, EMPLOYEE_CASH_STATUS_LABEL)
+      : null;
+    const notes = typeof after.notes === "string" ? after.notes : null;
+    return [
+      value ? `Valor ${value}` : null,
+      situation ? `Situação ${situation}` : null,
+      notes ? `Observação: ${notes}` : null,
+    ].filter(Boolean).join(" · ") || "Movimentação do caixa do funcionário registrada.";
   }
   if (action.startsWith("VISIT_")) {
     const client = String(after.clientName ?? before.clientName ?? "").trim();

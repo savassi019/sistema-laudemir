@@ -8,6 +8,7 @@ export type ModuleCapabilities = {
   routes: boolean;
   calendar: boolean;
   prize: boolean;
+  employeeCash: boolean;
 };
 
 const standardFieldModule: ModuleCapabilities = {
@@ -18,6 +19,7 @@ const standardFieldModule: ModuleCapabilities = {
   routes: false,
   calendar: false,
   prize: false,
+  employeeCash: true,
 };
 
 /**
@@ -40,6 +42,7 @@ export const MODULE_CAPABILITIES = {
     routes: false,
     calendar: false,
     prize: false,
+    employeeCash: true,
   },
   marketing: {
     clients: true,
@@ -49,6 +52,7 @@ export const MODULE_CAPABILITIES = {
     routes: false,
     calendar: true,
     prize: false,
+    employeeCash: false,
   },
   "mercado-autonomo": {
     clients: false,
@@ -58,6 +62,7 @@ export const MODULE_CAPABILITIES = {
     routes: false,
     calendar: false,
     prize: false,
+    employeeCash: true,
   },
   "plataforma-online": {
     clients: false,
@@ -67,6 +72,7 @@ export const MODULE_CAPABILITIES = {
     routes: false,
     calendar: false,
     prize: false,
+    employeeCash: true,
   },
   "financas-pessoais": {
     clients: false,
@@ -76,5 +82,6 @@ export const MODULE_CAPABILITIES = {
     routes: false,
     calendar: false,
     prize: false,
+    employeeCash: true,
   },
 } satisfies Record<ModuleSlug, ModuleCapabilities>;
