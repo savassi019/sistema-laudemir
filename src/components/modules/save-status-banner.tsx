@@ -1,8 +1,13 @@
 "use client";
 
 import { CheckCircle2, CloudUpload, LoaderCircle, TriangleAlert } from "lucide-react";
+import { useEffect, useState } from "react";
 
 import { cn } from "@/lib/cn";
+import {
+  OFFLINE_SUBMISSION_EVENT,
+  readOfflineSubmissions,
+} from "@/lib/offline-submission-queue";
 
 export type SaveStatus = "idle" | "saving" | "saved" | "queued" | "error";
 
@@ -34,24 +39,48 @@ const CONTENT = {
 } as const;
 
 export function SaveStatusBanner({ status }: { status: SaveStatus }) {
+  const [offlineQueueFinished, setOfflineQueueFinished] = useState(false);
+
+  useEffect(() => {
+    if (status !== "queued") return;
+    let active = true;
+    const refresh = async () => {
+      try {
+        const pending = await readOfflineSubmissions();
+        if (active) setOfflineQueueFinished(pending.length === 0);
+      } catch {
+        // A fila global continua exibindo a falha de leitura. Aqui mantemos o
+        // estado conservador de protegido, sem anunciar um envio inexistente.
+      }
+    };
+    const handleQueueChange = () => void refresh();
+    void refresh();
+    window.addEventListener(OFFLINE_SUBMISSION_EVENT, handleQueueChange);
+    return () => {
+      active = false;
+      window.removeEventListener(OFFLINE_SUBMISSION_EVENT, handleQueueChange);
+    };
+  }, [status]);
+
   if (status === "idle") return null;
-  const content = CONTENT[status];
+  const visibleStatus = status === "queued" && offlineQueueFinished ? "saved" : status;
+  const content = CONTENT[visibleStatus];
   const Icon = content.icon;
 
   return (
     <div
-      role={status === "error" ? "alert" : "status"}
+      role={visibleStatus === "error" ? "alert" : "status"}
       aria-live="polite"
       className={cn("flex items-start gap-3 rounded-2xl border p-3.5", content.style)}
     >
       <div className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-black/15">
-        <Icon className={cn("size-4", status === "saving" && "animate-spin")} />
+        <Icon className={cn("size-4", visibleStatus === "saving" && "animate-spin")} />
       </div>
       <div className="min-w-0">
         <p className="text-sm font-semibold">{content.title}</p>
         <p className="mt-0.5 text-xs leading-5 opacity-80">{content.detail}</p>
       </div>
-      {status === "saving" ? <CloudUpload className="ml-auto mt-2 size-4 shrink-0 opacity-70" /> : null}
+      {visibleStatus === "saving" ? <CloudUpload className="ml-auto mt-2 size-4 shrink-0 opacity-70" /> : null}
     </div>
   );
 }
