@@ -45,6 +45,8 @@ export default async function RelatorioPage(props: {
   ]);
 
   const moduleTotal = moduleRows.reduce((sum, row) => sum + row.total, 0);
+  const moduleIncomeTotal = moduleRows.reduce((sum, row) => sum + row.income, 0);
+  const moduleExpenseTotal = moduleRows.reduce((sum, row) => sum + row.expense, 0);
 
   const totalIncome = visits.reduce((s, v) => s + v.incomeAmount, 0);
   const totalExpense = visits.reduce((s, v) => s + v.expenseAmount, 0);
@@ -80,27 +82,33 @@ export default async function RelatorioPage(props: {
   const toLabel = formatShortDate(to);
 
   return (
-    <div className="space-y-4">
-      <section className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[linear-gradient(135deg,rgba(17,22,20,0.92),rgba(209,160,79,0.08))] p-4 md:p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <p className="text-xs uppercase tracking-[0.28em] text-[#9a958b]">Gestão</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-white md:text-3xl">
-              Relatório de visitas
-            </h1>
-            <p className="mt-1 text-sm text-[#c9c2b4]">
-              {fromLabel} — {toLabel} · {visits.length}{" "}
-              {visits.length === 1 ? "visita" : "visitas"}
-            </p>
+    <div className="mx-auto w-full max-w-7xl space-y-4 pb-6">
+      <section className="overflow-hidden rounded-3xl border border-[rgba(245,241,232,0.1)] bg-[linear-gradient(135deg,rgba(17,22,20,0.96),rgba(209,160,79,0.09))] p-4 md:p-6">
+        <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl border border-[#d1a04f]/25 bg-[#d1a04f]/10 text-[#f3dfae]">
+              <FileText aria-hidden="true" className="size-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.24em] text-[#9a958b]">Gestão</p>
+              <h1 className="mt-1 text-pretty text-2xl font-semibold tracking-tight text-white md:text-3xl">Relatório de visitas</h1>
+              <p className="mt-1 text-sm text-[#c9c2b4]">
+                {fromLabel} — {toLabel} · {visits.length} {visits.length === 1 ? "visita" : "visitas"}
+              </p>
+            </div>
           </div>
-          <a
-            href={`/api/visitas/exportar?from=${from}&to=${to}`}
-            download
-            className="inline-flex items-center gap-2 rounded-2xl border border-[#8aa17c]/35 bg-[#8aa17c]/12 px-4 py-3 text-sm font-semibold text-[#dbe6d4] shadow-[0_4px_14px_rgba(138,161,124,0.2)] transition hover:bg-[#8aa17c]/20"
-          >
-            <Download className="size-4" />
-            Baixar CSV
-          </a>
+          <div className="grid w-full gap-2 sm:w-auto sm:grid-cols-2">
+            {visits.length > 0 ? (
+              <a href={`/api/visitas/exportar?from=${from}&to=${to}`} download className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#8aa17c]/35 bg-[#8aa17c]/12 px-4 py-2.5 text-sm font-semibold text-[#dbe6d4] transition-colors hover:bg-[#8aa17c]/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8aa17c] active:bg-[#8aa17c]/24 motion-reduce:transition-none">
+                <Download aria-hidden="true" className="size-4" /> Planilha de visitas
+              </a>
+            ) : null}
+            {moduleRows.length > 0 ? (
+              <a href={`/api/relatorio/modulos/exportar?from=${from}&to=${to}`} download className="inline-flex min-h-11 items-center justify-center gap-2 rounded-2xl border border-[#d1a04f]/30 bg-[#d1a04f]/10 px-4 py-2.5 text-sm font-semibold text-[#f3dfae] transition-colors hover:bg-[#d1a04f]/18 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d1a04f] active:bg-[#d1a04f]/22 motion-reduce:transition-none">
+                <Download aria-hidden="true" className="size-4" /> Resumo por módulo
+              </a>
+            ) : null}
+          </div>
         </div>
       </section>
 
@@ -108,34 +116,39 @@ export default async function RelatorioPage(props: {
       <form
         method="GET"
         action="/relatorio"
-        className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/82 p-4"
+        className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/82 p-4 shadow-[0_14px_40px_rgba(0,0,0,0.12)] md:p-5"
+        aria-labelledby="report-period-title"
       >
-        <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
+        <h2 id="report-period-title" className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
           Filtrar período
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <div className="flex-1 space-y-1.5">
-            <label className="block text-[11px] text-[#9a958b]">De</label>
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+          <div className="space-y-1.5">
+            <label htmlFor="report-from" className="block text-sm font-medium text-[#c9c2b4]">Data inicial</label>
             <input
+              id="report-from"
               type="date"
               name="from"
               defaultValue={from}
-              className="w-full rounded-xl border border-[rgba(245,241,232,0.12)] bg-[#0b0f0e]/72 px-3 py-2.5 text-sm text-white outline-none focus:border-[#d1a04f]/50"
+              autoComplete="off"
+              className="min-h-11 w-full rounded-xl border border-[rgba(245,241,232,0.12)] bg-[#0b0f0e]/72 px-3 py-2.5 text-base text-white outline-none [color-scheme:dark] focus:border-[#d1a04f]/50 focus-visible:ring-2 focus-visible:ring-[#d1a04f]/30 md:text-sm"
             />
           </div>
-          <div className="flex-1 space-y-1.5">
-            <label className="block text-[11px] text-[#9a958b]">Até</label>
+          <div className="space-y-1.5">
+            <label htmlFor="report-to" className="block text-sm font-medium text-[#c9c2b4]">Data final</label>
             <input
+              id="report-to"
               type="date"
               name="to"
               defaultValue={to}
-              className="w-full rounded-xl border border-[rgba(245,241,232,0.12)] bg-[#0b0f0e]/72 px-3 py-2.5 text-sm text-white outline-none focus:border-[#d1a04f]/50"
+              autoComplete="off"
+              className="min-h-11 w-full rounded-xl border border-[rgba(245,241,232,0.12)] bg-[#0b0f0e]/72 px-3 py-2.5 text-base text-white outline-none [color-scheme:dark] focus:border-[#d1a04f]/50 focus-visible:ring-2 focus-visible:ring-[#d1a04f]/30 md:text-sm"
             />
           </div>
-          <div className="flex items-end">
+          <div className="sm:col-span-2 lg:col-span-1">
             <button
               type="submit"
-              className="rounded-xl border border-[#d1a04f]/35 bg-[#d1a04f]/14 px-4 py-2.5 text-sm font-semibold text-[#f3dfae] transition hover:bg-[#d1a04f]/22"
+              className="min-h-11 w-full rounded-xl bg-[#d1a04f] px-5 py-2.5 text-sm font-semibold text-[#0d0a05] transition-colors hover:bg-[#dfb462] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f3dfae] active:bg-[#c59443] motion-reduce:transition-none lg:w-auto"
             >
               Filtrar
             </button>
@@ -144,43 +157,43 @@ export default async function RelatorioPage(props: {
       </form>
 
       {/* Summary metrics */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/72 p-4">
+      <section className="grid grid-cols-2 gap-3 lg:grid-cols-4" aria-label="Resumo do período">
+        <div className="min-w-0 rounded-2xl border border-[rgba(245,241,232,0.1)] border-l-[3px] border-l-[#d1a04f] bg-[#111614]/85 p-4">
           <div className="mb-2 flex items-center gap-2">
             <FileText className="size-3.5 text-[#d1a04f]" />
             <p className="text-[11px] uppercase tracking-[0.18em] text-[#9a958b]">Visitas</p>
           </div>
-          <p className="text-2xl font-bold text-white">{visits.length}</p>
+          <p className="text-2xl font-bold tabular-nums text-white">{visits.length}</p>
         </div>
-        <div className="rounded-2xl border border-[#8aa17c]/20 bg-[#1d2e22]/60 p-4">
+        <div className="min-w-0 rounded-2xl border border-[#8aa17c]/20 border-l-[3px] border-l-[#4ade80] bg-[#111614]/85 p-4">
           <div className="mb-2 flex items-center gap-2">
             <TrendingUp className="size-3.5 text-[#8aa17c]" />
             <p className="text-[11px] uppercase tracking-[0.18em] text-[#8aa17c]/70">Entrada</p>
           </div>
-          <p className="text-lg font-bold text-[#dbe6d4]">{formatCurrency(totalIncome)}</p>
+          <p className="break-words text-lg font-bold tabular-nums text-[#dbe6d4]">{formatCurrency(totalIncome)}</p>
         </div>
-        <div className="rounded-2xl border border-[#f87171]/15 bg-[#1a0f0f]/50 p-4">
+        <div className="min-w-0 rounded-2xl border border-[#f87171]/15 border-l-[3px] border-l-[#fb7185] bg-[#111614]/85 p-4">
           <div className="mb-2 flex items-center gap-2">
             <TrendingDown className="size-3.5 text-[#f87171]" />
             <p className="text-[11px] uppercase tracking-[0.18em] text-[#f87171]/70">Saída</p>
           </div>
-          <p className="text-lg font-bold text-[#f0c9ad]">{formatCurrency(totalExpense)}</p>
+          <p className="break-words text-lg font-bold tabular-nums text-[#f0c9ad]">{formatCurrency(totalExpense)}</p>
         </div>
-        <div className="rounded-2xl border border-[#d1a04f]/20 bg-[#1a1508]/60 p-4">
+        <div className="min-w-0 rounded-2xl border border-[#60a5fa]/20 border-l-[3px] border-l-[#60a5fa] bg-[#111614]/85 p-4">
           <div className="mb-2 flex items-center gap-2">
-            <Wallet className="size-3.5 text-[#d1a04f]" />
-            <p className="text-[11px] uppercase tracking-[0.18em] text-[#d1a04f]/70">Líquido</p>
+            <Wallet className="size-3.5 text-[#60a5fa]" />
+            <p className="text-[11px] uppercase tracking-[0.18em] text-[#93c5fd]/80">Líquido</p>
           </div>
-          <p className="text-lg font-bold text-[#f3dfae]">{formatCurrency(totalNet)}</p>
+          <p className="break-words text-lg font-bold tabular-nums text-[#bfdbfe]">{formatCurrency(totalNet)}</p>
         </div>
-      </div>
+      </section>
 
       {/* Breakdown by type */}
       {Object.keys(byType).length > 0 ? (
-        <div className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/72 p-4">
-          <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
+        <section className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/82 p-4">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
             Por tipo
-          </p>
+          </h2>
           <div className="flex flex-wrap gap-2">
             {Object.entries(byType)
               .sort(([, a], [, b]) => b - a)
@@ -193,25 +206,15 @@ export default async function RelatorioPage(props: {
                 </span>
               ))}
           </div>
-        </div>
+        </section>
       ) : null}
 
       {/* Module summary */}
-      <div className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/72 p-4">
+      <section className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/82 p-4 md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
+          <h2 className="text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
             Resumo por módulo
-          </p>
-          {moduleRows.length > 0 ? (
-            <a
-              href={`/api/relatorio/modulos/exportar?from=${from}&to=${to}`}
-              download
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#8aa17c] hover:underline"
-            >
-              <Download className="size-3.5" />
-              Baixar CSV
-            </a>
-          ) : null}
+          </h2>
         </div>
 
         {moduleRows.length === 0 ? (
@@ -246,28 +249,28 @@ export default async function RelatorioPage(props: {
               <div>
                 <p className="text-sm font-semibold text-[#f3dfae]">Total dos módulos</p>
                 <div className="mt-0.5 flex gap-3">
-                  {moduleRows.reduce((s, r) => s + r.income, 0) > 0 && (
-                    <p className="text-[11px] text-[#86efac]">↑ {formatCurrency(moduleRows.reduce((s, r) => s + r.income, 0))}</p>
+                  {moduleIncomeTotal > 0 && (
+                    <p className="text-[11px] tabular-nums text-[#86efac]">↑ {formatCurrency(moduleIncomeTotal)}</p>
                   )}
-                  {moduleRows.reduce((s, r) => s + r.expense, 0) > 0 && (
-                    <p className="text-[11px] text-[#f87171]">↓ {formatCurrency(moduleRows.reduce((s, r) => s + r.expense, 0))}</p>
+                  {moduleExpenseTotal > 0 && (
+                    <p className="text-[11px] tabular-nums text-[#f87171]">↓ {formatCurrency(moduleExpenseTotal)}</p>
                   )}
                 </div>
               </div>
-              <p className="text-sm font-bold text-[#f3dfae]">{formatCurrency(moduleTotal)}</p>
+              <p className="text-sm font-bold tabular-nums text-[#f3dfae]">{formatCurrency(moduleTotal)}</p>
             </div>
           </div>
         )}
-      </div>
+      </section>
 
       {/* Weekly financial breakdown */}
-      <div className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/72 p-4">
+      <section className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/82 p-4 md:p-5">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <CalendarRange className="size-3.5 text-[#d1a04f]" />
-            <p className="text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
+            <CalendarRange aria-hidden="true" className="size-3.5 text-[#d1a04f]" />
+            <h2 className="text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
               Financeiro semanal (seg a sáb)
-            </p>
+            </h2>
           </div>
           <p className="text-sm font-bold text-[#f3dfae]">
             Total: {formatCurrency(weeklySummary.totalAmount)}
@@ -302,42 +305,42 @@ export default async function RelatorioPage(props: {
             ))}
           </div>
         )}
-      </div>
+      </section>
 
       {/* Financial entries summary */}
       {(finSummary.paid > 0 || finSummary.pending > 0 || finSummary.overdue > 0) && (
-        <div className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/72 p-4">
-          <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
+        <section className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/82 p-4 md:p-5">
+          <h2 className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
             Lançamentos financeiros
-          </p>
-          <div className="grid grid-cols-3 gap-2">
+          </h2>
+          <div className="grid gap-3 sm:grid-cols-3">
             <div className="rounded-xl border border-[#86efac]/20 bg-[#0a1a0f]/60 p-3 text-center">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-[#86efac]/70">Recebido</p>
-              <p className="mt-1 text-base font-bold text-[#86efac]">{formatCurrency(finSummary.paid)}</p>
+              <p className="mt-1 break-words text-base font-bold tabular-nums text-[#86efac]">{formatCurrency(finSummary.paid)}</p>
               <p className="text-[10px] text-[#9a958b]">{finSummary.paidCount} lanç.</p>
             </div>
             <div className="rounded-xl border border-[#d1a04f]/20 bg-[#1a1508]/60 p-3 text-center">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-[#f3dfae]/70">Pendente</p>
-              <p className="mt-1 text-base font-bold text-[#f3dfae]">{formatCurrency(finSummary.pending)}</p>
+              <p className="mt-1 break-words text-base font-bold tabular-nums text-[#f3dfae]">{formatCurrency(finSummary.pending)}</p>
               <p className="text-[10px] text-[#9a958b]">{finSummary.pendingCount} lanç.</p>
             </div>
             <div className="rounded-xl border border-[#f87171]/20 bg-[#1a0a0a]/60 p-3 text-center">
               <p className="text-[10px] font-semibold uppercase tracking-wider text-[#f87171]/70">Atrasado</p>
-              <p className="mt-1 text-base font-bold text-[#f87171]">{formatCurrency(finSummary.overdue)}</p>
+              <p className="mt-1 break-words text-base font-bold tabular-nums text-[#f87171]">{formatCurrency(finSummary.overdue)}</p>
               <p className="text-[10px] text-[#9a958b]">{finSummary.overdueCount} lanç.</p>
             </div>
           </div>
-        </div>
+        </section>
       )}
 
       {/* Per-staff breakdown */}
       {staffRows.length > 1 && (
-        <div className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/72 p-4">
+        <section className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/82 p-4 md:p-5">
           <div className="mb-3 flex items-center gap-2">
-            <UserCheck className="size-3.5 text-[#d1a04f]" />
-            <p className="text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
+            <UserCheck aria-hidden="true" className="size-3.5 text-[#d1a04f]" />
+            <h2 className="text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
               Por funcionário
-            </p>
+            </h2>
           </div>
           <div className="space-y-2">
             {staffRows.map((s) => (
@@ -352,14 +355,14 @@ export default async function RelatorioPage(props: {
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
 
       {/* Visit list */}
-      <div className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/72 p-4">
-        <p className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
+      <section className="rounded-2xl border border-[rgba(245,241,232,0.1)] bg-[#111614]/82 p-4 md:p-5">
+        <h2 className="mb-3 text-xs font-medium uppercase tracking-[0.2em] text-[#9a958b]">
           Visitas{visits.length > 50 ? ` (mostrando 50 de ${visits.length})` : ""}
-        </p>
+        </h2>
 
         {visits.length === 0 ? (
           <p className="py-6 text-center text-sm text-[#5a544c]">
@@ -396,18 +399,7 @@ export default async function RelatorioPage(props: {
             ))}
           </div>
         )}
-      </div>
-
-      {visits.length > 0 ? (
-        <a
-          href={`/api/visitas/exportar?from=${from}&to=${to}`}
-          download
-          className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-[#8aa17c]/25 bg-[#8aa17c]/8 py-3.5 text-sm font-semibold text-[#dbe6d4] transition hover:bg-[#8aa17c]/15"
-        >
-          <Download className="size-4" />
-          Baixar CSV — {visits.length} {visits.length === 1 ? "visita" : "visitas"}
-        </a>
-      ) : null}
+      </section>
     </div>
   );
 }

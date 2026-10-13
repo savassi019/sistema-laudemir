@@ -1,17 +1,10 @@
 import { type NextRequest } from "next/server";
 
 import { getSession, hasModuleAccess } from "@/lib/auth";
+import { buildPtBrCsv, formatCsvDecimal } from "@/lib/csv";
 import { listVisitsInRange } from "@/server/services/visit-service";
 
 export const dynamic = "force-dynamic";
-
-function esc(value: string): string {
-  const s = String(value ?? "");
-  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
 
 function fmtDate(iso: string): string {
   const d = new Date(iso);
@@ -50,31 +43,30 @@ export async function GET(request: NextRequest) {
     "Cliente",
     "Tipo",
     "Entrada (R$)",
-    "Saida (R$)",
-    "Liquido (R$)",
+    "Saída (R$)",
+    "Líquido (R$)",
     "Checklist",
-    "Observacoes",
+    "Observações",
     "Registrado por",
-  ].join(",");
+  ];
 
   const rows = visits.map((v) => {
     const income = v.incomeAmount;
     const expense = v.expenseAmount;
     return [
-      esc(fmtDate(v.occurredAt)),
-      esc(v.clientName),
-      esc(v.visitType),
-      income.toFixed(2).replace(".", ","),
-      expense.toFixed(2).replace(".", ","),
-      (income - expense).toFixed(2).replace(".", ","),
-      esc(v.checkedItems.join(" | ")),
-      esc(v.notes ?? ""),
-      esc(v.createdBy ?? ""),
-    ].join(",");
+      fmtDate(v.occurredAt),
+      v.clientName,
+      v.visitType,
+      formatCsvDecimal(income),
+      formatCsvDecimal(expense),
+      formatCsvDecimal(income - expense),
+      v.checkedItems.join(" | "),
+      v.notes ?? "",
+      v.createdBy ?? "",
+    ];
   });
 
-  const bom = "﻿";
-  const csv = bom + [header, ...rows].join("\n");
+  const csv = buildPtBrCsv([header, ...rows]);
 
   return new Response(csv, {
     headers: {

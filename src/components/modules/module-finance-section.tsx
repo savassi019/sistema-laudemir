@@ -1055,29 +1055,43 @@ export function ModuleFinanceSection({
         ? "Prêmios, gastos e descontos"
         : "Valores registrados como despesa";
 
+  const panelClass =
+    "rounded-2xl border border-white/[0.08] bg-[#101412]/90 p-4 shadow-[0_14px_40px_rgba(0,0,0,0.12)] md:p-5";
+  const actionButtonClass =
+    "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.025] px-3 text-sm font-semibold text-[#d7ded9] transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d1a04f]/70 active:bg-white/[0.09] disabled:cursor-not-allowed disabled:opacity-40 motion-reduce:transition-none";
+
   return (
-    <div className="space-y-4">
+    <div className="mx-auto w-full max-w-7xl space-y-4 pb-5">
       {saved ? (
-        <div className="flex items-center gap-2.5 rounded-xl border border-[#6b9d6f]/30 bg-[#0e1c10]/80 px-4 py-3 text-sm font-medium text-[#bfe3c2]">
-          <CheckCircle2 className="size-4 shrink-0" /> {feedback}
+        <div role="status" className="flex items-center gap-2.5 rounded-xl border border-[#6b9d6f]/30 bg-[#0e1c10]/80 px-4 py-3 text-sm font-medium text-[#bfe3c2]">
+          <CheckCircle2 aria-hidden="true" className="size-4 shrink-0" /> {feedback}
         </div>
       ) : null}
 
-      <div className="rounded-2xl border border-white/[0.08] bg-[#0b0f0e]/35 p-3.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <CalendarDays className="size-4 text-[#9a958b]" />
-          <p className="text-xs font-semibold uppercase tracking-wide text-[#9a958b]">
-            {dailyOnly ? "Financeiro de hoje" : "Filtrar por período"}
-          </p>
-          <div className="ml-auto flex gap-1.5">
-            <button type="button" onClick={handlePrint} disabled={filtered.length === 0} className="flex min-h-11 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-xs font-semibold text-[#c9c2b4] disabled:opacity-40">
-              <Printer className="size-4" /> PDF
+      <section className={panelClass} aria-labelledby="finance-period-title">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-[#d1a04f]/20 bg-[#d1a04f]/10 text-[#f3dfae]">
+              <CalendarDays aria-hidden="true" className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <h2 id="finance-period-title" className="text-sm font-semibold text-white">
+                {dailyOnly ? "Movimentação de hoje" : "Período do financeiro"}
+              </h2>
+              <p className="mt-0.5 text-xs text-[#9a958b]">
+                {dailyOnly ? "Acesso diário do funcionário" : "Escolha as datas para atualizar todos os valores abaixo"}
+              </p>
+            </div>
+          </div>
+          <div className="grid grid-cols-[1fr_1fr_44px] gap-2 sm:flex">
+            <button type="button" onClick={handlePrint} disabled={filtered.length === 0} className={actionButtonClass}>
+              <Printer aria-hidden="true" className="size-4" /> PDF
             </button>
-            <button type="button" onClick={handleCsv} disabled={filtered.length === 0} className="flex min-h-11 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-xs font-semibold text-[#c9c2b4] disabled:opacity-40">
-              <Download className="size-4" /> Planilha
+            <button type="button" onClick={handleCsv} disabled={filtered.length === 0} className={actionButtonClass}>
+              <Download aria-hidden="true" className="size-4" /> Planilha
             </button>
-            <button type="button" onClick={handleShare} disabled={filtered.length === 0} className="flex size-11 items-center justify-center rounded-xl border border-white/10 text-[#c9c2b4] disabled:opacity-40" title="Compartilhar">
-              <Share2 className="size-4" />
+            <button type="button" onClick={handleShare} disabled={filtered.length === 0} className={`${actionButtonClass} size-11 px-0`} aria-label="Compartilhar relatório financeiro">
+              <Share2 aria-hidden="true" className="size-4" />
             </button>
           </div>
         </div>
@@ -1086,91 +1100,95 @@ export function ModuleFinanceSection({
             Este acesso mostra somente os lançamentos do dia atual. O consolidado completo fica disponível apenas para o dono.
           </p>
         ) : (
-          <>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <input type="date" value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} className={`${fieldClass} [color-scheme:dark]`} />
-              <input type="date" value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} className={`${fieldClass} [color-scheme:dark]`} />
-            </div>
-            <div className="mt-2 flex gap-2">
-              <button type="button" onClick={handleDateSearch} disabled={periodLoading} className="min-h-11 flex-1 rounded-xl bg-[#d1a04f] px-4 text-sm font-semibold text-[#0d0a05] disabled:opacity-50">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] lg:items-end">
+            <label className="space-y-1.5" htmlFor="finance-from-date">
+              <span className={labelClass}>Data inicial</span>
+              <input id="finance-from-date" type="date" value={fromDate} max={toDate || undefined} onChange={(event) => setFromDate(event.target.value)} className={`${fieldClass} [color-scheme:dark]`} />
+            </label>
+            <label className="space-y-1.5" htmlFor="finance-to-date">
+              <span className={labelClass}>Data final</span>
+              <input id="finance-to-date" type="date" value={toDate} min={fromDate || undefined} onChange={(event) => setToDate(event.target.value)} className={`${fieldClass} [color-scheme:dark]`} />
+            </label>
+            <div className="flex gap-2 sm:col-span-2 lg:col-span-1">
+              <button type="button" onClick={handleDateSearch} disabled={periodLoading} className="min-h-11 flex-1 rounded-xl bg-[#d1a04f] px-5 text-sm font-semibold text-[#0d0a05] transition-colors hover:bg-[#dfb462] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f3dfae] active:bg-[#c59443] disabled:opacity-50 motion-reduce:transition-none lg:flex-none">
                 {periodLoading ? <LoaderCircle className="mx-auto size-4 animate-spin" /> : "Buscar"}
               </button>
-              {fromDate || toDate ? <button type="button" onClick={clearDates} className="min-h-11 rounded-xl border border-white/10 px-4 text-sm text-[#c9c2b4]">Limpar</button> : null}
+              {fromDate || toDate ? <button type="button" onClick={clearDates} className={actionButtonClass}>Limpar</button> : null}
             </div>
-          </>
+          </div>
         )}
-        {error ? <p className="mt-2 text-xs text-[#f0a08f]">{error}</p> : null}
-      </div>
+        {error ? <p role="alert" className="mt-3 text-sm text-[#f0a08f]">{error}</p> : null}
+      </section>
 
       {creditTotals ? (
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {[
             { label: "Capital emprestado", value: creditTotals.principal, color: "border-l-[#60a5fa]" },
             { label: "Recebido", value: creditTotals.received, color: "border-l-[#4ade80]" },
             { label: "Ainda a receber", value: creditTotals.outstanding, color: "border-l-[#fbbf24]" },
             { label: "Juros recebidos", value: creditTotals.receivedInterest, color: "border-l-[#a78bfa]" },
           ].map((card) => (
-            <article key={card.label} className={cn("rounded-2xl border border-white/10 border-l-4 bg-[#111513] p-3.5", card.color)}>
+            <article key={card.label} className={cn("min-w-0 rounded-2xl border border-white/10 border-l-[3px] bg-[#111513] p-4 shadow-[0_10px_28px_rgba(0,0,0,0.1)]", card.color)}>
               <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#a9b2ac]">{card.label}</p>
-              <p className="mt-2 break-words text-lg font-bold text-white">{formatCurrency(card.value)}</p>
+              <p className="mt-2 break-words text-lg font-bold tabular-nums text-white">{formatCurrency(card.value)}</p>
             </article>
           ))}
         </div>
       ) : (
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-        <article className="rounded-2xl border border-white/10 border-l-4 border-l-[#4ade80] bg-[#111513] p-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <article className="rounded-2xl border border-white/10 border-l-[3px] border-l-[#4ade80] bg-[#111513] p-4 shadow-[0_10px_28px_rgba(0,0,0,0.1)]">
           <div className="flex items-center gap-2 text-[#d7ded9]"><TrendingUp className="size-4 text-[#4ade80]" /><p className="text-xs font-semibold uppercase tracking-[0.12em]">Entradas</p></div>
-          <p className="mt-2 break-words text-xl font-bold text-white">{formatCurrency(totals.income)}</p>
+          <p className="mt-2 break-words text-xl font-bold tabular-nums text-white">{formatCurrency(totals.income)}</p>
           <p className="mt-1 text-[11px] text-[#8f9992]">{incomeDescription}</p>
         </article>
-        <article className="rounded-2xl border border-white/10 border-l-4 border-l-[#fb7185] bg-[#111513] p-4">
+        <article className="rounded-2xl border border-white/10 border-l-[3px] border-l-[#fb7185] bg-[#111513] p-4 shadow-[0_10px_28px_rgba(0,0,0,0.1)]">
           <div className="flex items-center gap-2 text-[#d7ded9]"><TrendingDown className="size-4 text-[#fb7185]" /><p className="text-xs font-semibold uppercase tracking-[0.12em]">Despesas</p></div>
-          <p className="mt-2 break-words text-xl font-bold text-white">{formatCurrency(totals.expense)}</p>
+          <p className="mt-2 break-words text-xl font-bold tabular-nums text-white">{formatCurrency(totals.expense)}</p>
           <p className="mt-1 text-[11px] text-[#8f9992]">{expenseDescription}</p>
         </article>
-        <article className={cn("rounded-2xl border border-white/10 border-l-4 bg-[#111513] p-4", totals.net >= 0 ? "border-l-[#60a5fa]" : "border-l-[#f87171]")}>
+        <article className={cn("rounded-2xl border border-white/10 border-l-[3px] bg-[#111513] p-4 shadow-[0_10px_28px_rgba(0,0,0,0.1)]", totals.net >= 0 ? "border-l-[#60a5fa]" : "border-l-[#f87171]")}>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-[#d7ded9]"><Wallet className={cn("size-4", totals.net >= 0 ? "text-[#60a5fa]" : "text-[#f87171]")} /><p className="text-xs font-semibold uppercase tracking-[0.12em]">Saldo</p></div>
             <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", totals.net >= 0 ? "bg-[#60a5fa]/12 text-[#93c5fd]" : "bg-[#f87171]/12 text-[#fca5a5]")}>{totals.net >= 0 ? "Positivo" : "Negativo"}</span>
           </div>
-          <p className={cn("mt-2 break-words text-xl font-bold", totals.net >= 0 ? "text-[#93c5fd]" : "text-[#fca5a5]")}>{formatCurrency(totals.net)}</p>
+          <p className={cn("mt-2 break-words text-xl font-bold tabular-nums", totals.net >= 0 ? "text-[#93c5fd]" : "text-[#fca5a5]")}>{formatCurrency(totals.net)}</p>
           <p className="mt-1 text-[11px] text-[#8f9992]">Entradas menos despesas</p>
         </article>
       </div>
       )}
 
       {bxTotals ? (
-        <div className="rounded-2xl border border-white/10 bg-[#101412] p-4">
-          <p className="text-sm font-semibold text-white">De onde vieram as despesas</p>
+        <section className={panelClass}>
+          <h2 className="text-sm font-semibold text-white">De onde vieram as despesas</h2>
           <p className="mt-1 text-xs text-[#8f9992]">Separação dos valores registrados no BX</p>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-white/10 border-l-4 border-l-[#fbbf24] bg-[#151a17] p-3">
               <p className="text-xs font-medium text-[#c5cdc7]">Prêmios</p>
-              <p className="mt-1 text-base font-bold text-white">{formatCurrency(bxTotals.prize)}</p>
+              <p className="mt-1 text-base font-bold tabular-nums text-white">{formatCurrency(bxTotals.prize)}</p>
             </div>
             <div className="rounded-xl border border-white/10 border-l-4 border-l-[#fb923c] bg-[#151a17] p-3">
               <p className="text-xs font-medium text-[#c5cdc7]">Outras despesas</p>
-              <p className="mt-1 text-base font-bold text-white">{formatCurrency(bxTotals.other)}</p>
+              <p className="mt-1 text-base font-bold tabular-nums text-white">{formatCurrency(bxTotals.other)}</p>
             </div>
             <div className="rounded-xl border border-white/10 border-l-4 border-l-[#a78bfa] bg-[#151a17] p-3">
               <p className="text-xs font-medium text-[#c5cdc7]">Descontos</p>
-              <p className="mt-1 text-base font-bold text-white">{formatCurrency(bxTotals.discount)}</p>
+              <p className="mt-1 text-base font-bold tabular-nums text-white">{formatCurrency(bxTotals.discount)}</p>
             </div>
             <div className="rounded-xl border border-[#f87171]/30 border-l-4 border-l-[#f87171] bg-[#171313] p-3">
               <p className="text-xs font-semibold text-[#fca5a5]">Total gasto</p>
-              <p className="mt-1 text-base font-bold text-white">{formatCurrency(bxTotals.total)}</p>
+              <p className="mt-1 text-base font-bold tabular-nums text-white">{formatCurrency(bxTotals.total)}</p>
             </div>
           </div>
-        </div>
+        </section>
       ) : null}
 
       {slotHTotals ? (
-        <div className="rounded-2xl border border-white/10 bg-[#101412] p-4">
-          <p className="text-sm font-semibold text-white">Resultado das máquinas H</p>
+        <section className={panelClass}>
+          <h2 className="text-sm font-semibold text-white">Resultado das máquinas H</h2>
           <p className="mt-1 text-xs text-[#8f9992]">
             Somente os fechamentos das máquinas; lançamentos avulsos ficam nos totais acima
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-white/10 border-l-4 border-l-[#4ade80] bg-[#151a17] p-3">
               <p className="text-xs font-medium text-[#c5cdc7]">Recebido</p>
               <p className="mt-1 text-base font-bold text-white">
@@ -1206,16 +1224,16 @@ export function ModuleFinanceSection({
               </p>
             </div>
           </div>
-        </div>
+        </section>
       ) : null}
 
       {billiardTotals ? (
-        <div className="rounded-2xl border border-white/10 bg-[#101412] p-4">
-          <p className="text-sm font-semibold text-white">Resultado das mesas de bilhar</p>
+        <section className={panelClass}>
+          <h2 className="text-sm font-semibold text-white">Resultado das mesas de bilhar</h2>
           <p className="mt-1 text-xs text-[#8f9992]">
             Somente os fechamentos das mesas; lançamentos avulsos ficam nos totais acima
           </p>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl border border-white/10 border-l-4 border-l-[#4ade80] bg-[#151a17] p-3">
               <p className="text-xs font-medium text-[#c5cdc7]">Recebido</p>
               <p className="mt-1 text-base font-bold text-white">
@@ -1251,28 +1269,28 @@ export function ModuleFinanceSection({
               </p>
             </div>
           </div>
-        </div>
+        </section>
       ) : null}
 
       {methodTotals.length > 0 ? (
-        <div className="rounded-2xl border border-white/10 bg-[#101412] p-4">
-          <p className="text-sm font-semibold text-white">Como o dinheiro entrou</p>
+        <section className={panelClass}>
+          <h2 className="text-sm font-semibold text-white">Como o dinheiro entrou</h2>
           <p className="mt-1 text-xs text-[#8f9992]">Somente valores recebidos, separados por pagamento</p>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {methodTotals.map((item) => (
               <div key={item.method} className="rounded-xl border border-white/10 border-l-4 border-l-[#4ade80] bg-[#151a17] p-3">
                 <p className="text-xs font-medium text-[#c5cdc7]">{item.label}</p>
-                <p className="mt-1 text-base font-bold text-white">{formatCurrency(item.amount)}</p>
+                <p className="mt-1 text-base font-bold tabular-nums text-white">{formatCurrency(item.amount)}</p>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       ) : null}
 
-      <div className="rounded-2xl border border-white/[0.08] bg-[#0b0f0e]/35 p-4">
+      <section className={panelClass}>
         <div className="flex items-center justify-between gap-3">
           <div><h2 className="text-sm font-semibold text-white">Lançamento avulso</h2><p className="mt-0.5 text-xs text-[#9a958b]">Entrada ou despesa que não veio de uma operação.</p></div>
-          <button type="button" onClick={() => setFormOpen((current) => !current)} className="flex min-h-11 items-center gap-1.5 rounded-xl bg-[#d1a04f] px-3 text-xs font-semibold text-[#0d0a05]">
+          <button type="button" onClick={() => setFormOpen((current) => !current)} className="flex min-h-11 items-center gap-1.5 rounded-xl bg-[#d1a04f] px-4 text-sm font-semibold text-[#0d0a05] transition-colors hover:bg-[#dfb462] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f3dfae] active:bg-[#c59443] motion-reduce:transition-none">
             {formOpen ? <X className="size-4" /> : <Plus className="size-4" />} {formOpen ? "Cancelar" : "Novo"}
           </button>
         </div>
@@ -1290,9 +1308,9 @@ export function ModuleFinanceSection({
             <button type="submit" disabled={isPending} className="min-h-11 w-full rounded-xl bg-[#d1a04f] px-4 text-sm font-semibold text-[#0d0a05] disabled:opacity-50">{isPending ? "Salvando..." : "Salvar lançamento"}</button>
           </form>
         ) : null}
-      </div>
+      </section>
 
-      <div className="rounded-2xl border border-white/[0.08] bg-[#0b0f0e]/35 p-4">
+      <section className={panelClass}>
         <button
           type="button"
           onClick={toggleAudit}
@@ -1338,9 +1356,9 @@ export function ModuleFinanceSection({
             ))}
           </div>
         ) : null}
-      </div>
+      </section>
 
-      <div className="rounded-2xl border border-white/[0.08] bg-[#0b0f0e]/35 p-4">
+      <section className={panelClass}>
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2"><h2 className="text-sm font-semibold text-white">Lançamentos</h2><span className="rounded-full border border-white/10 px-2 py-0.5 text-[11px] text-[#c9c2b4]">{filtered.length}</span></div>
           <div className="flex overflow-hidden rounded-xl border border-white/10">
@@ -1416,7 +1434,7 @@ export function ModuleFinanceSection({
             })}
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 }

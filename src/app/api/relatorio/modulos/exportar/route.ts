@@ -1,17 +1,10 @@
 import { type NextRequest } from "next/server";
 
 import { getSession, hasModuleAccess } from "@/lib/auth";
+import { buildPtBrCsv, formatCsvDecimal } from "@/lib/csv";
 import { getModuleReportSummary } from "@/server/services/module-report-service";
 
 export const dynamic = "force-dynamic";
-
-function esc(value: string): string {
-  const s = String(value ?? "");
-  if (s.includes(",") || s.includes('"') || s.includes("\n")) {
-    return `"${s.replace(/"/g, '""')}"`;
-  }
-  return s;
-}
 
 export async function GET(request: NextRequest) {
   const session = await getSession();
@@ -42,17 +35,18 @@ export async function GET(request: NextRequest) {
     new Date(`${to}T23:59:59`),
   );
 
-  const header = ["Modulo", "Registros", "Total (R$)"].join(",");
+  const header = ["Módulo", "Registros", "Total (R$)"];
 
-  const csvRows = rows.map((row) =>
-    [esc(row.title), row.count, row.total.toFixed(2).replace(".", ",")].join(","),
-  );
+  const csvRows: Array<Array<string | number>> = rows.map((row) => [
+    row.title,
+    row.count,
+    formatCsvDecimal(row.total),
+  ]);
 
   const total = rows.reduce((sum, row) => sum + row.total, 0);
-  csvRows.push(["Total geral", "", total.toFixed(2).replace(".", ",")].join(","));
+  csvRows.push(["Total geral", "", formatCsvDecimal(total)]);
 
-  const bom = "﻿";
-  const csv = bom + [header, ...csvRows].join("\n");
+  const csv = buildPtBrCsv([header, ...csvRows]);
 
   return new Response(csv, {
     headers: {
