@@ -1076,7 +1076,7 @@ export function ModuleFinanceSection({
             </span>
             <div className="min-w-0">
               <h2 id="finance-period-title" className="text-sm font-semibold text-white">
-                {dailyOnly ? "Movimentação de hoje" : "Período do financeiro"}
+                {dailyOnly ? "Financeiro de hoje" : "Período do financeiro"}
               </h2>
               <p className="mt-0.5 text-xs text-[#9a958b]">
                 {dailyOnly ? "Acesso diário do funcionário" : "Escolha as datas para atualizar todos os valores abaixo"}
