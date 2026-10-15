@@ -493,6 +493,7 @@ test.describe("regressao completa de liberacao", () => {
     const finalBody = (await finalListing.json()) as { records: Array<{ title: string }> };
     expect(finalBody.records.filter((record) => record.title === machineName)).toHaveLength(1);
 
+    await loginByApi(page, `${runId}-owner`, password!);
     await page.goto("/modulos/maquinas-de-pelucia");
     await page.getByRole("button", { name: /^Comprovantes/i }).click();
     const receiptCard = page.getByRole("article").filter({ hasText: clientName });
