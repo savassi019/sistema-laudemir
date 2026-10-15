@@ -1,6 +1,6 @@
 "use client";
 
-import { FileDown, ImageIcon, LoaderCircle, MessageCircle, Send } from "lucide-react";
+import { Eye, EyeOff, FileDown, ImageIcon, LoaderCircle, MessageCircle, Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 type Props = {
@@ -15,6 +15,7 @@ type Props = {
   showInfinityLogo?: boolean;
   moduleSlug?: string;
   receiptId?: string;
+  enablePreview?: boolean;
   directShareDisabled?: boolean;
   directShareDisabledMessage?: string;
 };
@@ -463,18 +464,33 @@ export function WhatsAppReceiptButton({
   showInfinityLogo = false,
   moduleSlug,
   receiptId,
+  enablePreview = false,
   directShareDisabled = false,
   directShareDisabledMessage = "O envio direto fica disponivel depois da sincronizacao.",
 }: Props) {
   const [phone, setPhone] = useState(defaultPhone);
   const [generating, setGenerating] = useState(false);
+  const [previewGenerating, setPreviewGenerating] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [showText, setShowText] = useState(false);
   const messageRef = useRef(message);
+  const previewMessageRef = useRef<string | null>(null);
+  const previewUrlRef = useRef<string | null>(null);
+  const previewMountedRef = useRef(true);
 
   useEffect(() => {
     messageRef.current = message;
   }, [message]);
+
+  useEffect(() => {
+    previewMountedRef.current = true;
+    return () => {
+      previewMountedRef.current = false;
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+    };
+  }, []);
 
   const isReady = phone.replace(/\D/g, "").length >= 10;
 
@@ -528,6 +544,47 @@ export function WhatsAppReceiptButton({
       }
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handleTogglePreview() {
+    if (previewOpen) {
+      setPreviewOpen(false);
+      return;
+    }
+    if (
+      previewUrlRef.current &&
+      previewMessageRef.current === messageRef.current
+    ) {
+      setPreviewOpen(true);
+      return;
+    }
+
+    setPreviewGenerating(true);
+    setShareError(null);
+    try {
+      const blob = await generateReceiptImage(
+        messageRef.current,
+        documentLabel,
+        closedAt,
+        showInfinityLogo,
+      );
+      const nextUrl = URL.createObjectURL(blob);
+      if (!previewMountedRef.current) {
+        URL.revokeObjectURL(nextUrl);
+        return;
+      }
+      if (previewUrlRef.current) URL.revokeObjectURL(previewUrlRef.current);
+      previewUrlRef.current = nextUrl;
+      previewMessageRef.current = messageRef.current;
+      setPreviewUrl(nextUrl);
+      setPreviewOpen(true);
+    } catch {
+      if (previewMountedRef.current) {
+        setShareError("Não foi possível gerar a prévia do comprovante.");
+      }
+    } finally {
+      if (previewMountedRef.current) setPreviewGenerating(false);
     }
   }
 
@@ -657,6 +714,47 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
       </div>}
 
       <div className={compact ? "space-y-2 p-3" : "space-y-3 p-4"}>
+          {enablePreview ? (
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => void handleTogglePreview()}
+                disabled={previewGenerating}
+                aria-expanded={previewOpen}
+                className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm font-semibold text-[#eee9df] transition active:bg-white/[0.08] disabled:opacity-50"
+              >
+                {previewGenerating ? (
+                  <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+                ) : previewOpen ? (
+                  <EyeOff className="size-4" aria-hidden="true" />
+                ) : (
+                  <Eye className="size-4" aria-hidden="true" />
+                )}
+                {previewGenerating
+                  ? "Gerando prévia…"
+                  : previewOpen
+                    ? "Ocultar prévia"
+                    : "Ver prévia do comprovante"}
+              </button>
+
+              {previewOpen && previewUrl ? (
+                <div
+                  role="region"
+                  aria-label="Prévia do comprovante"
+                  className="mx-auto max-w-[404px] overflow-hidden rounded-xl border border-white/10 bg-[#f5f6f8] shadow-[0_12px_36px_rgba(0,0,0,0.24)]"
+                >
+                  {/* A prévia usa o mesmo PNG enviado ao cliente, evitando divergência visual. */}
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={previewUrl}
+                    alt="Prévia do comprovante"
+                    className="block h-auto w-full"
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
           <button
             type="button"
             onClick={handleSendText}

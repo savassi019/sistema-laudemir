@@ -492,5 +492,25 @@ test.describe("regressao completa de liberacao", () => {
     const finalListing = await page.request.get("/api/modules/maquinas-de-pelucia/records?take=50");
     const finalBody = (await finalListing.json()) as { records: Array<{ title: string }> };
     expect(finalBody.records.filter((record) => record.title === machineName)).toHaveLength(1);
+
+    await page.goto("/modulos/maquinas-de-pelucia");
+    await page.getByRole("button", { name: /^Comprovantes/i }).click();
+    const receiptCard = page.getByRole("article").filter({ hasText: clientName });
+    await expect(receiptCard).toBeVisible();
+    await receiptCard.getByRole("button").first().click();
+    await receiptCard.getByRole("button", { name: "Ver prévia do comprovante" }).click();
+
+    const preview = receiptCard.getByRole("region", { name: "Prévia do comprovante" });
+    const previewImage = preview.getByRole("img", { name: "Prévia do comprovante" });
+    await expect(preview).toBeVisible();
+    await expect
+      .poll(() => previewImage.evaluate((image: HTMLImageElement) => image.naturalWidth))
+      .toBeGreaterThan(0);
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1))
+      .toBe(true);
+
+    await receiptCard.getByRole("button", { name: "Ocultar prévia" }).click();
+    await expect(preview).toBeHidden();
   });
 });

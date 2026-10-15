@@ -185,6 +185,7 @@ export function ModuleReceiptCenter({ slug }: { slug: string }) {
                     compact
                     moduleSlug={slug}
                     receiptId={item.id}
+                    enablePreview
                     defaultPhone={item.phone}
                     closedAt={item.closedAt}
                     showInfinityLogo={slug === "bilhar-pebolim"}
