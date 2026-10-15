@@ -13,6 +13,7 @@ import {
   listBxPrizeRecords,
   listModuleClientRecords,
   listModuleRecords,
+  ModuleClientValidationError,
   moduleSlugs,
   registerModuleClient,
   registerSlotClient,
@@ -75,26 +76,41 @@ export async function registerModuleClientAction(
   payload: Record<string, unknown>,
 ) {
   const session = await requireSession();
+  // ASVS V2.2/V8.3: o servidor valida o módulo e a permissão antes de persistir.
   assertSlugAccess(session, slug);
   const moduleSlug = slug as ModuleSlug;
-  const result = await registerModuleClient(session, moduleSlug, payload);
-  const moduleItem = getModuleBySlug(slug);
-  if (moduleItem) {
-    await prisma.auditLog.create({
-      data: {
-        organizationId: session.organizationId,
-        userId: session.userId,
-        module: moduleItem.module,
-        action: "MODULE_CLIENT_CREATED",
-        entityType: reviewEntityType[moduleSlug] ?? "CLIENT",
-        entityId: result.id,
-        newData: { slug, name: result.name },
-      },
-    }).catch((error) => {
-      console.error(`[audit] cliente ${slug}/${result.id} salvo sem log:`, error);
-    });
+  try {
+    const result = await registerModuleClient(session, moduleSlug, payload);
+    const moduleItem = getModuleBySlug(slug);
+    if (moduleItem) {
+      await prisma.auditLog.create({
+        data: {
+          organizationId: session.organizationId,
+          userId: session.userId,
+          module: moduleItem.module,
+          action: "MODULE_CLIENT_CREATED",
+          entityType: reviewEntityType[moduleSlug] ?? "CLIENT",
+          entityId: result.id,
+          newData: { slug, name: result.name },
+        },
+      }).catch((error) => {
+        console.error(`[audit] cliente ${slug}/${result.id} salvo sem log:`, error);
+      });
+    }
+    return { ok: true as const, client: result };
+  } catch (error) {
+    // ASVS V13.4/V16.5: somente erros de validação permitidos chegam ao usuário.
+    if (error instanceof z.ZodError) {
+      return {
+        ok: false as const,
+        error: error.issues[0]?.message ?? "Confira os dados informados.",
+      };
+    }
+    if (error instanceof ModuleClientValidationError) {
+      return { ok: false as const, error: error.message };
+    }
+    throw error;
   }
-  return result;
 }
 
 export async function listModuleRecordsAction(

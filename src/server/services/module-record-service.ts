@@ -9,6 +9,7 @@ import {
 import { randomUUID } from "crypto";
 import { z } from "zod";
 
+import { generateAssetCode } from "@/lib/asset-code";
 import { currentBusinessDayRange } from "@/lib/business-date";
 import { calculateCreditTerms, isCreditOverdue } from "@/lib/credit-finance";
 import { formatCurrency, formatMachineCounter, formatShortDate } from "@/lib/format";
@@ -473,15 +474,11 @@ function moduleClientKey(value: string) {
     .replace(/\s+/g, " ");
 }
 
-function generatedAssetCode(prefix: string, value: string) {
-  const normalized = value
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9]+/g, "-")
-    .replace(/(^-|-$)/g, "")
-    .slice(0, 18)
-    .toUpperCase();
-  return `${prefix}-${normalized || randomUUID().slice(0, 8).toUpperCase()}`;
+export class ModuleClientValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ModuleClientValidationError";
+  }
 }
 
 /** Cadastro isolado: cria cliente/ativo sem inventar um fechamento financeiro. */
@@ -499,7 +496,7 @@ export async function registerModuleClient(
       case "bilhar-pebolim": {
         const pointName = data.localName || data.clientName;
         const routeNumber = data.routeNumber ?? 1;
-        const code = data.code || generatedAssetCode(`R${String(routeNumber).padStart(2, "0")}`, pointName);
+        const code = data.code || generateAssetCode(`R${String(routeNumber).padStart(2, "0")}`, pointName);
         const result = await prisma.$queryRaw<[{ next: number }]>`
           SELECT COALESCE(MAX("registrationNumber"), 0) + 1 AS next
           FROM "BilliardPoint"
@@ -527,7 +524,7 @@ export async function registerModuleClient(
       case "maquinas-de-pelucia": {
         const machineName = data.machineName || data.localName || "GRUA";
         const machineNumber = data.machineNumber || "1";
-        const code = data.code || generatedAssetCode("GRUA", `${data.clientName}-${machineNumber}`);
+        const code = data.code || generateAssetCode("GRUA", `${data.clientName}-${machineNumber}`);
         const machine = await prisma.plushMachine.create({
           data: {
             organizationId,
@@ -611,11 +608,11 @@ export async function registerModuleClient(
         return { id: client.id, name: client.clientName };
       }
       default:
-        throw new Error("Este módulo não usa o cadastro rápido de clientes.");
+        throw new ModuleClientValidationError("Este módulo não usa o cadastro rápido de clientes.");
     }
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
-      throw new Error("Este cliente, código ou número de máquina já está cadastrado neste módulo.");
+      throw new ModuleClientValidationError("Este cliente, código ou número de máquina já está cadastrado neste módulo.");
     }
     throw error;
   }

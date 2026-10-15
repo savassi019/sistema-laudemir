@@ -460,6 +460,9 @@ test.describe("regressao completa de liberacao", () => {
     await page.getByLabel(/Dinheiro retirado/i).fill("900");
     await page.getByLabel(/Comiss.o %/i).fill("25");
     await page.getByLabel(/Quantidade de pel.cia/i).fill("4");
+    await page.getByLabel("Como o cliente foi pago", { exact: true }).selectOption("PIX_DINHEIRO");
+    await page.getByLabel("Parte paga em PIX (R$)", { exact: true }).fill("200");
+    await page.getByLabel("Parte paga em dinheiro (R$)", { exact: true }).fill("150");
     const photoInputs = page.locator('input[type="file"]');
     await expect(photoInputs).toHaveCount(3);
     await photoInputs.nth(0).setInputFiles({ name: "grua-pix-offline.png", mimeType: "image/png", buffer: onePixelPng });
@@ -470,6 +473,8 @@ test.describe("regressao completa de liberacao", () => {
     await page.getByRole("button", { name: /Salvar Pel.cia/i }).click();
     await expect(page.getByText("Protegido neste aparelho", { exact: true })).toBeVisible();
     await expect(page.getByText("Fechamento da GRUA protegido neste aparelho", { exact: true })).toBeVisible();
+    await expect(page.getByText("Informado em PIX: R$ 200,00", { exact: true })).toBeVisible();
+    await expect(page.getByText("Informado em dinheiro: R$ 150,00", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Aguardando sincronizacao" }).first()).toBeDisabled();
     await expect(page.getByRole("button", { name: "Compartilhar imagem do comprovante" }).first()).toBeVisible();
     await expect(page.getByRole("button", { name: "Gerar via do cliente em PDF" })).toBeVisible();

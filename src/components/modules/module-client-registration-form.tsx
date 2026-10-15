@@ -49,7 +49,11 @@ export function ModuleClientRegistrationForm({
     setSaved(false);
     startTransition(async () => {
       try {
-        await registerModuleClientAction(slug, payload);
+        const result = await registerModuleClientAction(slug, payload);
+        if (!result.ok) {
+          setError(result.error);
+          return;
+        }
         form.reset();
         setSaved(true);
         router.refresh();
