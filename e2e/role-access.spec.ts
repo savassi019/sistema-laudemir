@@ -16,6 +16,15 @@ test.describe("perfis de acesso em celular", () => {
     await login(page, `${runId}-owner`);
     await page.goto("/equipe");
     await expect(page.getByRole("heading", { name: "Equipe", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Editar", exact: true }).first().click();
+    const editDialog = page.getByRole("dialog");
+    await expect(editDialog).toBeVisible();
+    await expect(editDialog.getByRole("heading", { name: /^Editar / })).toBeVisible();
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1))
+      .toBe(true);
+    await editDialog.getByRole("button", { name: "Cancelar", exact: true }).click();
+    await expect(editDialog).toHaveCount(0);
     await page.goto("/painel");
     await expect(page).toHaveURL(/\/painel/);
     await expect(page.getByRole("heading", { name: "Painel do Dono" })).toBeVisible();

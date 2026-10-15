@@ -15,6 +15,8 @@ type Props = {
   showInfinityLogo?: boolean;
   moduleSlug?: string;
   receiptId?: string;
+  directShareDisabled?: boolean;
+  directShareDisabledMessage?: string;
 };
 
 type ReceiptLine = {
@@ -461,6 +463,8 @@ export function WhatsAppReceiptButton({
   showInfinityLogo = false,
   moduleSlug,
   receiptId,
+  directShareDisabled = false,
+  directShareDisabledMessage = "O envio direto fica disponivel depois da sincronizacao.",
 }: Props) {
   const [phone, setPhone] = useState(defaultPhone);
   const [generating, setGenerating] = useState(false);
@@ -632,6 +636,10 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
 
   function handleSendText() {
     setShareError(null);
+    if (directShareDisabled) {
+      setShareError(directShareDisabledMessage);
+      return;
+    }
     if (!isReady) {
       setShowText(true);
       setShareError("Cadastre ou confira o telefone do cliente para abrir o WhatsApp.");
@@ -652,10 +660,11 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
           <button
             type="button"
             onClick={handleSendText}
+            disabled={directShareDisabled}
             className={`inline-flex w-full items-center justify-center gap-2.5 rounded-xl bg-[#25d366] px-4 font-bold text-[#0a1a10] shadow-[0_6px_20px_rgba(37,211,102,0.3)] transition active:scale-[0.98] active:bg-[#22c55e] disabled:opacity-40 disabled:shadow-none ${compact ? "min-h-12 py-3 text-sm" : "min-h-14 py-4 text-base"}`}
           >
             <MessageCircle className="size-5" />
-            Enviar comprovante ao cliente
+            {directShareDisabled ? "Aguardando sincronizacao" : "Enviar comprovante ao cliente"}
           </button>
 
           {shareError ? <p className="text-center text-xs text-[#f0a08f]">{shareError}</p> : null}
@@ -711,7 +720,7 @@ body{background:#f5f6f8;padding:28px 16px;-webkit-print-color-adjust:exact;print
               <button
                 type="button"
                 onClick={handleSendText}
-                disabled={!isReady}
+                disabled={!isReady || directShareDisabled}
                 className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-[#25d366]/30 bg-transparent px-4 py-3 text-sm font-semibold text-[#25d366] transition active:bg-[#25d366]/10 disabled:opacity-35"
               >
                 <Send className="size-4" />

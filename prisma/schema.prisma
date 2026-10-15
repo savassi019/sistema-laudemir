@@ -869,6 +869,8 @@ model PlushMachine {
   code           String
   name           String
   machineNumber  String
+  payBlue        String?
+  macAddress     String?
   noteNumber     String?
   noteiroFixed   String?           @default("01")
   coinPhotoRule  Boolean           @default(true)

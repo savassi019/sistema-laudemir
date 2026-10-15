@@ -149,6 +149,8 @@ const createPlushSchema = z.object({
   code: z.string(),
   name: z.string(),
   machineNumber: z.string(),
+  payBlue: z.string().trim().max(100).optional(),
+  macAddress: z.string().trim().max(100).optional(),
   noteNumber: z.string().optional(),
   noteiroFixed: z.string().optional(),
   collectionDate: z.string(),
@@ -446,6 +448,8 @@ const registerModuleClientSchema = z.object({
   code: z.string().trim().optional(),
   machineName: z.string().trim().optional(),
   machineNumber: z.string().trim().optional(),
+  payBlue: z.string().trim().max(100).optional(),
+  macAddress: z.string().trim().max(100).optional(),
   tableModel: z.string().trim().optional(),
   routeNumber: z.coerce.number().int().min(1).optional(),
   chipValue: z.coerce.number().min(0).optional(),
@@ -526,6 +530,8 @@ export async function registerModuleClient(
             code,
             name: machineName,
             machineNumber,
+            ...(data.payBlue !== undefined ? { payBlue: data.payBlue || null } : {}),
+            ...(data.macAddress !== undefined ? { macAddress: data.macAddress || null } : {}),
             coinPhotoRule: true,
             giftPhotoRule: true,
             active: true,
@@ -1520,6 +1526,8 @@ async function saveWithPrisma(
             code: data.code,
             name: data.name,
             machineNumber: data.machineNumber,
+            payBlue: data.payBlue || null,
+            macAddress: data.macAddress || null,
             noteNumber: data.noteNumber,
             noteiroFixed: data.noteiroFixed,
             coinPhotoRule: true,
@@ -1532,6 +1540,8 @@ async function saveWithPrisma(
             phone: data.phone,
             name: data.name,
             machineNumber: data.machineNumber,
+            ...(data.payBlue !== undefined ? { payBlue: data.payBlue || null } : {}),
+            ...(data.macAddress !== undefined ? { macAddress: data.macAddress || null } : {}),
             noteNumber: data.noteNumber,
             noteiroFixed: data.noteiroFixed,
           },
@@ -3432,7 +3442,7 @@ export async function listModuleClients(
           id: machine.id,
           name: machine.clientName || machine.name,
           subtitle: `${machine.name} - Maquina ${machine.machineNumber}`,
-          tags: [machine.phone, machine.cpf, machine.code].filter(Boolean) as string[],
+          tags: [machine.phone, machine.cpf, machine.code, machine.payBlue, machine.macAddress].filter(Boolean) as string[],
           badge: machine.active ? "Ativa" : "Inativa",
         }));
       }
@@ -3796,7 +3806,7 @@ export async function listModuleVisitTargets(
 }
 
 export type ClientPrefillData =
-  | { kind: "plush-machine"; clientName: string; phone: string; cpf: string; code: string; name: string; machineNumber: string; noteNumber: string; noteiroFixed: string; coinPhotoRule: boolean; giftPhotoRule: boolean; active: boolean }
+  | { kind: "plush-machine"; clientName: string; phone: string; cpf: string; code: string; name: string; machineNumber: string; payBlue: string; macAddress: string; noteNumber: string; noteiroFixed: string; coinPhotoRule: boolean; giftPhotoRule: boolean; active: boolean }
   | { kind: "slot-machine"; clientName: string; phone: string; cpf: string; cep: string; street: string; neighborhood: string; city: string; state: string; clientMachineNumber: number; customerDebt: number; ppValue: number; initialAmount: number; initialAmountMode: string; optionalGreedAmount: number; active: boolean; previousIncome: number; previousExpense: number }
   | { kind: "bx-transaction"; clientName: string; phone: string; cpf: string; cep: string; street: string; neighborhood: string; city: string; state: string; exceptionClient: boolean; debt: number }
   | { kind: "carreta-kids-record"; localName: string; sheetName: string; phone: string }
@@ -3813,7 +3823,7 @@ export async function getClientPrefillData(
     case "maquinas-de-pelucia": {
       const m = await prisma.plushMachine.findFirst({ where: { id, organizationId: org } });
       if (!m) return null;
-      return { kind: "plush-machine", clientName: m.clientName ?? "", phone: m.phone ?? "", cpf: m.cpf ?? "", code: m.code, name: m.name, machineNumber: m.machineNumber, noteNumber: m.noteNumber ?? "", noteiroFixed: m.noteiroFixed ?? "01", coinPhotoRule: m.coinPhotoRule, giftPhotoRule: m.giftPhotoRule, active: m.active };
+      return { kind: "plush-machine", clientName: m.clientName ?? "", phone: m.phone ?? "", cpf: m.cpf ?? "", code: m.code, name: m.name, machineNumber: m.machineNumber, payBlue: m.payBlue ?? "", macAddress: m.macAddress ?? "", noteNumber: m.noteNumber ?? "", noteiroFixed: m.noteiroFixed ?? "01", coinPhotoRule: m.coinPhotoRule, giftPhotoRule: m.giftPhotoRule, active: m.active };
     }
     case "h-caca-niquel": {
       const m = await prisma.slotMachine.findFirst({ where: { id, organizationId: org } });

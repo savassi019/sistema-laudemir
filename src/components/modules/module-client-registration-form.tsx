@@ -38,6 +38,8 @@ export function ModuleClientRegistrationForm({
       chipValue: Number(data.get("chipValue") ?? 0),
       machineName: String(data.get("machineName") ?? "").trim(),
       machineNumber: String(data.get("machineNumber") ?? "").trim(),
+      payBlue: String(data.get("payBlue") ?? "").trim(),
+      macAddress: String(data.get("macAddress") ?? "").trim(),
       code: String(data.get("code") ?? "").trim(),
       machineCount: Number(data.get("machineCount") ?? 1),
       exceptionClient: data.get("exceptionClient") === "on",
@@ -111,6 +113,22 @@ export function ModuleClientRegistrationForm({
             <label className="space-y-1.5 sm:col-span-2">
               <span className={labelClass}>Código da máquina</span>
               <input name="code" className={fieldClass} placeholder="Se ficar vazio, será criado automaticamente" />
+            </label>
+            <label className="space-y-1.5">
+              <span className={labelClass}>Pay Blue</span>
+              <input name="payBlue" maxLength={100} autoComplete="off" className={fieldClass} placeholder="Identificação Pay Blue" />
+            </label>
+            <label className="space-y-1.5">
+              <span className={labelClass}>Código MAC</span>
+              <input
+                name="macAddress"
+                autoComplete="off"
+                autoCapitalize="characters"
+                spellCheck={false}
+                maxLength={100}
+                className={fieldClass}
+                placeholder="Ex.: AA:BB:CC:DD:EE:FF"
+              />
             </label>
           </>
         ) : null}

@@ -418,4 +418,67 @@ test.describe("regressao completa de liberacao", () => {
     const finalBody = (await finalListing.json()) as { records: Array<{ title: string }> };
     expect(finalBody.records.filter((record) => record.title === clientName)).toHaveLength(1);
   });
+
+  test("gera comprovante local da GRUA offline e sincroniza uma unica vez", async ({ context, page }) => {
+    test.setTimeout(180_000);
+    await loginByApi(page, `${runId}-operator`, password!);
+    const suffix = `${runId}-${Date.now()}`.slice(-28);
+    const clientName = `GRUA offline ${suffix}`;
+    const machineName = `GRUA recibo ${suffix}`;
+
+    await page.goto("/modulos/maquinas-de-pelucia");
+    await clickAfterHydration(
+      page.getByRole("button", { name: /^Clientes/i }),
+      page.getByRole("button", { name: "Novo", exact: true }),
+    );
+    await page.getByRole("button", { name: "Novo", exact: true }).click();
+    await page.getByLabel("Nome do cliente", { exact: true }).fill(clientName);
+    await page.getByLabel("Telefone", { exact: true }).fill("11966665555");
+    await page.getByLabel(/Nome da m.quina/i).fill(machineName);
+    await page.getByLabel(/N.mero da m.quina/i).fill(`OFF-${suffix}`);
+    await page.getByLabel("Pay Blue", { exact: true }).fill(`PAY-${suffix}`);
+    await page.getByLabel(/C.digo MAC/i).fill("AA:BB:CC:DD:EE:FF");
+    await page.getByRole("button", { name: "Salvar cliente", exact: true }).click();
+    await expect(page.getByText("Cliente cadastrado.", { exact: true })).toBeVisible();
+
+    await page.goto("/modulos/maquinas-de-pelucia");
+    await clickAfterHydration(
+      page.getByRole("button", { name: /^Visita/i }),
+      page.getByRole("button").filter({ hasText: clientName }),
+    );
+    await page.getByRole("button").filter({ hasText: clientName }).click();
+    await expect(page.getByText("Ativa", { exact: true })).toBeVisible();
+    await expect(page.getByText(`Pay Blue: PAY-${suffix}`, { exact: true })).toBeVisible();
+    await expect(page.getByText("Código MAC: AA:BB:CC:DD:EE:FF", { exact: true })).toBeVisible();
+    await page.getByLabel("Data da coleta", { exact: true }).fill(businessDate());
+    await page.getByLabel("Total bruto", { exact: true }).fill("1400");
+    await page.getByLabel(/Comiss.o %/i).fill("25");
+    await page.getByLabel(/Quantidade de pel.cia/i).fill("4");
+    const photoInputs = page.locator('input[type="file"]');
+    await expect(photoInputs).toHaveCount(2);
+    await photoInputs.nth(0).setInputFiles({ name: "grua-moedas-offline.png", mimeType: "image/png", buffer: onePixelPng });
+    await photoInputs.nth(1).setInputFiles({ name: "grua-brindes-offline.png", mimeType: "image/png", buffer: onePixelPng });
+
+    await context.setOffline(true);
+    await page.getByRole("button", { name: /Salvar Pel.cia/i }).click();
+    await expect(page.getByText("Protegido neste aparelho", { exact: true })).toBeVisible();
+    await expect(page.getByText("Fechamento da GRUA protegido neste aparelho", { exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Aguardando sincronizacao" }).first()).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Compartilhar imagem do comprovante" }).first()).toBeVisible();
+    await expect(page.getByRole("button", { name: "Gerar via do cliente em PDF" })).toBeVisible();
+
+    await context.setOffline(false);
+    await expect.poll(async () => {
+      const response = await page.request.get("/api/modules/maquinas-de-pelucia/records?take=50");
+      if (!response.ok()) return 0;
+      const body = (await response.json()) as { records: Array<{ title: string }> };
+      return body.records.filter((record) => record.title === machineName).length;
+    }, { timeout: 60_000 }).toBe(1);
+    await expect(page.getByText("Registro da grua salvo", { exact: true })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByRole("button", { name: "Enviar comprovante ao cliente" }).first()).toBeEnabled();
+
+    const finalListing = await page.request.get("/api/modules/maquinas-de-pelucia/records?take=50");
+    const finalBody = (await finalListing.json()) as { records: Array<{ title: string }> };
+    expect(finalBody.records.filter((record) => record.title === machineName)).toHaveLength(1);
+  });
 });

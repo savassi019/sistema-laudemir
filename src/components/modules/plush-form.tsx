@@ -10,7 +10,11 @@ import { formatCurrency, formatShortDate } from "@/lib/format";
 import { PAYMENT_METHOD_LABEL, rotuloDeStatus } from "@/lib/status-labels";
 import { useFormDraft } from "@/hooks/use-form-draft";
 import { useIdempotentSubmission } from "@/hooks/use-idempotent-submission";
-import { postJsonWithOfflineQueue } from "@/lib/offline-submission-queue";
+import {
+  OFFLINE_SUBMISSION_EVENT,
+  postJsonWithOfflineQueue,
+  type OfflineSubmissionEventDetail,
+} from "@/lib/offline-submission-queue";
 import { maskCpf, maskPhone, withMask } from "@/lib/masks";
 import {
   formatClosingReceiptId,
@@ -34,6 +38,8 @@ const schema = z
     code: z.string().min(2, "Informe o codigo."),
     name: z.string().min(2, "Informe o nome."),
     machineNumber: z.string().min(1, "Informe o numero da maquina."),
+    payBlue: z.string().max(100).optional(),
+    macAddress: z.string().max(100).optional(),
     noteNumber: z.string().optional(),
     noteiroFixed: z.string().optional(),
     coinPhotoRule: z.boolean().default(true),
@@ -95,7 +101,9 @@ type FormValues = z.output<typeof schema>;
 
 type ReceiptState = {
   receiptId?: string;
+  requestKey?: string;
   closedAt?: string;
+  syncPending: boolean;
   clientName: string;
   phone: string;
   code: string;
@@ -120,7 +128,54 @@ function getFile(value: unknown) {
   return file instanceof File ? file : undefined;
 }
 
-type LoadedMachine = { clientName: string; phone: string; code: string; name: string; machineNumber: string; coinPhotoRule: boolean; giftPhotoRule: boolean };
+function buildReceiptState({
+  values,
+  coinPhoto,
+  giftPhoto,
+  receiptId,
+  requestKey,
+  closedAt,
+  syncPending,
+}: {
+  values: FormValues;
+  coinPhoto?: File;
+  giftPhoto?: File;
+  receiptId?: string;
+  requestKey?: string;
+  closedAt: string;
+  syncPending: boolean;
+}): ReceiptState {
+  const grossAmount = Number(values.grossAmount);
+  const clientAmount = grossAmount * (Number(values.commissionPercentage) / 100);
+  const companyAmount = grossAmount - clientAmount;
+  const netAmount =
+    companyAmount - Number(values.discountAmount) - Number(values.ownerExpenseAmount);
+
+  return {
+    receiptId,
+    requestKey,
+    closedAt,
+    syncPending,
+    clientName: values.clientName,
+    phone: values.phone,
+    code: values.code,
+    name: values.name,
+    machineNumber: values.machineNumber,
+    collectionDate: values.collectionDate,
+    grossAmount,
+    clientAmount,
+    companyAmount,
+    netAmount,
+    plushCountOut: Number(values.plushCountOut),
+    paymentMethod: values.paymentMethod,
+    compensationStatus: values.compensationStatus,
+    coinPhotoName: coinPhoto?.name,
+    giftPhotoName: giftPhoto?.name,
+    notes: values.notes,
+  };
+}
+
+type LoadedMachine = { clientName: string; phone: string; code: string; name: string; machineNumber: string; payBlue: string; macAddress: string; coinPhotoRule: boolean; giftPhotoRule: boolean; active: boolean };
 
 export function PlushForm({ hideFinancials = false, initialClientName = "", initialPhone = "", initialClientId }: { hideFinancials?: boolean; initialClientName?: string; initialPhone?: string; initialClientId?: string } = {}) {
   const [receipt, setReceipt] = useState<ReceiptState | null>(null);
@@ -148,6 +203,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       giftPhotoRule: true,
       active: true,
       paymentMethod: "PIX",
+      payBlue: "",
+      macAddress: "",
       compensationStatus: "NOT_WORTH_IT",
       commissionPercentage: 25,
       discountAmount: 0,
@@ -158,17 +215,46 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
   const { clearDraft } = useFormDraft(`plush:${initialClientId ?? "new"}`, form);
 
   useEffect(() => {
+    if (!receipt?.syncPending || !receipt.requestKey) return;
+    const requestKey = receipt.requestKey;
+    const handleQueueChange = (event: Event) => {
+      const detail = (event as CustomEvent<OfflineSubmissionEventDetail | undefined>).detail;
+      if (
+        detail?.type !== "synced" ||
+        detail.requestKey !== requestKey ||
+        detail.endpoint !== "/api/modules/maquinas-de-pelucia/records"
+      ) return;
+      const response = detail.data as SavedModuleRecordResponse;
+      if (!response.record) return;
+      setReceipt((current) => current?.requestKey === requestKey
+        ? {
+            ...current,
+            receiptId: response.record?.id,
+            closedAt: response.record?.createdAt,
+            syncPending: false,
+          }
+        : current);
+      clearDraft();
+      setSaveStatus("saved");
+    };
+    window.addEventListener(OFFLINE_SUBMISSION_EVENT, handleQueueChange);
+    return () => window.removeEventListener(OFFLINE_SUBMISSION_EVENT, handleQueueChange);
+  }, [clearDraft, receipt?.requestKey, receipt?.syncPending]);
+
+  useEffect(() => {
     if (!initialClientId) return;
     getClientPrefillDataAction("maquinas-de-pelucia", initialClientId)
       .then((data) => {
         if (!data || data.kind !== "plush-machine") return;
-        setLoadedMachine({ clientName: data.clientName, phone: data.phone, code: data.code, name: data.name, machineNumber: data.machineNumber, coinPhotoRule: data.coinPhotoRule, giftPhotoRule: data.giftPhotoRule });
+        setLoadedMachine({ clientName: data.clientName, phone: data.phone, code: data.code, name: data.name, machineNumber: data.machineNumber, payBlue: data.payBlue, macAddress: data.macAddress, coinPhotoRule: data.coinPhotoRule, giftPhotoRule: data.giftPhotoRule, active: data.active });
         form.setValue("clientName", data.clientName);
         form.setValue("phone", data.phone);
         form.setValue("cpf", data.cpf);
         form.setValue("code", data.code);
         form.setValue("name", data.name);
         form.setValue("machineNumber", data.machineNumber);
+        form.setValue("payBlue", data.payBlue);
+        form.setValue("macAddress", data.macAddress);
         form.setValue("noteNumber", data.noteNumber);
         form.setValue("noteiroFixed", data.noteiroFixed);
         form.setValue("coinPhotoRule", data.coinPhotoRule);
@@ -219,7 +305,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
     const coinPhoto = getFile(values.coinPhoto);
     const giftPhoto = getFile(values.giftPhoto);
 
-    let savedRecord: SavedModuleRecordResponse["record"];
+    const localClosedAt = new Date().toISOString();
+    const requestKey = submission.key();
 
     const payload = {
           clientName: values.clientName,
@@ -228,6 +315,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
           code: values.code,
           name: values.name,
           machineNumber: values.machineNumber,
+          payBlue: values.payBlue,
+          macAddress: values.macAddress,
           noteNumber: values.noteNumber,
           noteiroFixed: values.noteiroFixed,
           collectionDate: values.collectionDate,
@@ -248,7 +337,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       const result = await postJsonWithOfflineQueue<SavedModuleRecordResponse>({
         endpoint: "/api/modules/maquinas-de-pelucia/records",
         payload,
-        requestKey: submission.key(),
+        requestKey,
         label: `Fechamento GRUA de ${values.clientName}`,
         files: [
           ...(coinPhoto ? [{ file: coinPhoto, category: "PHOTO", payloadPath: "coinPhotoFileId" }] : []),
@@ -257,12 +346,35 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       });
       submission.complete();
       if (result.queued) {
+        setReceipt(
+          buildReceiptState({
+            values,
+            coinPhoto,
+            giftPhoto,
+            requestKey,
+            closedAt: localClosedAt,
+            syncPending: true,
+          }),
+        );
         setSaveStatus("queued");
         return;
       }
-      savedRecord = result.data.record;
+      const savedRecord = result.data.record;
+      if (!savedRecord) {
+        throw new Error("O servidor não confirmou o fechamento da GRUA.");
+      }
       clearDraft();
       setSaveStatus("saved");
+      setReceipt(
+        buildReceiptState({
+          values,
+          coinPhoto,
+          giftPhoto,
+          receiptId: savedRecord.id,
+          closedAt: savedRecord.createdAt,
+          syncPending: false,
+        }),
+      );
     } catch {
       setSaveError("Registro mantido na tela. O salvamento no servidor falhou.");
       setSaveStatus("error");
@@ -271,27 +383,6 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       setLoading(false);
       submittingRef.current = false;
     }
-
-    setReceipt({
-      receiptId: savedRecord?.id,
-      closedAt: savedRecord?.createdAt,
-      clientName: values.clientName,
-      phone: values.phone,
-      code: values.code,
-      name: values.name,
-      machineNumber: values.machineNumber,
-      collectionDate: values.collectionDate,
-      grossAmount,
-      clientAmount,
-      companyAmount,
-      netAmount,
-      plushCountOut: Number(values.plushCountOut),
-      paymentMethod: values.paymentMethod,
-      compensationStatus: values.compensationStatus,
-      coinPhotoName: coinPhoto?.name,
-      giftPhotoName: giftPhoto?.name,
-      notes: values.notes,
-    });
 
   });
 
@@ -318,10 +409,30 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
         {machineLoading ? (
           <p className="text-sm text-slate-400">Carregando dados da máquina...</p>
         ) : loadedMachine ? (
-          <div className="rounded-[18px] border border-[#8aa17c]/30 bg-[#243528]/60 p-4 text-sm text-[#dbe6d4] space-y-0.5">
-            <p className="font-semibold text-white">{loadedMachine.clientName}</p>
-            <p className="text-[#9a958b]">{loadedMachine.phone}</p>
-            <p className="mt-1 text-xs text-[#9a958b]">{loadedMachine.code} · {loadedMachine.name} · Máq. {loadedMachine.machineNumber}</p>
+          <div className="rounded-[18px] border border-[#8aa17c]/30 bg-[#243528]/60 p-4 text-sm text-[#dbe6d4]">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0 space-y-0.5">
+                <p className="truncate font-semibold text-white">{loadedMachine.clientName}</p>
+                <p className="text-[#9a958b]">{loadedMachine.phone}</p>
+                <p className="mt-1 break-words text-xs text-[#9a958b]">{loadedMachine.code} · {loadedMachine.name} · Máq. {loadedMachine.machineNumber}</p>
+                {loadedMachine.payBlue ? <p className="break-words text-xs text-[#9a958b]">Pay Blue: {loadedMachine.payBlue}</p> : null}
+                {loadedMachine.macAddress ? <p className="break-words text-xs text-[#9a958b]">Código MAC: {loadedMachine.macAddress}</p> : null}
+              </div>
+              <span
+                className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                  loadedMachine.active
+                    ? "border-[#4ade80]/25 bg-[#4ade80]/10 text-[#86efac]"
+                    : "border-[#f87171]/25 bg-[#f87171]/10 text-[#fca5a5]"
+                }`}
+              >
+                {loadedMachine.active ? "Ativa" : "Inativa"}
+              </span>
+            </div>
+            {!loadedMachine.active ? (
+              <p role="alert" className="mt-3 rounded-xl border border-[#f87171]/25 bg-black/15 px-3 py-2 text-xs leading-5 text-[#fecaca]">
+                Esta máquina está inativa e não pode receber um novo fechamento.
+              </p>
+            ) : null}
           </div>
         ) : (
           <>
@@ -403,6 +514,27 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
                   Noteiro fixo
                 </label>
                 <input id="noteiroFixed" className={fieldClass} {...form.register("noteiroFixed")} />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="payBlue">
+                  Pay Blue
+                </label>
+                <input id="payBlue" maxLength={100} autoComplete="off" className={fieldClass} {...form.register("payBlue")} />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="macAddress">
+                  Código MAC
+                </label>
+                <input
+                  id="macAddress"
+                  autoComplete="off"
+                  autoCapitalize="characters"
+                  spellCheck={false}
+                  maxLength={100}
+                  className={fieldClass}
+                  placeholder="Ex.: AA:BB:CC:DD:EE:FF"
+                  {...form.register("macAddress")}
+                />
               </div>
             </div>
           </>
@@ -615,11 +747,11 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || loadedMachine?.active === false}
           className="inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-[#d1a04f] px-4 py-3.5 text-sm font-semibold text-[#0d0a05] shadow-[0_6px_20px_rgba(209,160,79,0.32)] transition hover:bg-[#daa855] disabled:opacity-70"
         >
           {loading ? <LoaderCircle className="size-4 animate-spin" /> : null}
-          Salvar Pelúcia
+          {loadedMachine?.active === false ? "Máquina inativa" : "Salvar Pelúcia"}
           <ArrowRight className="size-4" />
         </button>
       </form>
@@ -627,11 +759,33 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       <SaveStatusBanner status={saveStatus} />
 
       {receipt ? (
-        <article className="rounded-[28px] border border-[#8aa17c]/25 bg-[#243528]/72 p-5">
+        <article
+          className={`rounded-[28px] border p-5 ${
+            receipt.syncPending
+              ? "border-[#d1a04f]/30 bg-[#3a2b18]/60"
+              : "border-[#8aa17c]/25 bg-[#243528]/72"
+          }`}
+        >
           <div className="flex items-center gap-2 text-[#dbe6d4]">
             <ReceiptText className="size-4" />
-            <p className="font-medium">{saveError ? "NAO salvo no servidor — confira a conexão" : "Registro da grua salvo"}</p>
+            <p className="font-medium">
+              {receipt.syncPending
+                ? "Fechamento da GRUA protegido neste aparelho"
+                : saveError
+                  ? "NAO salvo no servidor — confira a conexão"
+                  : "Registro da grua salvo"}
+            </p>
           </div>
+          {receipt.syncPending ? (
+            <div
+              role="status"
+              className="mt-4 rounded-2xl border border-[#d1a04f]/25 bg-black/15 p-3.5 text-sm leading-6 text-[#f3dfae]"
+            >
+              Aguardando sincronização automática. Os dados e as fotos já estão protegidos
+              neste aparelho. A via definitiva com ID ficará disponível no sistema quando a
+              internet voltar.
+            </div>
+          ) : null}
           <div className="mt-4 grid gap-3 text-sm text-[#dbe6d4]/85 md:grid-cols-2">
             <p>Cliente: {receipt.clientName}</p>
             <p>Maquina: {receipt.name}</p>
@@ -672,7 +826,13 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
                     `*Líquido: ${formatCurrency(receipt.netAmount)}*`,
                   ]
                 : []),
-              `Situação: ${saveError ? "Não salvo — confira a conexão" : "Fechamento concluído"}`,
+              `Situação: ${
+                receipt.syncPending
+                  ? "Registro offline — aguardando sincronização"
+                  : saveError
+                    ? "Não salvo — confira a conexão"
+                    : "Fechamento concluído"
+              }`,
             ].join("\n");
 
             return (
@@ -687,6 +847,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
                   phoneLabel="Número do cliente"
                   documentLabel="Via do cliente"
                   pdfButtonLabel="Gerar via do cliente em PDF"
+                  directShareDisabled={receipt.syncPending}
+                  directShareDisabledMessage="A via está protegida no aparelho. Compartilhe a imagem agora ou aguarde a sincronização para abrir o WhatsApp direto."
                 />
                 <WhatsAppReceiptButton
                   moduleSlug="maquinas-de-pelucia"
@@ -698,6 +860,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
                   phoneLabel="Número do dono"
                   documentLabel="Via do dono"
                   pdfButtonLabel="Gerar via do dono em PDF"
+                  directShareDisabled={receipt.syncPending}
+                  directShareDisabledMessage="A via está protegida no aparelho. Compartilhe a imagem agora ou aguarde a sincronização para abrir o WhatsApp direto."
                 />
                 <WhatsAppReceiptButton
                   moduleSlug="maquinas-de-pelucia"
@@ -709,6 +873,8 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
                   phoneLabel="Número da equipe/central"
                   documentLabel="Via da equipe"
                   pdfButtonLabel="Gerar via da equipe em PDF"
+                  directShareDisabled={receipt.syncPending}
+                  directShareDisabledMessage="A via está protegida no aparelho. Compartilhe a imagem agora ou aguarde a sincronização para abrir o WhatsApp direto."
                 />
               </div>
             );

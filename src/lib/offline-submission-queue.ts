@@ -3,6 +3,13 @@
 export const OFFLINE_SUBMISSION_STORAGE_KEY = "infinity-offline-submissions-v1";
 export const OFFLINE_SUBMISSION_EVENT = "infinity:offline-submissions-changed";
 
+export type OfflineSubmissionEventDetail = {
+  type: "synced";
+  requestKey: string;
+  endpoint: string;
+  data: unknown;
+};
+
 const ACTIVE_SCOPE_KEY = "infinity-offline-active-scope-v1";
 const DATABASE_NAME = "infinity-offline-operations-v2";
 const DATABASE_VERSION = 1;
@@ -112,9 +119,9 @@ function openLegacyFileDatabase() {
   });
 }
 
-function notifyQueueChanged() {
+function notifyQueueChanged(detail?: OfflineSubmissionEventDetail) {
   if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(OFFLINE_SUBMISSION_EVENT));
+  window.dispatchEvent(new CustomEvent(OFFLINE_SUBMISSION_EVENT, { detail }));
   try {
     localStorage.setItem(`${OFFLINE_SUBMISSION_EVENT}:pulse`, String(Date.now()));
   } catch {}
@@ -237,7 +244,7 @@ async function readFile(key: string) {
   }
 }
 
-async function removeSubmission(item: OfflineSubmission) {
+async function removeSubmission(item: OfflineSubmission, detail?: OfflineSubmissionEventDetail) {
   const database = await openDatabase();
   try {
     const transaction = database.transaction([SUBMISSION_STORE, FILE_STORE], "readwrite");
@@ -249,7 +256,7 @@ async function removeSubmission(item: OfflineSubmission) {
   } finally {
     database.close();
   }
-  notifyQueueChanged();
+  notifyQueueChanged(detail);
 }
 
 export async function readOfflineSubmissions(scope = getOfflineSubmissionScope()) {
@@ -548,8 +555,13 @@ export async function syncOfflineSubmissions(options: {
 
     let item = original;
     try {
-      await sendSubmission(item);
-      await removeSubmission(item);
+      const result = await sendSubmission(item);
+      await removeSubmission(item, {
+        type: "synced",
+        requestKey: item.requestKey,
+        endpoint: item.endpoint,
+        data: result.data,
+      });
       synced += 1;
     } catch (error) {
       if (error instanceof HttpResponseError) {

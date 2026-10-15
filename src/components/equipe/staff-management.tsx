@@ -1,7 +1,7 @@
 "use client";
 
 import { Activity, Check, KeyRound, LoaderCircle, Pencil, Plus, Power, Shield, User, X } from "lucide-react";
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 
 import { cn } from "@/lib/cn";
 import { fieldClass, labelClass, selectClass } from "@/components/modules/styles";
@@ -344,16 +344,6 @@ function StaffCard({
   const [modo, setModo] = useState<"ver" | "editar" | "senha" | "status">("ver");
   const days = daysSince(stats?.lastVisitAt);
 
-  if (modo === "editar") {
-    return (
-      <EditStaffForm
-        member={member}
-        onSaved={(patch) => { onUpdate(patch); setModo("ver"); }}
-        onCancel={() => setModo("ver")}
-      />
-    );
-  }
-
   if (modo === "senha") {
     return (
       <ResetPasswordForm
@@ -375,7 +365,8 @@ function StaffCard({
   }
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f0e]/55">
+    <>
+      <article className="overflow-hidden rounded-2xl border border-white/10 bg-[#0b0f0e]/55">
       <div className={cn("h-[3px] w-full", member.status === "ativo" ? "bg-[#d1a04f]/40" : "bg-white/10")} />
       <div className="p-4">
         <div className="flex items-start justify-between gap-3">
@@ -461,7 +452,15 @@ function StaffCard({
           </button>
         </div>
       </div>
-    </article>
+      </article>
+      {modo === "editar" ? (
+        <EditStaffForm
+          member={member}
+          onSaved={(patch) => { onUpdate(patch); setModo("ver"); }}
+          onCancel={() => setModo("ver")}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -481,6 +480,20 @@ function EditStaffForm({
   const [modules, setModules] = useState<Set<ModuleName>>(new Set(member.modules ?? []));
   const [saving, setSaving] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  const titleId = `edit-staff-${member.id}`;
+
+  useEffect(() => {
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !saving) onCancel();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onCancel, saving]);
 
   function toggleModule(m: ModuleName) {
     setModules((prev) => {
@@ -514,99 +527,173 @@ function EditStaffForm({
   }
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-[#d1a04f]/25 bg-[#0b0f0e]/70 p-4">
-      <p className="mb-3 text-sm font-semibold text-white">Editar {member.name}</p>
+    <div className="fixed inset-0 z-[100] flex items-end justify-center sm:items-center sm:p-4">
+      <button
+        type="button"
+        aria-label="Fechar edição"
+        onClick={onCancel}
+        disabled={saving}
+        className="absolute inset-0 bg-black/75 backdrop-blur-[2px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#d1a04f]"
+      />
 
-      <div className="space-y-3">
-        <label className="block space-y-1.5">
-          <span className={labelClass}>Nome</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} className={fieldClass} />
-        </label>
-        <label className="block space-y-1.5">
-          <span className={labelClass}>Usuário de acesso</span>
-          <input
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            minLength={USERNAME_MIN}
-            maxLength={USERNAME_MAX}
-            autoComplete="username"
-            autoCapitalize="none"
-            autoCorrect="off"
-            spellCheck={false}
-            className={fieldClass}
-          />
-        </label>
-        <label className="block space-y-1.5">
-          <span className={labelClass}>Telefone</span>
-          <input value={phone} onChange={(e) => setPhone(e.target.value)} className={fieldClass} placeholder="(11) 99999-9999" />
-        </label>
-        <label className="block space-y-1.5">
-          <span className={labelClass}>Perfil</span>
-          <select value={role} onChange={(e) => setRole(e.target.value as "STAFF" | "ADMIN")} className={selectClass}>
-            <option value="STAFF">Funcionário de campo — sem totais</option>
-            <option value="ADMIN">Gestor — financeiro somente do dia</option>
-          </select>
-          <span className="block text-[11px] leading-4 text-[#9a958b]">
-            Para acessar o financeiro diário com cálculos, use Gestor e marque apenas os módulos desejados.
-          </span>
-        </label>
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        className="relative z-10 flex max-h-[94dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-[28px] border border-[#d1a04f]/25 bg-[#0b0f0e] shadow-[0_28px_100px_rgba(0,0,0,0.65)] sm:max-h-[90dvh] sm:rounded-[28px]"
+      >
+        <header className="flex shrink-0 items-start justify-between gap-4 border-b border-white/10 px-4 py-4 sm:px-6">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#d1a04f]">
+              Acesso do funcionário
+            </p>
+            <h2 id={titleId} className="mt-1 truncate text-lg font-semibold text-white sm:text-xl">
+              Editar {member.name}
+            </h2>
+            <p className="mt-1 text-xs text-[#9a958b]">
+              Dados pessoais, perfil e módulos em um só lugar.
+            </p>
+          </div>
+          <button
+            type="button"
+            aria-label="Fechar edição"
+            onClick={onCancel}
+            disabled={saving}
+            className="flex size-11 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-white/[0.04] text-[#9a958b] transition-colors active:bg-white/[0.09] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d1a04f] disabled:opacity-40"
+          >
+            <X aria-hidden="true" className="size-5" />
+          </button>
+        </header>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <span className={labelClass}>Módulos liberados</span>
-            <div className="flex gap-3 text-xs font-medium text-[#d1a04f]">
-              <button type="button" onClick={() => setModules(new Set(assignableModules.map((m) => m.module)))} className="hover:underline">
-                Todos
-              </button>
-              <button type="button" onClick={() => setModules(new Set())} className="hover:underline">
-                Limpar
-              </button>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-sm font-semibold text-white">Dados de acesso</h3>
+                <p className="mt-1 text-xs text-[#9a958b]">Identificação usada no login e no histórico.</p>
+              </div>
+
+              <label className="block space-y-1.5">
+                <span className={labelClass}>Nome</span>
+                <input name="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className={fieldClass} />
+              </label>
+              <label className="block space-y-1.5">
+                <span className={labelClass}>Usuário de acesso</span>
+                <input
+                  name="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  minLength={USERNAME_MIN}
+                  maxLength={USERNAME_MAX}
+                  autoComplete="username"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className={fieldClass}
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className={labelClass}>Telefone</span>
+                <input
+                  name="phone"
+                  type="tel"
+                  inputMode="tel"
+                  autoComplete="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  className={fieldClass}
+                  placeholder="Ex.: (11) 99999-9999"
+                />
+              </label>
+              <label className="block space-y-1.5">
+                <span className={labelClass}>Perfil</span>
+                <select name="role" value={role} onChange={(e) => setRole(e.target.value as "STAFF" | "ADMIN")} className={selectClass}>
+                  <option value="STAFF">Funcionário de campo — sem totais</option>
+                  <option value="ADMIN">Gestor — financeiro somente do dia</option>
+                </select>
+                <span className="block text-xs leading-5 text-[#9a958b]">
+                  O gestor vê apenas o financeiro diário dos módulos marcados. O funcionário não vê totais.
+                </span>
+              </label>
+            </div>
+
+            <div className="space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-white">Módulos liberados</h3>
+                  <p className="mt-1 text-xs text-[#9a958b]">{modules.size} selecionado{modules.size === 1 ? "" : "s"}</p>
+                </div>
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setModules(new Set(assignableModules.map((item) => item.module)))}
+                    className="min-h-11 rounded-xl border border-[#d1a04f]/25 px-3 text-xs font-semibold text-[#f3dfae] active:bg-[#d1a04f]/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d1a04f]"
+                  >
+                    Todos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setModules(new Set())}
+                    className="min-h-11 rounded-xl border border-white/10 px-3 text-xs font-semibold text-[#9a958b] active:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d1a04f]"
+                  >
+                    Limpar
+                  </button>
+                </div>
+              </div>
+              <div className="grid gap-2 sm:grid-cols-2 md:grid-cols-1">
+                {assignableModules.map((item) => {
+                  const checked = modules.has(item.module);
+                  return (
+                    <label
+                      key={item.module}
+                      className={cn(
+                        "flex min-h-12 items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition-colors",
+                        checked
+                          ? "border-[#d1a04f]/35 bg-[#d1a04f]/10 text-[#f3dfae]"
+                          : "border-white/10 bg-white/[0.025] text-slate-300 active:bg-white/[0.06]",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggleModule(item.module)}
+                        className="size-5 shrink-0 accent-[#d1a04f]"
+                      />
+                      <span className="min-w-0 break-words">{item.title}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
           </div>
-          <div className="max-h-56 space-y-0.5 overflow-y-auto rounded-2xl border border-white/10 bg-[#0b0f0e]/45 p-1.5">
-            {assignableModules.map((item) => (
-              <label
-                key={item.module}
-                className="flex min-h-11 items-center gap-2.5 rounded-xl px-2.5 py-2.5 text-sm text-slate-200 active:bg-white/[0.05]"
-              >
-                <input
-                  type="checkbox"
-                  checked={modules.has(item.module)}
-                  onChange={() => toggleModule(item.module)}
-                  className="size-4 shrink-0 accent-[#d1a04f]"
-                />
-                <span className="truncate">{item.title}</span>
-              </label>
-            ))}
-          </div>
+
+          {erro ? (
+            <p aria-live="polite" className="mt-4 rounded-xl border border-[#f87171]/30 bg-[#f87171]/10 px-3 py-2.5 text-sm font-medium text-[#fca5a5]">
+              {erro}
+            </p>
+          ) : null}
         </div>
 
-        {erro ? (
-          <p className="rounded-lg border border-[#f87171]/30 bg-[#f87171]/10 px-2.5 py-1.5 text-[11px] font-medium text-[#fca5a5]">
-            {erro}
-          </p>
-        ) : null}
-
-        <div className="flex gap-2">
+        <footer className="grid shrink-0 grid-cols-[1fr_auto] gap-2 border-t border-white/10 bg-[#0b0f0e] p-4 sm:px-6">
           <button
             type="button"
             onClick={salvar}
             disabled={saving}
-            className="flex-1 rounded-xl bg-[#d1a04f] py-2.5 text-xs font-semibold text-[#0d0a05] transition active:scale-[0.98] disabled:opacity-60"
+            className="flex min-h-12 items-center justify-center rounded-xl bg-[#d1a04f] px-5 text-sm font-semibold text-[#0d0a05] transition-transform active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#f3dfae] disabled:opacity-60"
           >
-            {saving ? <LoaderCircle className="mx-auto size-3.5 animate-spin" /> : "Salvar"}
+            {saving ? <LoaderCircle aria-hidden="true" className="size-4 animate-spin" /> : "Salvar alterações"}
           </button>
           <button
             type="button"
             onClick={onCancel}
             disabled={saving}
-            className="rounded-xl border border-white/10 px-4 py-2.5 text-xs text-[#9a958b] transition active:text-white"
+            className="min-h-12 rounded-xl border border-white/10 px-4 text-sm text-[#c9c2b4] transition-colors active:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d1a04f] disabled:opacity-40"
           >
             Cancelar
           </button>
-        </div>
-      </div>
-    </article>
+        </footer>
+      </section>
+    </div>
   );
 }
 
