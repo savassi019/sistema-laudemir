@@ -128,6 +128,14 @@ export async function listModuleReceipts(
           ...(showFinancials
             ? [
                 `Bruto: ${formatCurrency(Number(record.grossAmount))}`,
+                `Dinheiro retirado: ${formatCurrency(Number(record.cashInMachineAmount ?? 0))}`,
+                `Repasse ao cliente: ${formatCurrency(Number(record.clientAmount))}`,
+                ...(Number(record.clientPixAmount ?? 0) > 0
+                  ? [`Pago em PIX: ${formatCurrency(Number(record.clientPixAmount))}`]
+                  : []),
+                ...(Number(record.clientCashAmount ?? 0) > 0
+                  ? [`Pago em dinheiro: ${formatCurrency(Number(record.clientCashAmount))}`]
+                  : []),
                 `*Líquido: ${formatCurrency(Number(record.companyAmount))}*`,
               ]
             : []),

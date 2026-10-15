@@ -12,10 +12,14 @@ const onePixelPng = Buffer.from(
 
 const normalizeSpaces = (value: string) => value.replace(/\s/g, " ");
 
-async function uploadPhoto(page: Parameters<typeof loginByApi>[0], name: string) {
+async function uploadPhoto(
+  page: Parameters<typeof loginByApi>[0],
+  name: string,
+  category: "PHOTO" | "PROOF" = "PHOTO",
+) {
   const response = await page.request.post("/api/upload", {
     multipart: {
-      category: "PHOTO",
+      category,
       file: {
         name,
         mimeType: "image/png",
@@ -43,9 +47,12 @@ test.describe("fluxos financeiros criticos", () => {
       machineNumber: `E2E-${unique}`,
       collectionDate: "2026-10-10",
       grossAmount: 100,
+      cashInMachineAmount: 80,
       commissionPercentage: 25,
       plushCountOut: 2,
-      paymentMethod: "PIX",
+      paymentMethod: "PIX_DINHEIRO",
+      clientPixAmount: 20,
+      clientCashAmount: 5,
       discountAmount: 0,
       ownerExpenseAmount: 0,
       compensationStatus: "WORTH_IT",
@@ -62,8 +69,25 @@ test.describe("fluxos financeiros criticos", () => {
 
     const coinPhotoFileId = await uploadPhoto(page, "moedas-e2e.png");
     const giftPhotoFileId = await uploadPhoto(page, "brindes-e2e.png");
-    const validClosing = await page.request.post("/api/modules/maquinas-de-pelucia/records", {
+    const repeatedPhoto = await page.request.post("/api/modules/maquinas-de-pelucia/records", {
+      data: {
+        ...payload,
+        coinPhotoFileId,
+        giftPhotoFileId: coinPhotoFileId,
+      },
+    });
+    expect(repeatedPhoto.status()).toBe(400);
+    expect((await repeatedPhoto.json()).error).toMatch(/outra foto/i);
+
+    const missingPixProof = await page.request.post("/api/modules/maquinas-de-pelucia/records", {
       data: { ...payload, coinPhotoFileId, giftPhotoFileId },
+    });
+    expect(missingPixProof.status()).toBe(400);
+    expect((await missingPixProof.json()).error).toMatch(/comprovante.*PIX/i);
+
+    const pixProofFileId = await uploadPhoto(page, "comprovante-pix-e2e.png", "PROOF");
+    const validClosing = await page.request.post("/api/modules/maquinas-de-pelucia/records", {
+      data: { ...payload, coinPhotoFileId, giftPhotoFileId, pixProofFileId },
     });
     expect(validClosing.status(), await validClosing.text()).toBe(201);
   });

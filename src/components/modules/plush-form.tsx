@@ -17,6 +17,11 @@ import {
 } from "@/lib/offline-submission-queue";
 import { maskCpf, maskPhone, withMask } from "@/lib/masks";
 import {
+  calculatePlushFinancials,
+  validatePlushClientPayment,
+  type PlushClientPaymentMethod,
+} from "@/lib/module-calculations";
+import {
   formatClosingReceiptId,
   type SavedModuleRecordResponse,
 } from "@/lib/receipt";
@@ -47,9 +52,12 @@ const schema = z
     active: z.boolean().default(true),
     collectionDate: z.string().min(1, "Informe a data da coleta."),
     grossAmount: z.coerce.number().min(0),
+    cashInMachineAmount: z.coerce.number().min(0),
     commissionPercentage: z.coerce.number().min(0).max(100),
     plushCountOut: z.coerce.number().min(0),
-    paymentMethod: z.enum(["PIX", "DINHEIRO", "CARTAO", "ABERTO"]),
+    paymentMethod: z.enum(["PIX", "DINHEIRO", "PIX_DINHEIRO", "CARTAO", "ABERTO"]),
+    clientPixAmount: z.coerce.number().min(0),
+    clientCashAmount: z.coerce.number().min(0),
     discountAmount: z.coerce.number().min(0),
     discountReason: z.string().optional(),
     ownerExpenseAmount: z.coerce.number().min(0),
@@ -58,10 +66,12 @@ const schema = z
     notes: z.string().optional(),
     coinPhoto: z.any().optional(),
     giftPhoto: z.any().optional(),
+    pixProof: z.any().optional(),
   })
   .superRefine((data, ctx) => {
     const coinPhoto = data.coinPhoto?.[0] as File | undefined;
     const giftPhoto = data.giftPhoto?.[0] as File | undefined;
+    const pixProof = data.pixProof?.[0] as File | undefined;
 
     if (data.coinPhotoRule && !coinPhoto) {
       ctx.addIssue({
@@ -84,6 +94,37 @@ const schema = z
         code: "custom",
         path: ["discountReason"],
         message: "Explique o motivo do desconto.",
+      });
+    }
+
+    const { clientAmount } = calculatePlushFinancials({
+      grossAmount: data.grossAmount,
+      commissionPercentage: data.commissionPercentage,
+      discountAmount: data.discountAmount,
+      ownerExpenseAmount: data.ownerExpenseAmount,
+    });
+    const pixAmount = data.paymentMethod === "PIX"
+      ? clientAmount
+      : data.paymentMethod === "PIX_DINHEIRO"
+        ? data.clientPixAmount
+        : 0;
+    const cashAmount = data.paymentMethod === "DINHEIRO"
+      ? clientAmount
+      : data.paymentMethod === "PIX_DINHEIRO"
+        ? data.clientCashAmount
+        : 0;
+    const paymentValidation = validatePlushClientPayment({
+      paymentMethod: data.paymentMethod,
+      clientAmount,
+      pixAmount,
+      cashAmount,
+      hasPixProof: Boolean(pixProof),
+    });
+    if (!paymentValidation.valid) {
+      ctx.addIssue({
+        code: "custom",
+        path: [paymentValidation.field === "pixProof" ? "pixProof" : "clientCashAmount"],
+        message: paymentValidation.message,
       });
     }
 
@@ -111,14 +152,18 @@ type ReceiptState = {
   machineNumber: string;
   collectionDate: string;
   grossAmount: number;
+  cashInMachineAmount: number;
   clientAmount: number;
   companyAmount: number;
   netAmount: number;
   plushCountOut: number;
   paymentMethod: string;
+  clientPixAmount: number;
+  clientCashAmount: number;
   compensationStatus: string;
   coinPhotoName?: string;
   giftPhotoName?: string;
+  pixProofName?: string;
   notes?: string;
 };
 
@@ -128,10 +173,25 @@ function getFile(value: unknown) {
   return file instanceof File ? file : undefined;
 }
 
+function resolveClientPaymentAmounts(
+  paymentMethod: PlushClientPaymentMethod,
+  clientAmount: number,
+  pixAmount: number,
+  cashAmount: number,
+) {
+  if (paymentMethod === "PIX") return { clientPixAmount: clientAmount, clientCashAmount: 0 };
+  if (paymentMethod === "DINHEIRO") return { clientPixAmount: 0, clientCashAmount: clientAmount };
+  if (paymentMethod === "PIX_DINHEIRO") {
+    return { clientPixAmount: pixAmount, clientCashAmount: cashAmount };
+  }
+  return { clientPixAmount: 0, clientCashAmount: 0 };
+}
+
 function buildReceiptState({
   values,
   coinPhoto,
   giftPhoto,
+  pixProof,
   receiptId,
   requestKey,
   closedAt,
@@ -140,16 +200,25 @@ function buildReceiptState({
   values: FormValues;
   coinPhoto?: File;
   giftPhoto?: File;
+  pixProof?: File;
   receiptId?: string;
   requestKey?: string;
   closedAt: string;
   syncPending: boolean;
 }): ReceiptState {
   const grossAmount = Number(values.grossAmount);
-  const clientAmount = grossAmount * (Number(values.commissionPercentage) / 100);
-  const companyAmount = grossAmount - clientAmount;
-  const netAmount =
-    companyAmount - Number(values.discountAmount) - Number(values.ownerExpenseAmount);
+  const { clientAmount, companyAmount, netAmount } = calculatePlushFinancials({
+    grossAmount,
+    commissionPercentage: Number(values.commissionPercentage),
+    discountAmount: Number(values.discountAmount),
+    ownerExpenseAmount: Number(values.ownerExpenseAmount),
+  });
+  const { clientPixAmount, clientCashAmount } = resolveClientPaymentAmounts(
+    values.paymentMethod,
+    clientAmount,
+    Number(values.clientPixAmount),
+    Number(values.clientCashAmount),
+  );
 
   return {
     receiptId,
@@ -163,14 +232,18 @@ function buildReceiptState({
     machineNumber: values.machineNumber,
     collectionDate: values.collectionDate,
     grossAmount,
+    cashInMachineAmount: Number(values.cashInMachineAmount),
     clientAmount,
     companyAmount,
     netAmount,
     plushCountOut: Number(values.plushCountOut),
     paymentMethod: values.paymentMethod,
+    clientPixAmount,
+    clientCashAmount,
     compensationStatus: values.compensationStatus,
     coinPhotoName: coinPhoto?.name,
     giftPhotoName: giftPhoto?.name,
+    pixProofName: pixProof?.name,
     notes: values.notes,
   };
 }
@@ -207,6 +280,9 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
       macAddress: "",
       compensationStatus: "NOT_WORTH_IT",
       commissionPercentage: 25,
+      cashInMachineAmount: 0,
+      clientPixAmount: 0,
+      clientCashAmount: 0,
       discountAmount: 0,
       ownerExpenseAmount: 0,
       plushCountOut: 0,
@@ -272,18 +348,28 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
   const discountAmount = Number(useWatch({ control: form.control, name: "discountAmount" }) ?? 0);
   const ownerExpenseAmount =
     Number(useWatch({ control: form.control, name: "ownerExpenseAmount" }) ?? 0);
+  const paymentMethod = useWatch({ control: form.control, name: "paymentMethod" }) ?? "PIX";
+  const clientPixAmount = Number(
+    useWatch({ control: form.control, name: "clientPixAmount" }) ?? 0,
+  );
+  const clientCashAmount = Number(
+    useWatch({ control: form.control, name: "clientCashAmount" }) ?? 0,
+  );
   const coinPhotoRule = Boolean(
     useWatch({ control: form.control, name: "coinPhotoRule" }) ?? false,
   );
   const giftPhotoRule = Boolean(
     useWatch({ control: form.control, name: "giftPhotoRule" }) ?? false,
   );
-  const clientAmount = useMemo(
-    () => grossAmount * (commissionPercentage / 100),
-    [grossAmount, commissionPercentage],
+  const { clientAmount, netAmount } = useMemo(
+    () => calculatePlushFinancials({
+      grossAmount,
+      commissionPercentage,
+      discountAmount,
+      ownerExpenseAmount,
+    }),
+    [commissionPercentage, discountAmount, grossAmount, ownerExpenseAmount],
   );
-  const companyAmount = grossAmount - clientAmount;
-  const netAmount = companyAmount - discountAmount - ownerExpenseAmount;
 
   useEffect(() => {
     if (compensationManuallySet) return;
@@ -304,6 +390,19 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
 
     const coinPhoto = getFile(values.coinPhoto);
     const giftPhoto = getFile(values.giftPhoto);
+    const pixProof = getFile(values.pixProof);
+    const calculated = calculatePlushFinancials({
+      grossAmount: Number(values.grossAmount),
+      commissionPercentage: Number(values.commissionPercentage),
+      discountAmount: Number(values.discountAmount),
+      ownerExpenseAmount: Number(values.ownerExpenseAmount),
+    });
+    const paymentAmounts = resolveClientPaymentAmounts(
+      values.paymentMethod,
+      calculated.clientAmount,
+      Number(values.clientPixAmount),
+      Number(values.clientCashAmount),
+    );
 
     const localClosedAt = new Date().toISOString();
     const requestKey = submission.key();
@@ -321,9 +420,12 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
           noteiroFixed: values.noteiroFixed,
           collectionDate: values.collectionDate,
           grossAmount: Number(values.grossAmount),
+          cashInMachineAmount: Number(values.cashInMachineAmount),
           commissionPercentage: Number(values.commissionPercentage),
           plushCountOut: Number(values.plushCountOut),
           paymentMethod: values.paymentMethod,
+          clientPixAmount: paymentAmounts.clientPixAmount,
+          clientCashAmount: paymentAmounts.clientCashAmount,
           discountAmount: Number(values.discountAmount),
           discountReason: values.discountReason,
           ownerExpenseAmount: Number(values.ownerExpenseAmount),
@@ -332,6 +434,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
           notes: values.notes,
           coinPhotoFileId: null,
           giftPhotoFileId: null,
+          pixProofFileId: null,
     };
     try {
       const result = await postJsonWithOfflineQueue<SavedModuleRecordResponse>({
@@ -342,6 +445,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
         files: [
           ...(coinPhoto ? [{ file: coinPhoto, category: "PHOTO", payloadPath: "coinPhotoFileId" }] : []),
           ...(giftPhoto ? [{ file: giftPhoto, category: "PHOTO", payloadPath: "giftPhotoFileId" }] : []),
+          ...(pixProof ? [{ file: pixProof, category: "PROOF", payloadPath: "pixProofFileId" }] : []),
         ],
       });
       submission.complete();
@@ -351,6 +455,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
             values,
             coinPhoto,
             giftPhoto,
+            pixProof,
             requestKey,
             closedAt: localClosedAt,
             syncPending: true,
@@ -370,6 +475,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
           values,
           coinPhoto,
           giftPhoto,
+          pixProof,
           receiptId: savedRecord.id,
           closedAt: savedRecord.createdAt,
           syncPending: false,
@@ -557,7 +663,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <label className={labelClass} htmlFor="grossAmount">
-              Total bruto
+              Total apurado da máquina
             </label>
             <input
               id="grossAmount"
@@ -568,6 +674,24 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
               className={fieldClass}
               {...form.register("grossAmount")}
             />
+            <p className={hintClass}>Valor total usado para calcular o repasse.</p>
+          </div>
+          <div className="space-y-2">
+            <label className={labelClass} htmlFor="cashInMachineAmount">
+              Dinheiro retirado da máquina
+            </label>
+            <input
+              id="cashInMachineAmount"
+              type="number"
+              inputMode="decimal"
+              step="0.01"
+              min="0"
+              className={fieldClass}
+              {...form.register("cashInMachineAmount")}
+            />
+            <p className={hintClass}>
+              Conferência do dinheiro físico. Não soma novamente no financeiro.
+            </p>
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="commissionPercentage">
@@ -600,11 +724,12 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
           </div>
           <div className="space-y-2">
             <label className={labelClass} htmlFor="paymentMethod">
-              Forma de pagamento
+              Como o cliente foi pago
             </label>
             <select id="paymentMethod" className={selectClass} {...form.register("paymentMethod")}>
               <option value="PIX">PIX</option>
               <option value="DINHEIRO">Dinheiro</option>
+              <option value="PIX_DINHEIRO">PIX + Dinheiro</option>
               <option value="CARTAO">Cartão</option>
               <option value="ABERTO">Aberto</option>
             </select>
@@ -654,6 +779,107 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
             />
           </div>
         </div>
+
+        <section
+          aria-labelledby="client-payment-title"
+          className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.025] p-4"
+        >
+          <div>
+            <h3 id="client-payment-title" className="text-sm font-semibold text-white">
+              Pagamento do cliente
+            </h3>
+            <p className="mt-1 text-xs leading-5 text-[#9a958b]">
+              Registre como o repasse foi entregue ao cliente.
+            </p>
+          </div>
+
+          {paymentMethod === "PIX_DINHEIRO" ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="clientPixAmount">
+                  Parte paga em PIX (R$)
+                </label>
+                <input
+                  id="clientPixAmount"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  className={fieldClass}
+                  {...form.register("clientPixAmount")}
+                />
+              </div>
+              <div className="space-y-2">
+                <label className={labelClass} htmlFor="clientCashAmount">
+                  Parte paga em dinheiro (R$)
+                </label>
+                <input
+                  id="clientCashAmount"
+                  type="number"
+                  inputMode="decimal"
+                  step="0.01"
+                  min="0"
+                  className={fieldClass}
+                  {...form.register("clientCashAmount")}
+                />
+              </div>
+            </div>
+          ) : (
+            <p className="rounded-xl border border-white/[0.07] bg-black/15 px-3 py-3 text-sm text-[#c9c2b4]">
+              {paymentMethod === "PIX"
+                ? "O repasse inteiro será registrado em PIX."
+                : paymentMethod === "DINHEIRO"
+                  ? "O repasse inteiro será registrado em dinheiro."
+                  : paymentMethod === "ABERTO"
+                    ? "O repasse ficará em aberto."
+                    : "O repasse será registrado no cartão."}
+            </p>
+          )}
+
+          {form.formState.errors.clientCashAmount ? (
+            <p role="alert" className="text-sm text-[#d59a8b]">
+              {form.formState.errors.clientCashAmount.message}
+            </p>
+          ) : null}
+
+          {paymentMethod === "PIX" || paymentMethod === "PIX_DINHEIRO" ? (
+            <div className="space-y-2">
+              <label className={labelClass} htmlFor="pixProof">
+                Comprovante do PIX
+              </label>
+              <input
+                id="pixProof"
+                type="file"
+                accept=".pdf,image/*"
+                className={fieldClass}
+                {...form.register("pixProof")}
+              />
+              <p className={hintClass}>Anexe a foto, imagem ou PDF real do pagamento.</p>
+              {form.formState.errors.pixProof ? (
+                <p role="alert" className="text-sm text-[#d59a8b]">
+                  {form.formState.errors.pixProof.message?.toString()}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+
+          {hideFinancials ? null : (
+            <div className="grid gap-2 border-t border-white/[0.07] pt-3 text-sm sm:grid-cols-2">
+              <p className="text-[#9a958b]">
+                Repasse arredondado:{" "}
+                <strong className="text-white">{formatCurrency(clientAmount)}</strong>
+              </p>
+              {paymentMethod === "PIX_DINHEIRO" ? (
+                <p className="text-[#9a958b]">
+                  Total informado:{" "}
+                  <strong className="text-white">
+                    {formatCurrency(clientPixAmount + clientCashAmount)}
+                  </strong>
+                </p>
+              ) : null}
+            </div>
+          )}
+        </section>
 
         <section className="space-y-3" aria-labelledby="visit-settings-title">
           <div className="px-1">
@@ -792,9 +1018,17 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
             <p>Codigo: {receipt.code}</p>
             <p>Numero: {receipt.machineNumber}</p>
             <p>Data: {formatShortDate(receipt.collectionDate)}</p>
+            <p>Dinheiro retirado: {formatCurrency(receipt.cashInMachineAmount)}</p>
+            {receipt.paymentMethod === "PIX_DINHEIRO" ? (
+              <>
+                <p>Informado em PIX: {formatCurrency(receipt.clientPixAmount)}</p>
+                <p>Informado em dinheiro: {formatCurrency(receipt.clientCashAmount)}</p>
+              </>
+            ) : null}
             {hideFinancials ? null : (
               <>
                 <p>Bruto: {formatCurrency(receipt.grossAmount)}</p>
+                <p>Repasse ao cliente: {formatCurrency(receipt.clientAmount)}</p>
                 <p>Casa: {formatCurrency(receipt.netAmount)}</p>
               </>
             )}
@@ -805,6 +1039,7 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
             <span>{receipt.compensationStatus === "WORTH_IT" ? "Compensa" : "Não compensa"}</span>
             {receipt.coinPhotoName ? <span>Foto moedas: {receipt.coinPhotoName}</span> : null}
             {receipt.giftPhotoName ? <span>Foto brindes: {receipt.giftPhotoName}</span> : null}
+            {receipt.pixProofName ? <span>Comprovante PIX: {receipt.pixProofName}</span> : null}
           </div>
           {receipt.notes ? <p className="mt-3 text-sm text-[#dbe6d4]/75">{receipt.notes}</p> : null}
 
@@ -820,9 +1055,16 @@ export function PlushForm({ hideFinancials = false, initialClientName = "", init
               `Data: ${formatShortDate(receipt.collectionDate)}`,
               `Pelúcias: ${receipt.plushCountOut}`,
               `Pagamento: ${rotuloDeStatus(receipt.paymentMethod, PAYMENT_METHOD_LABEL)}`,
+              ...(receipt.paymentMethod === "PIX_DINHEIRO"
+                ? [
+                    `Informado em PIX: ${formatCurrency(receipt.clientPixAmount)}`,
+                    `Informado em dinheiro: ${formatCurrency(receipt.clientCashAmount)}`,
+                  ]
+                : []),
               ...(!hideFinancials
                 ? [
                     `Bruto: ${formatCurrency(receipt.grossAmount)}`,
+                    `Repasse ao cliente: ${formatCurrency(receipt.clientAmount)}`,
                     `*Líquido: ${formatCurrency(receipt.netAmount)}*`,
                   ]
                 : []),

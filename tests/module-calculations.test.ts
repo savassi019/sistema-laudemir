@@ -9,6 +9,7 @@ import {
   calculatePlushFinancials,
   calculateRentalFinancials,
   calculateSlotMachineSplit,
+  validatePlushClientPayment,
 } from "../src/lib/module-calculations";
 import { calculateSlotCustomerDebt } from "../src/lib/slot-finance";
 
@@ -131,5 +132,57 @@ test("H usa somente a variação do negativo e mantém a dívida do cliente sepa
   assert.deepEqual(
     calculateSlotCustomerDebt({ clientShareBeforeDebt: -120, previousCustomerDebt: 50 }),
     { generatedDebtAmount: 120, customerDebtDiscounted: 0, finalCustomerDebt: 170 },
+  );
+});
+
+test("GRUA arredonda o repasse para cima e preserva cada centavo da Infinity", () => {
+  const comCentavos = calculatePlushFinancials({
+    grossAmount: 1197,
+    commissionPercentage: 25,
+  });
+  assert.deepEqual(comCentavos, { clientAmount: 300, companyAmount: 897, netAmount: 897 });
+  assert.equal(comCentavos.clientAmount + comCentavos.companyAmount, 1197);
+
+  const metade = calculatePlushFinancials({
+    grossAmount: 1198,
+    commissionPercentage: 25,
+  });
+  assert.deepEqual(metade, { clientAmount: 300, companyAmount: 898, netAmount: 898 });
+
+  const inteiro = calculatePlushFinancials({
+    grossAmount: 1196,
+    commissionPercentage: 25,
+  });
+  assert.deepEqual(inteiro, { clientAmount: 299, companyAmount: 897, netAmount: 897 });
+});
+
+test("GRUA valida PIX + dinheiro e exige comprovante sempre que houver PIX", () => {
+  assert.deepEqual(
+    validatePlushClientPayment({
+      paymentMethod: "PIX_DINHEIRO",
+      clientAmount: 300,
+      pixAmount: 200,
+      cashAmount: 100,
+      hasPixProof: true,
+    }),
+    { valid: true },
+  );
+  assert.equal(
+    validatePlushClientPayment({
+      paymentMethod: "PIX_DINHEIRO",
+      clientAmount: 300,
+      pixAmount: 199,
+      cashAmount: 100,
+      hasPixProof: true,
+    }).valid,
+    false,
+  );
+  assert.deepEqual(
+    validatePlushClientPayment({
+      paymentMethod: "PIX",
+      clientAmount: 300,
+      pixAmount: 300,
+    }),
+    { valid: false, field: "pixProof", message: "Anexe o comprovante do PIX." },
   );
 });

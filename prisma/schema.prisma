@@ -53,6 +53,7 @@ enum ClientStatus {
 enum PaymentMethod {
   CASH
   PIX
+  PIX_CASH
   CREDIT_CARD
   DEBIT_CARD
   BANK_TRANSFER
@@ -892,9 +893,12 @@ model PlushCollection {
   plushMachine         PlushMachine              @relation(fields: [plushMachineId], references: [id], onDelete: Cascade)
   clientId             String?
   grossAmount          Decimal                   @db.Decimal(14, 2)
+  cashInMachineAmount  Decimal?                  @db.Decimal(14, 2)
   commissionPercentage Decimal                   @default(25) @db.Decimal(5, 2)
   clientAmount         Decimal                   @db.Decimal(14, 2)
   companyAmount        Decimal                   @db.Decimal(14, 2)
+  clientPixAmount      Decimal?                  @db.Decimal(14, 2)
+  clientCashAmount     Decimal?                  @db.Decimal(14, 2)
   plushCountOut        Int                       @default(0)
   paymentMethod        PaymentMethod?
   discountAmount       Decimal                   @default(0) @db.Decimal(14, 2)
@@ -904,6 +908,7 @@ model PlushCollection {
   noteiro              String?
   coinPhotoId          String?
   giftPhotoId          String?
+  pixProofId           String?
   notes                String?
   createdById          String?
   createdAt            DateTime                  @default(now())

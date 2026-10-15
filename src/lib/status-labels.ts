@@ -27,6 +27,8 @@ export const PERSON_TYPE_LABEL: Record<string, string> = {
  */
 export const PAYMENT_METHOD_LABEL: Record<string, string> = {
   PIX: "PIX",
+  PIX_DINHEIRO: "PIX + Dinheiro",
+  PIX_CASH: "PIX + Dinheiro",
   DINHEIRO: "Dinheiro",
   CARTAO: "Cartão",
   ABERTO: "Em aberto",

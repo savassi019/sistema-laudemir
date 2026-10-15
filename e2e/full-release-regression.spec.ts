@@ -97,14 +97,18 @@ function operationPayloads(date: string, suffix: string, files: Record<string, s
         machineNumber: `M-${suffix}`,
         collectionDate: date,
         grossAmount: 100,
+        cashInMachineAmount: 80,
         commissionPercentage: 25,
         plushCountOut: 2,
         paymentMethod: "PIX",
+        clientPixAmount: 25,
+        clientCashAmount: 0,
         discountAmount: 3,
         ownerExpenseAmount: 5,
         compensationStatus: "WORTH_IT",
         coinPhotoFileId: files.coin,
         giftPhotoFileId: files.gift,
+        pixProofFileId: files.plushPixProof,
         notes: "Regressao completa",
       },
     },
@@ -330,6 +334,7 @@ test.describe("regressao completa de liberacao", () => {
     const files = {
       coin: await upload(page.request, "PHOTO", `${suffix}-moedas.png`),
       gift: await upload(page.request, "PHOTO", `${suffix}-brindes.png`),
+      plushPixProof: await upload(page.request, "PROOF", `${suffix}-grua-pix.png`),
       billiard: await upload(page.request, "PHOTO", `${suffix}-bilhar.png`),
       bxScreen: await upload(page.request, "PHOTO", `${suffix}-bx-tela.png`),
       bxPaper: await upload(page.request, "PHOTO", `${suffix}-bx-papel.png`),
@@ -451,13 +456,15 @@ test.describe("regressao completa de liberacao", () => {
     await expect(page.getByText(`Pay Blue: PAY-${suffix}`, { exact: true })).toBeVisible();
     await expect(page.getByText("Código MAC: AA:BB:CC:DD:EE:FF", { exact: true })).toBeVisible();
     await page.getByLabel("Data da coleta", { exact: true }).fill(businessDate());
-    await page.getByLabel("Total bruto", { exact: true }).fill("1400");
+    await page.getByLabel(/Total apurado/i).fill("1400");
+    await page.getByLabel(/Dinheiro retirado/i).fill("900");
     await page.getByLabel(/Comiss.o %/i).fill("25");
     await page.getByLabel(/Quantidade de pel.cia/i).fill("4");
     const photoInputs = page.locator('input[type="file"]');
-    await expect(photoInputs).toHaveCount(2);
-    await photoInputs.nth(0).setInputFiles({ name: "grua-moedas-offline.png", mimeType: "image/png", buffer: onePixelPng });
-    await photoInputs.nth(1).setInputFiles({ name: "grua-brindes-offline.png", mimeType: "image/png", buffer: onePixelPng });
+    await expect(photoInputs).toHaveCount(3);
+    await photoInputs.nth(0).setInputFiles({ name: "grua-pix-offline.png", mimeType: "image/png", buffer: onePixelPng });
+    await photoInputs.nth(1).setInputFiles({ name: "grua-moedas-offline.png", mimeType: "image/png", buffer: onePixelPng });
+    await photoInputs.nth(2).setInputFiles({ name: "grua-brindes-offline.png", mimeType: "image/png", buffer: onePixelPng });
 
     await context.setOffline(true);
     await page.getByRole("button", { name: /Salvar Pel.cia/i }).click();

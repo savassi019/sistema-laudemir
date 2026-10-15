@@ -98,14 +98,101 @@ export function calculatePlushFinancials(input: {
   discountAmount?: number;
   ownerExpenseAmount?: number;
 }) {
-  const clientAmount = input.grossAmount * (input.commissionPercentage / 100);
-  const companyAmount = input.grossAmount - clientAmount;
+  const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  const grossAmount = roundMoney(input.grossAmount);
+  const rawClientAmount = grossAmount * (input.commissionPercentage / 100);
+  // Regra operacional da GRUA: o valor entregue ao cliente nao usa centavos
+  // e qualquer fracao e arredondada para cima (ex.: 299,25 vira 300,00).
+  // A Infinity fica com o restante exato, portanto nenhum centavo desaparece
+  // nem e contado duas vezes durante o arredondamento.
+  const clientAmount = Math.ceil(rawClientAmount - 1e-9);
+  const companyAmount = roundMoney(grossAmount - clientAmount);
   return {
     clientAmount,
     companyAmount,
-    netAmount:
+    netAmount: roundMoney(
       companyAmount - (input.discountAmount ?? 0) - (input.ownerExpenseAmount ?? 0),
+    ),
   };
+}
+
+export type PlushClientPaymentMethod =
+  | "PIX"
+  | "DINHEIRO"
+  | "PIX_DINHEIRO"
+  | "CARTAO"
+  | "ABERTO";
+
+export function validatePlushClientPayment(input: {
+  paymentMethod: PlushClientPaymentMethod;
+  clientAmount: number;
+  pixAmount?: number;
+  cashAmount?: number;
+  hasPixProof?: boolean;
+}) {
+  const toCents = (value: number) => Math.round((value + Number.EPSILON) * 100);
+  const clientCents = toCents(input.clientAmount);
+  const pixCents = toCents(input.pixAmount ?? 0);
+  const cashCents = toCents(input.cashAmount ?? 0);
+
+  if (pixCents < 0 || cashCents < 0) {
+    return {
+      valid: false as const,
+      field: "amounts" as const,
+      message: "Os valores pagos nao podem ser negativos.",
+    };
+  }
+
+  if (input.paymentMethod === "PIX_DINHEIRO") {
+    if (pixCents <= 0 || cashCents <= 0) {
+      return {
+        valid: false as const,
+        field: "amounts" as const,
+        message: "Informe uma parte em PIX e outra em dinheiro.",
+      };
+    }
+    if (pixCents + cashCents !== clientCents) {
+      return {
+        valid: false as const,
+        field: "amounts" as const,
+        message: "A soma do PIX com o dinheiro deve ser igual ao repasse do cliente.",
+      };
+    }
+  } else if (input.paymentMethod === "PIX" && (pixCents !== clientCents || cashCents !== 0)) {
+    return {
+      valid: false as const,
+      field: "amounts" as const,
+      message: "O valor em PIX deve ser igual ao repasse do cliente.",
+    };
+  } else if (
+    input.paymentMethod === "DINHEIRO" &&
+    (cashCents !== clientCents || pixCents !== 0)
+  ) {
+    return {
+      valid: false as const,
+      field: "amounts" as const,
+      message: "O valor em dinheiro deve ser igual ao repasse do cliente.",
+    };
+  } else if (
+    (input.paymentMethod === "CARTAO" || input.paymentMethod === "ABERTO") &&
+    (pixCents !== 0 || cashCents !== 0)
+  ) {
+    return {
+      valid: false as const,
+      field: "amounts" as const,
+      message: "Esta forma de pagamento nao aceita divisao entre PIX e dinheiro.",
+    };
+  }
+
+  if (pixCents > 0 && !input.hasPixProof) {
+    return {
+      valid: false as const,
+      field: "pixProof" as const,
+      message: "Anexe o comprovante do PIX.",
+    };
+  }
+
+  return { valid: true as const };
 }
 
 export function calculateRentalFinancials(input: {

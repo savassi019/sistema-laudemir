@@ -20,6 +20,8 @@ import {
   calculatePlushFinancials,
   calculateRentalFinancials,
   calculateSlotMachineSplit,
+  validatePlushClientPayment,
+  type PlushClientPaymentMethod,
 } from "@/lib/module-calculations";
 import { prisma } from "@/lib/prisma";
 import { calculateSlotCustomerDebt } from "@/lib/slot-finance";
@@ -98,6 +100,7 @@ type SaveResult = {
 
 const paymentMethodMap: Record<string, PaymentMethod> = {
   PIX: "PIX",
+  PIX_DINHEIRO: "PIX_CASH",
   DINHEIRO: "CASH",
   CARTAO: "CREDIT_CARD",
   ABERTO: "OTHER",
@@ -154,18 +157,22 @@ const createPlushSchema = z.object({
   noteNumber: z.string().optional(),
   noteiroFixed: z.string().optional(),
   collectionDate: z.string(),
-  grossAmount: z.number(),
-  commissionPercentage: z.number(),
-  plushCountOut: z.number(),
-  paymentMethod: z.string(),
-  discountAmount: z.number().optional(),
+  grossAmount: z.number().finite().min(0).max(99_999_999.99),
+  cashInMachineAmount: z.number().finite().min(0).max(99_999_999.99).optional(),
+  commissionPercentage: z.number().finite().min(0).max(100),
+  plushCountOut: z.number().int().min(0).max(1_000_000),
+  paymentMethod: z.enum(["PIX", "DINHEIRO", "PIX_DINHEIRO", "CARTAO", "ABERTO"]),
+  clientPixAmount: z.number().finite().min(0).max(99_999_999.99).optional(),
+  clientCashAmount: z.number().finite().min(0).max(99_999_999.99).optional(),
+  discountAmount: z.number().finite().min(0).max(99_999_999.99).optional(),
   discountReason: z.string().optional(),
-  ownerExpenseAmount: z.number().optional(),
+  ownerExpenseAmount: z.number().finite().min(0).max(99_999_999.99).optional(),
   compensationStatus: z.enum(["WORTH_IT", "NOT_WORTH_IT"]),
   noteiro: z.string().optional(),
   notes: z.string().optional(),
   coinPhotoFileId: z.string().nullish(),
   giftPhotoFileId: z.string().nullish(),
+  pixProofFileId: z.string().nullish(),
 });
 
 const createBilliardSchema = z.object({
@@ -1481,24 +1488,14 @@ async function saveWithPrisma(
       if (giftPhotoRequired && !data.giftPhotoFileId) {
         throw new ModuleRecordValidationError("A foto dos brindes e obrigatoria nesta maquina.");
       }
-
-      const submittedPhotoIds = [data.coinPhotoFileId, data.giftPhotoFileId].filter(
-        (id): id is string => Boolean(id),
-      );
-      if (submittedPhotoIds.length > 0) {
-        const validPhotos = await prisma.fileAsset.findMany({
-          where: {
-            id: { in: submittedPhotoIds },
-            organizationId: session.organizationId,
-            category: "PHOTO",
-          },
-          select: { id: true },
-        });
-        if (new Set(validPhotos.map((photo) => photo.id)).size !== new Set(submittedPhotoIds).size) {
-          throw new ModuleRecordValidationError(
-            "Uma das fotos nao pertence a esta empresa ou nao e uma foto valida.",
-          );
-        }
+      if (
+        data.coinPhotoFileId &&
+        data.giftPhotoFileId &&
+        data.coinPhotoFileId === data.giftPhotoFileId
+      ) {
+        throw new ModuleRecordValidationError(
+          "Use uma foto das moedas e outra foto dos brindes.",
+        );
       }
 
       const plushTotals = calculatePlushFinancials({
@@ -1509,6 +1506,65 @@ async function saveWithPrisma(
       });
       const clientAmount = plushTotals.clientAmount;
       const companyAmount = plushTotals.netAmount;
+      const clientPixAmount = data.paymentMethod === "PIX"
+        ? clientAmount
+        : data.paymentMethod === "PIX_DINHEIRO"
+          ? (data.clientPixAmount ?? 0)
+          : 0;
+      const clientCashAmount = data.paymentMethod === "DINHEIRO"
+        ? clientAmount
+        : data.paymentMethod === "PIX_DINHEIRO"
+          ? (data.clientCashAmount ?? 0)
+          : 0;
+      const paymentValidation = validatePlushClientPayment({
+        paymentMethod: data.paymentMethod as PlushClientPaymentMethod,
+        clientAmount,
+        pixAmount: clientPixAmount,
+        cashAmount: clientCashAmount,
+        hasPixProof: Boolean(data.pixProofFileId),
+      });
+      if (!paymentValidation.valid) {
+        throw new ModuleRecordValidationError(paymentValidation.message);
+      }
+
+      const submittedPhotoIds = [data.coinPhotoFileId, data.giftPhotoFileId].filter(
+        (id): id is string => Boolean(id),
+      );
+      if (submittedPhotoIds.length > 0) {
+        const validPhotos = await prisma.fileAsset.findMany({
+          where: {
+            id: { in: submittedPhotoIds },
+            organizationId: session.organizationId,
+            category: "PHOTO",
+            uploadedById: session.userId,
+            entityId: null,
+          },
+          select: { id: true },
+        });
+        if (new Set(validPhotos.map((photo) => photo.id)).size !== new Set(submittedPhotoIds).size) {
+          throw new ModuleRecordValidationError(
+            "Uma das fotos nao pertence a esta empresa ou nao e uma foto valida.",
+          );
+        }
+      }
+
+      if (data.pixProofFileId) {
+        const validProof = await prisma.fileAsset.findFirst({
+          where: {
+            id: data.pixProofFileId,
+            organizationId: session.organizationId,
+            category: "PROOF",
+            uploadedById: session.userId,
+            entityId: null,
+          },
+          select: { id: true },
+        });
+        if (!validProof) {
+          throw new ModuleRecordValidationError(
+            "O comprovante do PIX nao pertence a este usuario ou ja foi utilizado.",
+          );
+        }
+      }
 
       const record = await prisma.$transaction(async (tx) => {
         const machine = await tx.plushMachine.upsert({
@@ -1547,15 +1603,18 @@ async function saveWithPrisma(
           },
         });
 
-        return tx.plushCollection.create({
+        const collection = await tx.plushCollection.create({
           data: {
             organizationId: session.organizationId,
             createdById: session.userId,
             plushMachineId: machine.id,
             grossAmount: data.grossAmount,
+            cashInMachineAmount: data.cashInMachineAmount ?? 0,
             commissionPercentage: data.commissionPercentage,
             clientAmount,
             companyAmount,
+            clientPixAmount,
+            clientCashAmount,
             plushCountOut: data.plushCountOut,
             paymentMethod: mapPaymentMethod(data.paymentMethod),
             discountAmount: data.discountAmount ?? 0,
@@ -1565,12 +1624,40 @@ async function saveWithPrisma(
             noteiro: data.noteiro,
             coinPhotoId: data.coinPhotoFileId,
             giftPhotoId: data.giftPhotoFileId,
+            pixProofId: data.pixProofFileId,
             notes: data.notes,
           },
           include: {
             plushMachine: true,
           },
         });
+
+        const attachmentIds = [
+          data.coinPhotoFileId,
+          data.giftPhotoFileId,
+          data.pixProofFileId,
+        ].filter((id): id is string => Boolean(id));
+        if (attachmentIds.length > 0) {
+          const attached = await tx.fileAsset.updateMany({
+            where: {
+              id: { in: attachmentIds },
+              organizationId: session.organizationId,
+              uploadedById: session.userId,
+              entityId: null,
+            },
+            data: {
+              entityType: "PLUSH_COLLECTION",
+              entityId: collection.id,
+            },
+          });
+          if (attached.count !== new Set(attachmentIds).size) {
+            throw new ModuleRecordValidationError(
+              "Nao foi possivel vincular todos os anexos a este fechamento.",
+            );
+          }
+        }
+
+        return collection;
       });
 
       await logFieldVisitForModuleRecord({
@@ -1595,9 +1682,17 @@ async function saveWithPrisma(
             `Codigo: ${record.plushMachine.code}`,
             `Fichas: ${record.plushCountOut}`,
             `Comissao: ${record.commissionPercentage}%`,
+            `Pagamento: ${rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL)}`,
+            `Dinheiro retirado: ${formatCurrency(Number(record.cashInMachineAmount ?? 0))}`,
             `Compensacao: ${record.compensationStatus === "WORTH_IT" ? "Compensa" : "Não compensa"}`,
           ],
           amount: formatCurrency(Number(record.companyAmount)),
+          paymentMethod: record.paymentMethod,
+          attachments: [
+            ...(record.coinPhotoId ? [{ id: record.coinPhotoId, label: "Foto das moedas" }] : []),
+            ...(record.giftPhotoId ? [{ id: record.giftPhotoId, label: "Foto dos brindes" }] : []),
+            ...(record.pixProofId ? [{ id: record.pixProofId, label: "Comprovante do PIX" }] : []),
+          ],
           badge: record.plushMachine.active ? "Ativa" : "Inativa",
           createdAt: record.createdAt.toISOString(),
         },
@@ -2732,12 +2827,20 @@ async function listModuleRecordsBase(
             `Codigo: ${record.plushMachine.code}`,
             `Fichas: ${record.plushCountOut}`,
             `Comissao: ${record.commissionPercentage}%`,
+            `Pagamento: ${rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL)}`,
+            `Dinheiro retirado: ${formatCurrency(Number(record.cashInMachineAmount ?? 0))}`,
             `Compensacao: ${record.compensationStatus === "WORTH_IT" ? "Compensa" : "Não compensa"}`,
           ],
           amount: formatCurrency(Number(record.companyAmount)),
           amountValue: Number(record.companyAmount),
           incomeValue: Number(record.grossAmount),
           expenseValue: Number(record.grossAmount) - Number(record.companyAmount),
+          paymentMethod: record.paymentMethod,
+          attachments: [
+            ...(record.coinPhotoId ? [{ id: record.coinPhotoId, label: "Foto das moedas" }] : []),
+            ...(record.giftPhotoId ? [{ id: record.giftPhotoId, label: "Foto dos brindes" }] : []),
+            ...(record.pixProofId ? [{ id: record.pixProofId, label: "Comprovante do PIX" }] : []),
+          ],
           badge: record.plushMachine.active ? "Ativa" : "Inativa",
           createdAt: record.createdAt.toISOString(),
         }));
@@ -3554,12 +3657,20 @@ async function listModuleClientRecordsBase(
           `Cliente: ${record.plushMachine.clientName ?? "-"}`,
           `Fichas: ${record.plushCountOut}`,
           `Comissao: ${record.commissionPercentage}%`,
+          `Pagamento: ${rotuloDeStatus(record.paymentMethod, PAYMENT_METHOD_LABEL)}`,
+          `Dinheiro retirado: ${formatCurrency(Number(record.cashInMachineAmount ?? 0))}`,
           `Compensacao: ${record.compensationStatus === "WORTH_IT" ? "Compensa" : "Não compensa"}`,
         ],
         amount: formatCurrency(Number(record.companyAmount)),
         amountValue: Number(record.companyAmount),
         incomeValue: Number(record.grossAmount),
         expenseValue: Number(record.grossAmount) - Number(record.companyAmount),
+        paymentMethod: record.paymentMethod,
+        attachments: [
+          ...(record.coinPhotoId ? [{ id: record.coinPhotoId, label: "Foto das moedas" }] : []),
+          ...(record.giftPhotoId ? [{ id: record.giftPhotoId, label: "Foto dos brindes" }] : []),
+          ...(record.pixProofId ? [{ id: record.pixProofId, label: "Comprovante do PIX" }] : []),
+        ],
         badge: record.compensationStatus === "WORTH_IT" ? "Compensa" : "Não compensa",
         createdAt: record.createdAt.toISOString(),
       }));
